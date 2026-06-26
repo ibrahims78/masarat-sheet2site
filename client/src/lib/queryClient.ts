@@ -1,0 +1,46 @@
+import { QueryClient } from "@tanstack/react-query";
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 30 * 1000,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+export async function apiRequest<T = any>(
+  method: string,
+  url: string,
+  body?: any,
+  timeoutMs: number = 30_000
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: "include",
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || "حدث خطأ غير متوقع");
+    }
+    return res.json();
+  } catch (err: any) {
+    if (err.name === "AbortError") {
+      throw new Error("انتهت مهلة الطلب — تحقق من اتصالك بالإنترنت وأعد المحاولة");
+    }
+    if (err.message === "Failed to fetch") {
+      throw new Error("تعذّر الوصول إلى الخادم — تحقق من اتصالك بالإنترنت");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}

@@ -1,0 +1,1078 @@
+import { useState, useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import {
+  Search, Eye, Edit, Trash2, ChevronLeft, ChevronRight,
+  Loader2, CheckSquare, Square, Users, Copy, Check,
+  SlidersHorizontal, Columns3, X, ChevronsLeft, ChevronsRight,
+  Printer, Filter, UserPlus, TableProperties, AlertCircle,
+  Download, RefreshCw, CheckCircle2, XCircle, ArrowDownToLine,
+  Minus, Plus, SkipForward,
+} from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Layout } from "@/components/Layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useLang } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
+
+interface Employee {
+  id: string;
+  sequentialNumber: number;
+  orgLevel1?: string; orgClassification?: string;
+  orgLevel2?: string; orgLevel3?: string; orgLevel4?: string; orgLevel5?: string;
+  workGovernorate?: string; employeeRefId?: string; jobTitle?: string;
+  birthDate?: string; workStartDate?: string; permanentDate?: string; contractDate?: string;
+  firstName: string; fatherName?: string; familyName: string; motherFullName?: string;
+  nationalId: string; gender?: string; mobile?: string;
+  residenceArea?: string; residenceDetail?: string; maritalStatus?: string;
+  jobCategory?: string; employmentStatus?: string; appointmentPattern?: string; mergeDetails?: string;
+  hasDisability?: string; disabilityType?: string; disabilityCard?: string;
+  registryNumber?: string; registryPlace?: string; birthCountry?: string;
+  governorate?: string; cityDistrict?: string; subDistrict?: string;
+  lastQualification?: string; status?: string; statusDetail?: string;
+  shamCashAccount?: string; childrenCount?: number; wivesCount?: number; centralNotes?: string;
+  submittedAt?: string; updatedAt?: string;
+}
+
+interface EmployeesResponse {
+  data: Employee[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+const STATUS_BADGE: Record<string, string> = {
+  "نشط": "success", "إجازة": "warning", "منتدب": "secondary",
+  "متوفى": "outline", "مفصول": "destructive",
+};
+const STATUS_ROW: Record<string, string> = {
+  "نشط": "border-r-2 border-r-emerald-400 dark:border-r-emerald-500",
+  "إجازة": "border-r-2 border-r-amber-400 dark:border-r-amber-500",
+  "منتدب": "border-r-2 border-r-blue-400 dark:border-r-blue-500",
+  "متوفى": "border-r-2 border-r-slate-300 dark:border-r-slate-500 opacity-70",
+  "مفصول": "border-r-2 border-r-red-400 dark:border-r-red-500",
+};
+
+const GOVERNORATES = ["دمشق","ريف دمشق","حلب","حمص","حماة","اللاذقية","طرطوس","درعا","السويداء","القنيطرة","دير الزور","الرقة","الحسكة","إدلب"];
+const JOB_CATEGORIES = ["طبيب","صيدلاني","ممرض","مساعد طبيب","فني","إداري","تمريض","دعم صحي","أخرى"];
+
+const ALL_COLS = [
+  { key: "seq",             label: "م",                    always: true  },
+  { key: "fullName",        label: "الاسم الثلاثي",         always: true  },
+  { key: "nationalId",      label: "الرقم الوطني",          def: true     },
+  { key: "workGovernorate", label: "محافظة العمل",           def: true     },
+  { key: "jobTitle",        label: "مسمى العمل",             def: true     },
+  { key: "jobCategory",     label: "الفئة الوظيفية",         def: true     },
+  { key: "employmentStatus",label: "مثبت أو متعاقد",         def: true     },
+  { key: "status",          label: "الحالة",                 always: true  },
+  { key: "birthDate",       label: "تاريخ التولد",           def: false    },
+  { key: "gender",          label: "الجنس",                  def: false    },
+  { key: "mobile",          label: "رقم الجوال",             def: false    },
+  { key: "employeeRefId",   label: "الرقم الذاتي",           def: false    },
+  { key: "maritalStatus",   label: "الوضع العائلي",          def: false    },
+  { key: "lastQualification",label: "آخر مؤهل",              def: false    },
+  { key: "submittedAt",     label: "تاريخ التسجيل",          def: false    },
+];
+
+function highlight(text: string, term: string) {
+  if (!term || !text) return <>{text}</>;
+  const parts = text.split(new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
+  return <>{parts.map((p, i) => parts.length > 1 && i % 2 === 1
+    ? <mark key={i} className="bg-yellow-200 dark:bg-yellow-800/70 rounded-sm px-0.5">{p}</mark>
+    : p)}</>;
+}
+
+function getPaginationPages(current: number, total: number): (number | "…")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | "…")[] = [1];
+  if (current > 3) pages.push("…");
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i);
+  if (current < total - 2) pages.push("…");
+  if (total > 1) pages.push(total);
+  return pages;
+}
+
+function DetailRow({ label, value }: { label: string; value?: string | number | null }) {
+  return (
+    <div className="flex gap-2 py-1.5 border-b border-slate-100 dark:border-slate-700 last:border-0">
+      <dt className="text-xs text-muted-foreground min-w-36 shrink-0">{label}</dt>
+      <dd className="text-sm font-medium text-slate-800 dark:text-slate-200">{value || <span className="text-slate-300 dark:text-slate-600">—</span>}</dd>
+    </div>
+  );
+}
+
+function EmployeeDetailDialog({ emp, open, onClose, onEdit, isAdmin }: {
+  emp: Employee | null; open: boolean; onClose: () => void;
+  onEdit: () => void; isAdmin: boolean;
+}) {
+  if (!emp) return null;
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-700">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <DialogTitle className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                {emp.firstName} {emp.fatherName} {emp.familyName}
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                م: {emp.sequentialNumber} | {emp.nationalId}
+                {emp.employeeRefId && ` | الرقم الذاتي: ${emp.employeeRefId}`}
+              </p>
+            </div>
+            {emp.status && <Badge variant={(STATUS_BADGE[emp.status] || "outline") as any}>{emp.status}</Badge>}
+          </div>
+        </DialogHeader>
+
+        <div className="overflow-y-auto flex-1">
+          <Tabs defaultValue="org" dir="rtl">
+            <TabsList className="w-full grid grid-cols-4 sticky top-0 bg-white dark:bg-slate-800 z-10">
+              <TabsTrigger value="org">التنظيمية</TabsTrigger>
+              <TabsTrigger value="personal">الشخصية</TabsTrigger>
+              <TabsTrigger value="residence">الإقامة والقيد</TabsTrigger>
+              <TabsTrigger value="qual">المؤهلات</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="org" className="p-4 space-y-0">
+              <dl>
+                <DetailRow label="المستوى التنظيمي الاول" value={emp.orgLevel1} />
+                <DetailRow label="التصنيف/ الجهة المرتبطة" value={emp.orgClassification} />
+                <DetailRow label="المستوى التنظيمي الثاني" value={emp.orgLevel2} />
+                <DetailRow label="المستوى التنظيمي الثالث" value={emp.orgLevel3} />
+                <DetailRow label="المستوى التنظيمي الرابع" value={emp.orgLevel4} />
+                <DetailRow label="المستوى التنظيمي الخامس" value={emp.orgLevel5} />
+                <DetailRow label="محافظة العمل" value={emp.workGovernorate} />
+                <DetailRow label="الرقم الذاتي" value={emp.employeeRefId} />
+                <DetailRow label="مسمى العمل" value={emp.jobTitle} />
+                <DetailRow label="تاريخ التولد" value={emp.birthDate} />
+                <DetailRow label="تاريخ بدء العمل بالدولة" value={emp.workStartDate} />
+                <DetailRow label="تاريخ التثبيت في الدولة" value={emp.permanentDate} />
+                <DetailRow label="تاريخ التعاقد في الدولة" value={emp.contractDate} />
+                <DetailRow label="الفئة الوظيفية" value={emp.jobCategory} />
+                <DetailRow label="مثبت أو متعاقد" value={emp.employmentStatus} />
+                <DetailRow label="نمط التعيين أو التعاقد" value={emp.appointmentPattern} />
+                <DetailRow label="تفاصيل دمج" value={emp.mergeDetails} />
+              </dl>
+            </TabsContent>
+
+            <TabsContent value="personal" className="p-4 space-y-0">
+              <dl>
+                <DetailRow label="الاسم" value={emp.firstName} />
+                <DetailRow label="اسم الأب" value={emp.fatherName} />
+                <DetailRow label="النسبة" value={emp.familyName} />
+                <DetailRow label="اسم الأم الكامل" value={emp.motherFullName} />
+                <DetailRow label="الرقم الوطني" value={emp.nationalId} />
+                <DetailRow label="الجنس" value={emp.gender} />
+                <DetailRow label="الوضع العائلي" value={emp.maritalStatus} />
+                <DetailRow label="عدد الأبناء" value={emp.childrenCount} />
+                <DetailRow label="عدد الزوجات" value={emp.wivesCount} />
+                <DetailRow label="رقم الجوال" value={emp.mobile} />
+              </dl>
+            </TabsContent>
+
+            <TabsContent value="residence" className="p-4 space-y-0">
+              <dl>
+                <DetailRow label="منطقة السكن" value={emp.residenceArea} />
+                <DetailRow label="تفصيل مكان السكن" value={emp.residenceDetail} />
+                <DetailRow label="رقم القيد" value={emp.registryNumber} />
+                <DetailRow label="مكان القيد" value={emp.registryPlace} />
+                <DetailRow label="دولة الولادة" value={emp.birthCountry} />
+                <DetailRow label="المحافظة" value={emp.governorate} />
+                <DetailRow label="المنطقة_المدينة" value={emp.cityDistrict} />
+                <DetailRow label="الناحية" value={emp.subDistrict} />
+              </dl>
+            </TabsContent>
+
+            <TabsContent value="qual" className="p-4 space-y-0">
+              <dl>
+                <DetailRow label="آخر مؤهل علمي معين على أساسه" value={emp.lastQualification} />
+                <DetailRow label="هل لديك إعاقة" value={emp.hasDisability} />
+                <DetailRow label="نوع الإعاقة" value={emp.disabilityType} />
+                <DetailRow label="بطاقة الإعاقة" value={emp.disabilityCard} />
+                <DetailRow label="الحالة" value={emp.status} />
+                <DetailRow label="تفصيل الحالة" value={emp.statusDetail} />
+                <DetailRow label="حساب شام كاش" value={emp.shamCashAccount} />
+                <DetailRow label="ملاحظات مركزية" value={emp.centralNotes} />
+                <DetailRow label="تاريخ التسجيل" value={emp.submittedAt ? new Date(emp.submittedAt).toLocaleDateString("ar-SY") : undefined} />
+              </dl>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        <DialogFooter className="pt-3 border-t border-slate-100 dark:border-slate-700 gap-2 flex-row">
+          <Button variant="outline" size="sm" onClick={() => window.print()}>
+            <Printer className="h-4 w-4 ml-1" /> طباعة
+          </Button>
+          {isAdmin && (
+            <Button size="sm" onClick={onEdit}>
+              <Edit className="h-4 w-4 ml-1" /> تعديل
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={onClose} className="mr-auto">إغلاق</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function EmployeeList() {
+  const { lang } = useLang();
+  const { user } = useAuth();
+  const [, nav] = useLocation();
+  const ar = lang === "ar";
+  const isAdmin = user?.role === "admin" || user?.role === "editor";
+
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  const [qGender, setQGender] = useState("");
+  const [qStatus, setQStatus] = useState("");
+  const [qGov, setQGov] = useState("");
+  const [qEmpStatus, setQEmpStatus] = useState("");
+  const [advOpen, setAdvOpen] = useState(false);
+  const [advJobCat, setAdvJobCat] = useState("");
+  const [advOrg1, setAdvOrg1] = useState("");
+
+  const [visibleCols, setVisibleCols] = useState<string[]>(
+    ALL_COLS.filter(c => c.always || c.def).map(c => c.key)
+  );
+  const [colPickerOpen, setColPickerOpen] = useState(false);
+  const [viewEmp, setViewEmp] = useState<Employee | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedFormLink, setCopiedFormLink] = useState(false);
+  const [jumpPage, setJumpPage] = useState("");
+
+  // حالة تصحيح ترويسات الـ Sheet — تُحفظ في localStorage
+  const HEADERS_KEY = "nawah_headers_fixed";
+  const [headersFixed, setHeadersFixed] = useState<null | boolean>(() => {
+    const v = localStorage.getItem(HEADERS_KEY);
+    if (v === "true") return true;
+    if (v === "false") return false;
+    return null;
+  });
+  const [fixingHeaders, setFixingHeaders] = useState(false);
+
+  const handleFixHeaders = async () => {
+    setFixingHeaders(true);
+    try {
+      const result = await apiRequest("POST", "/api/settings/fix-sheet-headers");
+      const ok = result?.ok === true;
+      setHeadersFixed(ok);
+      localStorage.setItem(HEADERS_KEY, String(ok));
+    } catch {
+      setHeadersFixed(false);
+      localStorage.setItem(HEADERS_KEY, "false");
+    } finally {
+      setFixingHeaders(false);
+    }
+  };
+
+  // ─── حالة استيراد Google Sheets ───
+  const IMPORT_KEY = "nawah_import_status";
+  interface ImportResult { inserted: number; updated: number; skipped: number; deleted: number; total: number; }
+  const [importStatus, setImportStatus] = useState<null | "success" | "error">(() => {
+    const v = localStorage.getItem(IMPORT_KEY);
+    return v === "success" ? "success" : v === "error" ? "error" : null;
+  });
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [syncDeletes, setSyncDeletes] = useState(false);
+
+  const handleImport = async () => {
+    setImporting(true);
+    setImportError(null);
+    try {
+      const result: ImportResult = await apiRequest("POST", "/api/admin/import-from-sheets", { syncDeletes });
+      setImportResult(result);
+      setImportStatus("success");
+      localStorage.setItem(IMPORT_KEY, "success");
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+      setImportDialogOpen(true);
+    } catch (err: any) {
+      setImportError(err?.message || "فشل الاستيراد");
+      setImportStatus("error");
+      localStorage.setItem(IMPORT_KEY, "error");
+      setImportDialogOpen(true);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const debounce = useCallback((val: string) => {
+    setSearch(val);
+    clearTimeout((window as any)._st);
+    (window as any)._st = setTimeout(() => { setDebouncedSearch(val); setPage(1); }, 350);
+  }, []);
+
+  const params = useMemo(() => {
+    const p = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (debouncedSearch) p.set("search", debouncedSearch);
+    if (qGender && qGender !== "all") p.set("gender", qGender);
+    if (qStatus && qStatus !== "all") p.set("status", qStatus);
+    if (qGov && qGov !== "all") p.set("governorate", qGov);
+    if (qEmpStatus && qEmpStatus !== "all") p.set("employmentStatus", qEmpStatus);
+    if (advJobCat && advJobCat !== "all") p.set("jobCategory", advJobCat);
+    if (advOrg1) p.set("orgLevel1", advOrg1);
+    return p;
+  }, [page, limit, debouncedSearch, qGender, qStatus, qGov, qEmpStatus, advJobCat, advOrg1]);
+
+  const { data, isLoading } = useQuery<EmployeesResponse>({
+    queryKey: ["employees", params.toString()],
+    queryFn: () => apiRequest("GET", `/api/admin/employees?${params}`),
+  });
+
+  const totalPages = data ? Math.ceil(data.total / limit) : 1;
+  const startRow = data ? (page - 1) * limit + 1 : 0;
+  const endRow = data ? Math.min(page * limit, data.total) : 0;
+
+  const activeFilterCount = [qGender, qStatus, qGov, qEmpStatus, advJobCat, advOrg1]
+    .filter(f => f && f !== "all").length;
+
+  const clearAllFilters = () => {
+    setQGender(""); setQStatus(""); setQGov(""); setQEmpStatus("");
+    setAdvJobCat(""); setAdvOrg1(""); setPage(1);
+  };
+
+  const handleDelete = async (id: string) => {
+    setDeleting(true);
+    try {
+      await apiRequest("DELETE", `/api/admin/employees/${id}`);
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+      setDeleteId(null);
+    } catch (err: any) { alert(err.message); }
+    finally { setDeleting(false); }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selected.length || !confirm(`حذف ${selected.length} سجل؟`)) return;
+    try {
+      await apiRequest("POST", "/api/admin/employees/bulk-delete", { ids: selected });
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+      setSelected([]);
+    } catch (err: any) { alert(err.message); }
+  };
+
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const toggleSelect = (id: string) =>
+    setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  const toggleAll = () => {
+    if (!data) return;
+    setSelected(selected.length === data.data.length ? [] : data.data.map(e => e.id));
+  };
+
+  const toggleCol = (key: string) => {
+    const col = ALL_COLS.find(c => c.key === key);
+    if (col?.always) return;
+    setVisibleCols(p => p.includes(key) ? p.filter(k => k !== key) : [...p, key]);
+  };
+
+  const goPage = (p: number) => { setPage(Math.max(1, Math.min(p, totalPages))); };
+
+  const colValue = (emp: Employee, key: string) => {
+    switch (key) {
+      case "seq": return String(emp.sequentialNumber);
+      case "fullName": return `${emp.firstName} ${emp.fatherName || ""} ${emp.familyName}`.trim();
+      case "nationalId": return emp.nationalId;
+      case "workGovernorate": return emp.workGovernorate;
+      case "jobTitle": return emp.jobTitle;
+      case "jobCategory": return emp.jobCategory;
+      case "employmentStatus": return emp.employmentStatus;
+      case "status": return emp.status;
+      case "birthDate": return emp.birthDate;
+      case "gender": return emp.gender;
+      case "mobile": return emp.mobile;
+      case "employeeRefId": return emp.employeeRefId;
+      case "maritalStatus": return emp.maritalStatus;
+      case "lastQualification": return emp.lastQualification;
+      case "submittedAt": return emp.submittedAt ? new Date(emp.submittedAt).toLocaleDateString("ar-SY") : undefined;
+      default: return undefined;
+    }
+  };
+
+  const filterChips = [
+    { val: qGender, label: `الجنس: ${qGender}`, clear: () => setQGender("") },
+    { val: qStatus && qStatus !== "all" ? qStatus : "", label: `الحالة: ${qStatus}`, clear: () => setQStatus("") },
+    { val: qGov && qGov !== "all" ? qGov : "", label: `المحافظة: ${qGov}`, clear: () => setQGov("") },
+    { val: qEmpStatus && qEmpStatus !== "all" ? qEmpStatus : "", label: `التوظيف: ${qEmpStatus}`, clear: () => setQEmpStatus("") },
+    { val: advJobCat && advJobCat !== "all" ? advJobCat : "", label: `الفئة: ${advJobCat}`, clear: () => setAdvJobCat("") },
+    { val: advOrg1, label: `المستوى الأول: ${advOrg1}`, clear: () => setAdvOrg1("") },
+  ].filter(c => c.val);
+
+  return (
+    <Layout>
+      <div className="space-y-4">
+
+        {/* ─── Header ─── */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100">الموظفون</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              {isLoading ? "جاري التحميل..." : `الإجمالي: ${(data?.total || 0).toLocaleString("ar-SY")} سجل`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {selected.length > 0 && isAdmin && (
+              <Button variant="destructive" size="sm" onClick={handleBulkDelete} data-testid="button-bulk-delete">
+                <Trash2 className="h-4 w-4 ml-2" /> حذف {selected.length} محدد
+              </Button>
+            )}
+
+            {/* ─── زر استيراد من Google Sheets ─── */}
+            {isAdmin && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleImport}
+                      disabled={importing}
+                      data-testid="button-import-from-sheets"
+                      className={cn(
+                        "relative border transition-all duration-200 gap-2",
+                        importStatus === "success" && "border-emerald-400 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30",
+                        importStatus === "error"   && "border-red-400 dark:border-red-600 text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30",
+                        importStatus === null      && "border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30",
+                      )}
+                    >
+                      {importing
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : importStatus === "success"
+                          ? <CheckCircle2 className="h-4 w-4" />
+                          : importStatus === "error"
+                            ? <XCircle className="h-4 w-4" />
+                            : <ArrowDownToLine className="h-4 w-4" />
+                      }
+
+                      {/* نقطة الحالة */}
+                      <span className={cn(
+                        "inline-block w-2 h-2 rounded-full flex-shrink-0",
+                        importStatus === "success" ? "bg-emerald-500" :
+                        importStatus === "error"   ? "bg-red-500" :
+                        "bg-blue-400 animate-pulse"
+                      )} />
+
+                      <span className="hidden sm:inline">
+                        {importing ? "جاري الاستيراد..." :
+                         importStatus === "success" ? "تم الاستيراد" :
+                         importStatus === "error"   ? "فشل الاستيراد" :
+                         "استيراد من Sheets"}
+                      </span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-72 text-xs leading-relaxed space-y-2">
+                    <p className="font-medium text-center">
+                      {importStatus === "success" ? "✅ آخر استيراد تم بنجاح" :
+                       importStatus === "error"   ? "❌ آخر استيراد فشل" :
+                       "📥 استيراد البيانات من Google Sheets إلى قاعدة البيانات"}
+                    </p>
+                    <div className="flex items-center gap-2 pt-1 border-t border-slate-200 dark:border-slate-600">
+                      <button
+                        onClick={e => { e.stopPropagation(); setSyncDeletes(v => !v); }}
+                        className={cn(
+                          "flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border transition-colors",
+                          syncDeletes
+                            ? "border-red-400 text-red-600 bg-red-50 dark:border-red-600 dark:text-red-400 dark:bg-red-900/20"
+                            : "border-slate-300 text-slate-500 dark:border-slate-600 dark:text-slate-400"
+                        )}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        {syncDeletes ? "مزامنة المحذوفات: مفعّلة" : "مزامنة المحذوفات: معطّلة"}
+                      </button>
+                    </div>
+                    {syncDeletes && (
+                      <p className="text-red-500 dark:text-red-400 text-xs">
+                        ⚠️ سيُحذف كل موظف في قاعدة البيانات غير موجود في الـ Sheet
+                      </p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+            {/* ─── زر تصحيح ترويسات الـ Sheet ─── */}
+            {isAdmin && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleFixHeaders}
+                      disabled={fixingHeaders}
+                      data-testid="button-fix-sheet-headers"
+                      className={cn(
+                        "relative border transition-all duration-200 gap-2",
+                        headersFixed === true  && "border-emerald-400 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30",
+                        headersFixed === false && "border-red-400 dark:border-red-600 text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30",
+                        headersFixed === null  && "border-amber-400 dark:border-amber-600 text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30",
+                      )}
+                    >
+                      {fixingHeaders
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : headersFixed === true
+                          ? <TableProperties className="h-4 w-4" />
+                          : headersFixed === false
+                            ? <AlertCircle className="h-4 w-4" />
+                            : <TableProperties className="h-4 w-4" />
+                      }
+
+                      {/* نقطة الحالة */}
+                      <span className={cn(
+                        "inline-block w-2 h-2 rounded-full flex-shrink-0",
+                        headersFixed === true  ? "bg-emerald-500" :
+                        headersFixed === false ? "bg-red-500" :
+                        "bg-amber-500 animate-pulse"
+                      )} />
+
+                      <span className="hidden sm:inline">
+                        {headersFixed === true  ? "الترويسات مُصحَّحة" :
+                         headersFixed === false ? "فشل التصحيح" :
+                         "تصحيح ترويسات الـ Sheet"}
+                      </span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-64 text-center text-xs leading-relaxed">
+                    {headersFixed === true
+                      ? "✅ تم تصحيح ترويسات الـ Sheet بنجاح — يمكنك الآن إرسال رابط التعبئة للموظفين"
+                      : headersFixed === false
+                        ? "❌ فشل تصحيح الترويسات — تأكد من إعداد Google Sheets في صفحة الإعدادات أولاً"
+                        : "⚠️ يُنصح بالضغط على هذا الزر قبل إرسال رابط التعبئة للموظفين لضمان دقة البيانات في الـ Sheet"}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+            {/* ─── زر نسخ رابط النموذج ─── */}
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const url = `${window.location.origin}/register`;
+                      navigator.clipboard.writeText(url).then(() => {
+                        setCopiedFormLink(true);
+                        setTimeout(() => setCopiedFormLink(false), 2500);
+                      });
+                    }}
+                    className={cn(
+                      "border-slate-200 dark:border-slate-700 transition-all duration-200",
+                      copiedFormLink && "border-green-400 text-green-600 dark:border-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20"
+                    )}
+                    data-testid="button-copy-form-link"
+                  >
+                    {copiedFormLink
+                      ? <><Check className="h-4 w-4 ml-2 text-green-500" />تم نسخ الرابط</>
+                      : <><Copy className="h-4 w-4 ml-2" />نسخ رابط النموذج</>
+                    }
+                  </Button>
+                </TooltipTrigger>
+                {!copiedFormLink && headersFixed !== true && isAdmin && (
+                  <TooltipContent side="bottom" className="max-w-64 text-center text-xs leading-relaxed bg-amber-50 dark:bg-amber-900/80 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700">
+                    ⚠️ تأكد من تصحيح ترويسات الـ Sheet أولاً قبل إرسال هذا الرابط للموظفين
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+
+            {isAdmin && (
+              <Button size="sm" onClick={() => nav("/admin/employees/new")} data-testid="button-add-employee">
+                <UserPlus className="h-4 w-4 ml-2" />
+                إضافة موظف جديد
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* ─── Search + Quick Filters ─── */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm space-y-3">
+          <div className="flex flex-wrap gap-2.5">
+            {/* Search */}
+            <div className="relative flex-1 min-w-52">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={e => debounce(e.target.value)}
+                placeholder="بحث بالاسم أو الرقم الوطني أو الرقم الذاتي أو الجوال..."
+                className="pr-10 h-9"
+                data-testid="input-search"
+              />
+              {search && (
+                <button onClick={() => { setSearch(""); setDebouncedSearch(""); setPage(1); }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* محافظة العمل */}
+            <Select value={qGov} onValueChange={v => { setQGov(v); setPage(1); }}>
+              <SelectTrigger className="w-40 h-9"><SelectValue placeholder="محافظة العمل" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل المحافظات</SelectItem>
+                {GOVERNORATES.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            {/* الحالة */}
+            <Select value={qStatus} onValueChange={v => { setQStatus(v); setPage(1); }}>
+              <SelectTrigger className="w-32 h-9"><SelectValue placeholder="الحالة" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل الحالات</SelectItem>
+                {["نشط","إجازة","منتدب","متوفى","مفصول"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            {/* الجنس */}
+            <Select value={qGender} onValueChange={v => { setQGender(v); setPage(1); }}>
+              <SelectTrigger className="w-28 h-9"><SelectValue placeholder="الجنس" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">الجميع</SelectItem>
+                <SelectItem value="ذكر">ذكر</SelectItem>
+                <SelectItem value="أنثى">أنثى</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* مثبت / متعاقد */}
+            <Select value={qEmpStatus} onValueChange={v => { setQEmpStatus(v); setPage(1); }}>
+              <SelectTrigger className="w-36 h-9"><SelectValue placeholder="مثبت / متعاقد" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">الكل</SelectItem>
+                <SelectItem value="مثبت">مثبت</SelectItem>
+                <SelectItem value="متعاقد">متعاقد</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Advanced + Columns */}
+            <Button
+              variant={advOpen ? "default" : "outline"}
+              size="sm"
+              onClick={() => setAdvOpen(!advOpen)}
+              className="h-9 gap-1.5 relative"
+              data-testid="button-advanced-filter"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              فلاتر متقدمة
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+
+            <Button variant="outline" size="sm" onClick={() => setColPickerOpen(!colPickerOpen)} className="h-9 gap-1.5">
+              <Columns3 className="h-4 w-4" />
+              الأعمدة
+            </Button>
+          </div>
+
+          {/* ─── Advanced Filters ─── */}
+          {advOpen && (
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground font-medium">الفئة الوظيفية</span>
+                <Select value={advJobCat} onValueChange={v => { setAdvJobCat(v); setPage(1); }}>
+                  <SelectTrigger className="w-44 h-9"><SelectValue placeholder="اختر الفئة..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الفئات</SelectItem>
+                    {JOB_CATEGORIES.map(j => <SelectItem key={j} value={j}>{j}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground font-medium">المستوى التنظيمي الأول</span>
+                <Input
+                  value={advOrg1} onChange={e => { setAdvOrg1(e.target.value); setPage(1); }}
+                  placeholder="اكتب للبحث..." className="h-9 w-52"
+                />
+              </div>
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+                  <X className="h-3.5 w-3.5 ml-1" /> مسح جميع الفلاتر
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* ─── Column Picker ─── */}
+          {colPickerOpen && (
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-700">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">تخصيص الأعمدة المعروضة:</p>
+              <div className="flex flex-wrap gap-2">
+                {ALL_COLS.map(col => (
+                  <button
+                    key={col.key}
+                    onClick={() => toggleCol(col.key)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg text-xs font-medium border transition-all",
+                      col.always ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600" :
+                      visibleCols.includes(col.key)
+                        ? "bg-primary text-white border-primary"
+                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:border-primary/50"
+                    )}
+                  >
+                    {col.label}
+                    {col.always && " 🔒"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ─── Active Filter Chips + Row Count ─── */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {filterChips.map((chip, i) => (
+              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                {chip.label}
+                <button onClick={chip.clear} className="hover:text-red-500 transition-colors">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            {data && <span>عرض {startRow}–{endRow} من {data.total.toLocaleString("ar-SY")} سجل</span>}
+            <span className="text-slate-300 dark:text-slate-600">|</span>
+            <span className="text-xs">عرض:</span>
+            {[10, 25, 50, 100].map(n => (
+              <button
+                key={n}
+                onClick={() => { setLimit(n); setPage(1); }}
+                className={cn(
+                  "w-8 h-7 rounded-md text-xs font-semibold transition-all",
+                  limit === n ? "bg-primary text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600"
+                )}
+              >{n}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* ─── Table ─── */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-card">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-48 gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">جاري التحميل...</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" dir="rtl">
+                  <thead className="bg-slate-50/80 dark:bg-slate-700/60 border-b border-slate-200 dark:border-slate-600">
+                    <tr>
+                      {isAdmin && (
+                        <th className="px-3 py-3 text-right w-10">
+                          <button onClick={toggleAll} className="hover:text-primary transition-colors">
+                            {selected.length > 0 && selected.length === (data?.data.length || 0)
+                              ? <CheckSquare className="h-4 w-4 text-primary" />
+                              : <Square className="h-4 w-4 text-slate-400" />}
+                          </button>
+                        </th>
+                      )}
+                      {ALL_COLS.filter(c => visibleCols.includes(c.key)).map(col => (
+                        <th key={col.key} className="px-3 py-3 text-right text-xs font-bold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                          {col.label}
+                        </th>
+                      ))}
+                      <th className="px-3 py-3 text-center text-xs font-bold text-muted-foreground uppercase tracking-wide">إجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                    {data?.data.length === 0 && (
+                      <tr>
+                        <td colSpan={20} className="text-center py-16">
+                          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                            <Users className="h-10 w-10 opacity-20" />
+                            <p className="text-sm font-medium">لا توجد نتائج مطابقة</p>
+                            {activeFilterCount > 0 && (
+                              <Button variant="link" size="sm" onClick={clearAllFilters} className="text-primary">مسح الفلاتر</Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {data?.data.map(emp => (
+                      <tr
+                        key={emp.id}
+                        className={cn(
+                          "hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors",
+                          emp.status && STATUS_ROW[emp.status],
+                          selected.includes(emp.id) && "bg-primary/5 dark:bg-primary/10"
+                        )}
+                      >
+                        {isAdmin && (
+                          <td className="px-3 py-2.5">
+                            <button onClick={() => toggleSelect(emp.id)} className="hover:text-primary transition-colors">
+                              {selected.includes(emp.id)
+                                ? <CheckSquare className="h-4 w-4 text-primary" />
+                                : <Square className="h-4 w-4 text-slate-400" />}
+                            </button>
+                          </td>
+                        )}
+                        {ALL_COLS.filter(c => visibleCols.includes(c.key)).map(col => {
+                          const val = colValue(emp, col.key);
+                          return (
+                            <td key={col.key} className="px-3 py-2.5">
+                              {col.key === "status" ? (
+                                val
+                                  ? <Badge variant={(STATUS_BADGE[val] || "outline") as any} className="text-xs">{val}</Badge>
+                                  : <span className="text-slate-300 dark:text-slate-600">—</span>
+                              ) : col.key === "nationalId" ? (
+                                <span className="font-mono text-xs tracking-wider text-slate-700 dark:text-slate-300">
+                                  {val ? highlight(val, debouncedSearch) : <span className="text-slate-300">—</span>}
+                                </span>
+                              ) : col.key === "seq" ? (
+                                <span className="text-xs font-mono text-muted-foreground">{val}</span>
+                              ) : col.key === "fullName" ? (
+                                <span className="font-bold text-slate-800 dark:text-slate-200">
+                                  {val ? highlight(val, debouncedSearch) : "—"}
+                                </span>
+                              ) : (
+                                <span className="text-slate-600 dark:text-slate-400 text-xs">
+                                  {val ? highlight(val, debouncedSearch) : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
+
+                        {/* Actions */}
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center justify-center gap-0.5">
+                            <Button
+                              variant="ghost" size="icon-sm"
+                              onClick={() => setViewEmp(emp)}
+                              title="عرض التفاصيل"
+                              className="text-primary hover:bg-primary/10 h-7 w-7"
+                              data-testid={`button-view-${emp.id}`}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </Button>
+
+                            <Button
+                              variant="ghost" size="icon-sm"
+                              onClick={() => handleCopy(emp.nationalId, emp.id)}
+                              title="نسخ الرقم الوطني"
+                              className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 h-7 w-7"
+                              data-testid={`button-copy-${emp.id}`}
+                            >
+                              {copiedId === emp.id
+                                ? <Check className="h-3.5 w-3.5 text-emerald-500" />
+                                : <Copy className="h-3.5 w-3.5" />}
+                            </Button>
+
+                            {isAdmin && (
+                              <>
+                                <Button
+                                  variant="ghost" size="icon-sm"
+                                  onClick={() => nav(`/admin/employees/${emp.id}/edit`)}
+                                  title="تعديل"
+                                  className="text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 h-7 w-7"
+                                  data-testid={`button-edit-${emp.id}`}
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost" size="icon-sm"
+                                  onClick={() => setDeleteId(emp.id)}
+                                  title="حذف"
+                                  className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 h-7 w-7"
+                                  data-testid={`button-delete-${emp.id}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* ─── Pagination ─── */}
+              {totalPages > 1 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-700/20">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Button variant="outline" size="icon-sm" onClick={() => goPage(1)} disabled={page === 1} className="h-8 w-8" title="الأولى">
+                      <ChevronsRight className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="outline" size="icon-sm" onClick={() => goPage(page - 1)} disabled={page === 1} className="h-8 w-8" title="السابق">
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+
+                    {getPaginationPages(page, totalPages).map((p, i) =>
+                      p === "…" ? (
+                        <span key={`e${i}`} className="px-1 text-muted-foreground text-sm">…</span>
+                      ) : (
+                        <button
+                          key={p}
+                          onClick={() => goPage(p as number)}
+                          className={cn(
+                            "h-8 min-w-8 px-2 rounded-lg text-xs font-semibold transition-all border",
+                            p === page
+                              ? "bg-primary text-white border-primary shadow-sm"
+                              : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:border-primary/40 hover:text-primary"
+                          )}
+                        >{p}</button>
+                      )
+                    )}
+
+                    <Button variant="outline" size="icon-sm" onClick={() => goPage(page + 1)} disabled={page >= totalPages} className="h-8 w-8" title="التالي">
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="outline" size="icon-sm" onClick={() => goPage(totalPages)} disabled={page >= totalPages} className="h-8 w-8" title="الأخيرة">
+                      <ChevronsLeft className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">انتقال إلى:</span>
+                    <Input
+                      type="number" min={1} max={totalPages}
+                      value={jumpPage}
+                      onChange={e => setJumpPage(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && jumpPage) { goPage(parseInt(jumpPage)); setJumpPage(""); } }}
+                      placeholder={String(page)}
+                      className="w-16 h-8 text-center text-xs"
+                    />
+                    <span className="text-xs text-muted-foreground">من {totalPages}</span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Employee Detail Dialog ─── */}
+      <EmployeeDetailDialog
+        emp={viewEmp}
+        open={!!viewEmp}
+        onClose={() => setViewEmp(null)}
+        onEdit={() => { if (viewEmp) nav(`/admin/employees/${viewEmp.id}/edit`); setViewEmp(null); }}
+        isAdmin={isAdmin}
+      />
+
+      {/* ─── Delete Confirm Dialog ─── */}
+      <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>تأكيد الحذف</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">هل أنت متأكد من حذف هذا السجل؟ لا يمكن التراجع عن هذا الإجراء.</p>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteId(null)}>إلغاء</Button>
+            <Button variant="destructive" onClick={() => deleteId && handleDelete(deleteId)} disabled={deleting}>
+              {deleting && <Loader2 className="h-4 w-4 animate-spin ml-2" />} حذف
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Import Results Dialog ─── */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="max-w-sm" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              {importStatus === "success"
+                ? <><CheckCircle2 className="h-5 w-5 text-emerald-500" /> نتيجة الاستيراد</>
+                : <><XCircle className="h-5 w-5 text-red-500" /> فشل الاستيراد</>
+              }
+            </DialogTitle>
+          </DialogHeader>
+
+          {importStatus === "success" && importResult ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                {/* إجمالي */}
+                <div className="col-span-2 flex items-center justify-between rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2.5">
+                  <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                    <Download className="h-4 w-4" /> إجمالي الصفوف
+                  </span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100">{importResult.total}</span>
+                </div>
+                {/* مُضاف */}
+                <div className="flex items-center justify-between rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-3 py-2">
+                  <span className="text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                    <Plus className="h-3.5 w-3.5" /> مُضاف جديد
+                  </span>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-400">{importResult.inserted}</span>
+                </div>
+                {/* مُحدَّث */}
+                <div className="flex items-center justify-between rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-3 py-2">
+                  <span className="text-xs text-blue-700 dark:text-blue-400 flex items-center gap-1">
+                    <RefreshCw className="h-3.5 w-3.5" /> مُحدَّث
+                  </span>
+                  <span className="font-bold text-blue-700 dark:text-blue-400">{importResult.updated}</span>
+                </div>
+                {/* مُتجاوَز */}
+                <div className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2">
+                  <span className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                    <SkipForward className="h-3.5 w-3.5" /> مُتجاوَز
+                  </span>
+                  <span className="font-bold text-amber-700 dark:text-amber-400">{importResult.skipped}</span>
+                </div>
+                {/* محذوف */}
+                <div className={cn(
+                  "flex items-center justify-between rounded-lg px-3 py-2 border",
+                  importResult.deleted > 0
+                    ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                    : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                )}>
+                  <span className={cn(
+                    "text-xs flex items-center gap-1",
+                    importResult.deleted > 0 ? "text-red-700 dark:text-red-400" : "text-slate-500 dark:text-slate-400"
+                  )}>
+                    <Minus className="h-3.5 w-3.5" /> محذوف
+                  </span>
+                  <span className={cn(
+                    "font-bold",
+                    importResult.deleted > 0 ? "text-red-700 dark:text-red-400" : "text-slate-500 dark:text-slate-400"
+                  )}>{importResult.deleted}</span>
+                </div>
+              </div>
+              {importResult.deleted > 0 && (
+                <p className="text-xs text-red-500 dark:text-red-400 text-center">
+                  ⚠️ تم حذف {importResult.deleted} سجل غير موجود في الـ Sheet
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+              {importError || "حدث خطأ غير متوقع أثناء الاستيراد"}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button size="sm" onClick={() => setImportDialogOpen(false)} className="w-full">إغلاق</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Layout>
+  );
+}
