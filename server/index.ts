@@ -7,12 +7,10 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
-import { pool, db } from "./db.js";
-import { systemSettings } from "../shared/schema.js";
+import { pool } from "./db.js";
 import authRoutes from "./routes/auth.js";
-import formRoutes from "./routes/form.js";
-import adminRoutes from "./routes/admin.js";
-import settingsRoutes from "./routes/settings.js";
+import projectsRoutes from "./routes/projects.js";
+import pformRoutes from "./routes/pform.js";
 
 dotenv.config();
 
@@ -45,14 +43,12 @@ app.use(session({
 }));
 
 app.use("/api/auth", authRoutes);
-app.use("/api/form", formRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/settings", settingsRoutes);
+app.use("/api/projects", projectsRoutes);
+app.use("/api/pform", pformRoutes);
 
-// Health check
 app.get("/api/health", (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 
-// Serve frontend in production (when dist/client exists)
+// Serve frontend in production
 const clientDist = path.join(__dirname, "..", "client");
 if (existsSync(clientDist)) {
   app.use(express.static(clientDist));
@@ -61,7 +57,6 @@ if (existsSync(clientDist)) {
   });
 }
 
-// Initialize DB tables and default settings
 async function initDB() {
   try {
     await pool.query(`
@@ -87,58 +82,80 @@ async function initDB() {
         used_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW()
       );
-      CREATE TABLE IF NOT EXISTS employees (
+      CREATE TABLE IF NOT EXISTS system_settings (
+        id TEXT PRIMARY KEY DEFAULT 'singleton',
+        app_name TEXT DEFAULT 'منصة نواة',
+        app_logo_url TEXT,
+        default_language TEXT DEFAULT 'ar',
+        timezone TEXT DEFAULT 'Asia/Damascus',
+        smtp_host TEXT,
+        smtp_port INTEGER DEFAULT 587,
+        smtp_user TEXT,
+        smtp_pass_enc TEXT,
+        smtp_from_name TEXT,
+        invitation_expiry_hours INTEGER DEFAULT 72,
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+      INSERT INTO system_settings (id) VALUES ('singleton') ON CONFLICT (id) DO NOTHING;
+
+      CREATE TABLE IF NOT EXISTS projects (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        sequential_number SERIAL,
-        org_level_1 TEXT, org_classification TEXT,
-        org_level_2 TEXT, org_level_3 TEXT, org_level_4 TEXT, org_level_5 TEXT,
-        work_governorate TEXT, employee_ref_id TEXT, job_title TEXT,
-        work_start_date TEXT, permanent_date TEXT, contract_date TEXT,
-        job_category TEXT, employment_status TEXT, appointment_pattern TEXT, merge_details TEXT,
-        first_name TEXT NOT NULL, father_name TEXT, family_name TEXT NOT NULL,
-        mother_full_name TEXT, national_id TEXT NOT NULL,
-        gender TEXT, birth_date TEXT, marital_status TEXT,
-        children_count INTEGER, wives_count INTEGER,
-        mobile TEXT, residence_area TEXT, residence_detail TEXT,
-        registry_number TEXT, registry_place TEXT, birth_country TEXT,
-        governorate TEXT, city_district TEXT, sub_district TEXT,
-        last_qualification TEXT, has_disability TEXT, disability_type TEXT, disability_card TEXT,
-        status TEXT, status_detail TEXT, central_notes TEXT, sham_cash_account TEXT,
+        name TEXT NOT NULL,
+        description TEXT,
+        created_by UUID REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT NOW(),
+        invitation_code TEXT NOT NULL DEFAULT 'PROJECT-2026',
+        edit_token_hours INTEGER DEFAULT 48,
+        form_enabled BOOLEAN DEFAULT TRUE,
+        form_disabled_message TEXT,
+        form_title TEXT DEFAULT 'نموذج التسجيل',
+        form_subtitle TEXT,
+        steps JSONB DEFAULT '["البيانات الأساسية","البيانات التفصيلية","المراجعة"]',
+        google_sheet_id TEXT,
+        google_sheet_name TEXT DEFAULT 'بيانات',
+        google_service_account_email TEXT,
+        google_service_account_key_enc TEXT,
+        google_drive_folder_id TEXT,
+        telegram_bot_token_enc TEXT,
+        telegram_chat_id TEXT,
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS project_fields (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        key TEXT NOT NULL,
+        label TEXT NOT NULL,
+        field_type TEXT NOT NULL DEFAULT 'text',
+        is_required BOOLEAN DEFAULT FALSE,
+        is_visible BOOLEAN DEFAULT TRUE,
+        options JSONB,
+        step_number INTEGER DEFAULT 1,
+        order_index INTEGER DEFAULT 0,
+        placeholder TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS project_records (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        sequential_number INTEGER,
+        data JSONB NOT NULL DEFAULT '{}',
         edit_token UUID DEFAULT gen_random_uuid(),
         token_expires_at TIMESTAMP,
         submitted_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP,
         sheets_row_index INTEGER
       );
-      CREATE TABLE IF NOT EXISTS system_settings (
-        id TEXT PRIMARY KEY DEFAULT 'singleton',
-        app_name TEXT DEFAULT 'نظام بيانات الكوادر الصحية',
-        app_logo_url TEXT,
-        default_language TEXT DEFAULT 'ar',
-        timezone TEXT DEFAULT 'Asia/Damascus',
-        edit_token_hours INTEGER DEFAULT 48,
-        form_enabled BOOLEAN DEFAULT TRUE,
-        form_disabled_message TEXT,
-        invitation_code TEXT NOT NULL DEFAULT 'NAWAH-2026',
-        code_updated_at TIMESTAMP DEFAULT NOW(),
-        google_sheet_id TEXT, google_sheet_name TEXT DEFAULT 'بيانات الكوادر الصحية',
-        google_service_account_email TEXT, google_service_account_key_enc TEXT,
-        google_drive_folder_id TEXT, google_drive_backup_enabled BOOLEAN DEFAULT FALSE,
-        google_drive_backup_frequency TEXT DEFAULT 'daily',
-        google_oauth_email TEXT, google_oauth_access_token_enc TEXT, google_oauth_refresh_token_enc TEXT,
-        telegram_bot_token_enc TEXT, telegram_chat_id TEXT,
-        smtp_host TEXT, smtp_port INTEGER DEFAULT 587, smtp_user TEXT, smtp_pass_enc TEXT, smtp_from_name TEXT,
-        updated_at TIMESTAMP DEFAULT NOW()
-      );
-      CREATE TABLE IF NOT EXISTS audit_log (
+
+      CREATE TABLE IF NOT EXISTS project_audit_log (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
+        project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+        record_id UUID REFERENCES project_records(id) ON DELETE CASCADE,
         changed_by TEXT,
         action TEXT NOT NULL,
         changed_at TIMESTAMP DEFAULT NOW(),
         changes_json JSONB
       );
-      INSERT INTO system_settings (id) VALUES ('singleton') ON CONFLICT (id) DO NOTHING;
     `);
     console.log("✅ Database tables initialized");
   } catch (err) {
