@@ -28,7 +28,7 @@ router.get("/", requireAuth, async (_req, res) => {
 
 router.get("/:id", requireAuth, async (req: Request, res: Response) => {
   try {
-    const [proj] = await db.select().from(projects).where(eq(projects.id, req.params.id));
+    const [proj] = await db.select().from(projects).where(eq(projects.id, String(req.params.id)));
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
     const { googleServiceAccountKeyEnc, telegramBotTokenEnc, ...safe } = proj;
     res.json({
@@ -95,7 +95,7 @@ router.patch("/:id", requireAdmin, async (req: Request, res: Response) => {
     if (body.googleServiceAccountKey) update.googleServiceAccountKeyEnc = encrypt(body.googleServiceAccountKey);
     if (body.telegramBotToken) update.telegramBotTokenEnc = encrypt(body.telegramBotToken);
 
-    await db.update(projects).set(update).where(eq(projects.id, req.params.id));
+    await db.update(projects).set(update).where(eq(projects.id, String(req.params.id)));
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -104,7 +104,7 @@ router.patch("/:id", requireAdmin, async (req: Request, res: Response) => {
 
 router.delete("/:id", requireAdmin, async (req: Request, res: Response) => {
   try {
-    await db.delete(projects).where(eq(projects.id, req.params.id));
+    await db.delete(projects).where(eq(projects.id, String(req.params.id)));
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -162,7 +162,7 @@ router.post("/parse-excel", requireAdmin, upload.single("file"), async (req: Req
 router.get("/:id/fields", requireAuth, async (req: Request, res: Response) => {
   try {
     const fields = await db.select().from(projectFields)
-      .where(eq(projectFields.projectId, req.params.id))
+      .where(eq(projectFields.projectId, String(req.params.id)))
       .orderBy(projectFields.stepNumber, projectFields.orderIndex);
     res.json(fields);
   } catch (err: any) {
@@ -173,10 +173,10 @@ router.get("/:id/fields", requireAuth, async (req: Request, res: Response) => {
 router.post("/:id/fields", requireAdmin, async (req: Request, res: Response) => {
   try {
     const fields: any[] = req.body.fields;
-    await db.delete(projectFields).where(eq(projectFields.projectId, req.params.id));
+    await db.delete(projectFields).where(eq(projectFields.projectId, String(req.params.id)));
     if (fields && fields.length > 0) {
       await db.insert(projectFields).values(fields.map((f: any, idx: number) => ({
-        projectId: req.params.id,
+        projectId: String(req.params.id),
         key: f.key,
         label: f.label,
         fieldType: f.fieldType || "text",
@@ -204,7 +204,7 @@ router.get("/:id/records", requireAuth, async (req: Request, res: Response) => {
     const search = (req.query.search as string) || "";
 
     let allRecords = await db.select().from(projectRecords)
-      .where(eq(projectRecords.projectId, req.params.id))
+      .where(eq(projectRecords.projectId, String(req.params.id)))
       .orderBy(desc(projectRecords.submittedAt));
 
     if (search) {
@@ -225,17 +225,17 @@ router.get("/:id/records", requireAuth, async (req: Request, res: Response) => {
 
 router.post("/:id/records", requireEditorOrAdmin, async (req: Request, res: Response) => {
   try {
-    const [proj] = await db.select({ editTokenHours: projects.editTokenHours }).from(projects).where(eq(projects.id, req.params.id));
+    const [proj] = await db.select({ editTokenHours: projects.editTokenHours }).from(projects).where(eq(projects.id, String(req.params.id)));
     const tokenHours = proj?.editTokenHours ?? 48;
     const tokenExpiresAt = new Date(Date.now() + tokenHours * 60 * 60 * 1000);
 
     // Get next sequential number
     const [maxSeq] = await db.select({ max: sql<number>`COALESCE(MAX(sequential_number), 0)` })
-      .from(projectRecords).where(eq(projectRecords.projectId, req.params.id));
+      .from(projectRecords).where(eq(projectRecords.projectId, String(req.params.id)));
     const seqNum = (maxSeq?.max || 0) + 1;
 
     const [record] = await db.insert(projectRecords).values({
-      projectId: req.params.id,
+      projectId: String(req.params.id),
       data: req.body,
       sequentialNumber: seqNum,
       tokenExpiresAt,
@@ -243,14 +243,14 @@ router.post("/:id/records", requireEditorOrAdmin, async (req: Request, res: Resp
     }).returning();
 
     await db.insert(projectAuditLog).values({
-      projectId: req.params.id,
+      projectId: String(req.params.id),
       recordId: record.id,
       changedBy: (req.session as any).userId || "admin",
       action: "create",
       changesJson: req.body,
     });
 
-    appendRecordToSheet(req.params.id, record.data as any, seqNum).then(async (rowIndex) => {
+    appendRecordToSheet(String(req.params.id), record.data as any, seqNum).then(async (rowIndex) => {
       if (rowIndex) {
         await db.update(projectRecords).set({ sheetsRowIndex: rowIndex }).where(eq(projectRecords.id, record.id));
       }
@@ -265,7 +265,7 @@ router.post("/:id/records", requireEditorOrAdmin, async (req: Request, res: Resp
 router.get("/:id/records/:recordId", requireAuth, async (req: Request, res: Response) => {
   try {
     const [record] = await db.select().from(projectRecords)
-      .where(and(eq(projectRecords.id, req.params.recordId), eq(projectRecords.projectId, req.params.id)));
+      .where(and(eq(projectRecords.id, String(req.params.recordId)), eq(projectRecords.projectId, String(req.params.id))));
     if (!record) return res.status(404).json({ error: "السجل غير موجود" });
 
     const logs = await db.select().from(projectAuditLog)
@@ -281,26 +281,26 @@ router.get("/:id/records/:recordId", requireAuth, async (req: Request, res: Resp
 router.patch("/:id/records/:recordId", requireEditorOrAdmin, async (req: Request, res: Response) => {
   try {
     const [existing] = await db.select().from(projectRecords)
-      .where(and(eq(projectRecords.id, req.params.recordId), eq(projectRecords.projectId, req.params.id)));
+      .where(and(eq(projectRecords.id, String(req.params.recordId)), eq(projectRecords.projectId, String(req.params.id))));
     if (!existing) return res.status(404).json({ error: "السجل غير موجود" });
 
     const [updated] = await db.update(projectRecords)
       .set({ data: req.body, updatedAt: new Date() })
-      .where(eq(projectRecords.id, req.params.recordId))
+      .where(eq(projectRecords.id, String(req.params.recordId)))
       .returning();
 
     await db.insert(projectAuditLog).values({
-      projectId: req.params.id,
-      recordId: req.params.recordId,
+      projectId: String(req.params.id),
+      recordId: String(req.params.recordId),
       changedBy: (req.session as any).userId,
       action: "update",
       changesJson: req.body,
     });
 
     if (updated.sheetsRowIndex) {
-      updateRecordRow(req.params.id, updated.sheetsRowIndex, updated.data as any, updated.sequentialNumber || 0).catch(console.error);
+      updateRecordRow(String(req.params.id), updated.sheetsRowIndex, updated.data as any, updated.sequentialNumber || 0).catch(console.error);
     } else {
-      appendRecordToSheet(req.params.id, updated.data as any, updated.sequentialNumber || 0).then(async (rowIndex) => {
+      appendRecordToSheet(String(req.params.id), updated.data as any, updated.sequentialNumber || 0).then(async (rowIndex) => {
         if (rowIndex) {
           await db.update(projectRecords).set({ sheetsRowIndex: rowIndex }).where(eq(projectRecords.id, updated.id));
         }
@@ -316,16 +316,16 @@ router.patch("/:id/records/:recordId", requireEditorOrAdmin, async (req: Request
 router.delete("/:id/records/:recordId", requireEditorOrAdmin, async (req: Request, res: Response) => {
   try {
     const [rec] = await db.select({ sheetsRowIndex: projectRecords.sheetsRowIndex })
-      .from(projectRecords).where(eq(projectRecords.id, req.params.recordId));
-    await db.delete(projectRecords).where(eq(projectRecords.id, req.params.recordId));
+      .from(projectRecords).where(eq(projectRecords.id, String(req.params.recordId)));
+    await db.delete(projectRecords).where(eq(projectRecords.id, String(req.params.recordId)));
 
     if (rec?.sheetsRowIndex) {
       const deletedRow = rec.sheetsRowIndex;
-      deleteRecordRow(req.params.id, deletedRow).then(ok => {
+      deleteRecordRow(String(req.params.id), deletedRow).then(ok => {
         if (ok) {
           db.update(projectRecords)
             .set({ sheetsRowIndex: sql`${projectRecords.sheetsRowIndex} - 1` })
-            .where(and(eq(projectRecords.projectId, req.params.id), gt(projectRecords.sheetsRowIndex, deletedRow)))
+            .where(and(eq(projectRecords.projectId, String(req.params.id)), gt(projectRecords.sheetsRowIndex, deletedRow)))
             .catch(console.error);
         }
       }).catch(console.error);
@@ -358,7 +358,7 @@ router.get("/:id/stats", requireAuth, async (req: Request, res: Response) => {
     const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - 7);
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const pid = req.params.id;
+    const pid = String(req.params.id);
 
     const [total] = await db.select({ count: count() }).from(projectRecords).where(eq(projectRecords.projectId, pid));
     const [today] = await db.select({ count: count() }).from(projectRecords).where(and(eq(projectRecords.projectId, pid), gte(projectRecords.submittedAt, startOfDay)));
@@ -404,7 +404,7 @@ router.get("/:id/stats", requireAuth, async (req: Request, res: Response) => {
 router.get("/:id/export", requireAuth, async (req: Request, res: Response) => {
   try {
     const format = (req.query.format as string) || "xlsx";
-    const pid = req.params.id;
+    const pid = String(req.params.id);
 
     const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, pid));
     const fields = await db.select().from(projectFields).where(eq(projectFields.projectId, pid)).orderBy(projectFields.stepNumber, projectFields.orderIndex);
@@ -460,12 +460,12 @@ router.get("/:id/export", requireAuth, async (req: Request, res: Response) => {
 // ─── SETTINGS ACTIONS ────────────────────────────────────────
 
 router.post("/:id/test-sheets", requireAdmin, async (req: Request, res: Response) => {
-  const result = await testProjectSheetsConnection(req.params.id);
+  const result = await testProjectSheetsConnection(String(req.params.id));
   res.json(result);
 });
 
 router.post("/:id/create-sheet", requireAdmin, async (req: Request, res: Response) => {
-  const result = await createProjectSheet(req.params.id);
+  const result = await createProjectSheet(String(req.params.id));
   res.json(result);
 });
 
@@ -474,7 +474,7 @@ router.post("/:id/test-telegram", requireAdmin, async (req: Request, res: Respon
     const { token, chatId } = req.body;
     let botToken = token;
     if (!botToken) {
-      const [proj] = await db.select({ telegramBotTokenEnc: projects.telegramBotTokenEnc }).from(projects).where(eq(projects.id, req.params.id));
+      const [proj] = await db.select({ telegramBotTokenEnc: projects.telegramBotTokenEnc }).from(projects).where(eq(projects.id, String(req.params.id)));
       if (proj?.telegramBotTokenEnc) botToken = decrypt(proj.telegramBotTokenEnc);
     }
     if (!botToken) return res.status(400).json({ error: "لم يتم إدخال Bot Token" });
@@ -490,7 +490,7 @@ router.post("/:id/telegram-updates", requireAdmin, async (req: Request, res: Res
     const { token } = req.body;
     let botToken = token;
     if (!botToken) {
-      const [proj] = await db.select({ telegramBotTokenEnc: projects.telegramBotTokenEnc }).from(projects).where(eq(projects.id, req.params.id));
+      const [proj] = await db.select({ telegramBotTokenEnc: projects.telegramBotTokenEnc }).from(projects).where(eq(projects.id, String(req.params.id)));
       if (proj?.telegramBotTokenEnc) botToken = decrypt(proj.telegramBotTokenEnc);
     }
     if (!botToken) return res.status(400).json({ ok: false, message: "أدخل Bot Token أولاً" });
@@ -582,7 +582,7 @@ router.post("/reset-password/:userId", requireAdmin, async (req: Request, res: R
     const bcrypt = await import("bcryptjs");
     const { password } = req.body;
     const hash = await bcrypt.default.hash(password, 12);
-    await db.update(users).set({ passwordHash: hash, mustChangePassword: true }).where(eq(users.id, req.params.userId));
+    await db.update(users).set({ passwordHash: hash, mustChangePassword: true }).where(eq(users.id, String(req.params.userId)));
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -597,7 +597,7 @@ router.get("/users-list", requireAdmin, async (_req, res) => {
 router.patch("/users/:userId", requireAdmin, async (req: Request, res: Response) => {
   try {
     const { fullName, email, role } = req.body;
-    await db.update(users).set({ fullName, email, role }).where(eq(users.id, req.params.userId));
+    await db.update(users).set({ fullName, email, role }).where(eq(users.id, String(req.params.userId)));
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -608,10 +608,10 @@ router.delete("/users/:userId", requireAdmin, async (req: Request, res: Response
   try {
     const adminUsers = await db.select({ count: count() }).from(users).where(eq(users.role, "admin"));
     if (Number(adminUsers[0]?.count || 0) <= 1) {
-      const [target] = await db.select().from(users).where(eq(users.id, req.params.userId));
+      const [target] = await db.select().from(users).where(eq(users.id, String(req.params.userId)));
       if (target?.role === "admin") return res.status(400).json({ error: "لا يمكن حذف آخر مدير" });
     }
-    await db.delete(users).where(eq(users.id, req.params.userId));
+    await db.delete(users).where(eq(users.id, String(req.params.userId)));
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

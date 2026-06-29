@@ -5,10 +5,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
-import { Save, Loader2, Users, Mail, Globe, Plus, Trash2 } from "lucide-react";
+import {
+  Save, Loader2, Users, Mail, Globe, Plus, Trash2,
+  Eye, EyeOff, Send, Check, X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import type { User } from "@shared/schema";
+
+type ExtUser = User & { lastLoginAt?: string | Date | null };
+
+function formatDate(d?: string | Date | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("ar", { year: "numeric", month: "short", day: "numeric" });
+}
 
 export function GlobalSettings() {
   const qc = useQueryClient();
@@ -19,38 +30,73 @@ export function GlobalSettings() {
     queryFn: () => fetch("/api/projects/global-settings", { credentials: "include" }).then(r => r.json()),
   });
 
-  const { data: userList = [] } = useQuery<User[]>({
+  const { data: userList = [] } = useQuery<ExtUser[]>({
     queryKey: ["/api/projects/users-list"],
     queryFn: () => fetch("/api/projects/users-list", { credentials: "include" }).then(r => r.json()),
   });
 
   const { register: regGeneral, handleSubmit: hsGeneral, reset: resetGeneral } = useForm<any>();
   const { register: regSmtp, handleSubmit: hsSmtp, reset: resetSmtp } = useForm<any>();
-  const { register: regInvite, handleSubmit: hsInvite } = useForm<{ email: string; role: string }>();
-  const { register: regUser, handleSubmit: hsUser } = useForm<{ fullName: string; email: string; password: string; role: string }>();
+  const { register: regInvite, handleSubmit: hsInvite, reset: resetInvite } = useForm<{ email: string; role: string }>({
+    defaultValues: { email: "", role: "viewer" },
+  });
+  const { register: regUser, handleSubmit: hsUser, reset: resetUser, formState: { errors: userErrors } } = useForm<{
+    fullName: string; email: string; password: string; role: string;
+  }>({ defaultValues: { fullName: "", email: "", password: "", role: "viewer" } });
+
+  const [showPass, setShowPass] = useState(false);
+  const [createResult, setCreateResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [inviteResult, setInviteResult] = useState<string | null>(null);
+  const [saveResult, setSaveResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     if (settings) {
-      resetGeneral({ appName: settings.appName, defaultLanguage: settings.defaultLanguage, invitationExpiryHours: settings.invitationExpiryHours });
-      resetSmtp({ smtpHost: settings.smtpHost, smtpPort: settings.smtpPort, smtpUser: settings.smtpUser, smtpFromName: settings.smtpFromName });
+      resetGeneral({
+        appName: settings.appName,
+        defaultLanguage: settings.defaultLanguage,
+        invitationExpiryHours: settings.invitationExpiryHours,
+      });
+      resetSmtp({
+        smtpHost: settings.smtpHost,
+        smtpPort: settings.smtpPort,
+        smtpUser: settings.smtpUser,
+        smtpFromName: settings.smtpFromName,
+      });
     }
   }, [settings]);
 
   const saveMut = useMutation({
     mutationFn: (data: any) => apiRequest("PATCH", "/api/projects/global-settings", data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/projects/global-settings"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/projects/global-settings"] });
+      setSaveResult({ ok: true, msg: "✅ تم الحفظ بنجاح" });
+      setTimeout(() => setSaveResult(null), 3000);
+    },
+    onError: (err: any) => {
+      setSaveResult({ ok: false, msg: `❌ ${err.message}` });
+    },
   });
 
   const inviteMut = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/projects/send-invitation", data),
     onSuccess: (res: any) => {
-      alert(`تم إرسال الدعوة${res.inviteUrl ? `\nالرابط: ${res.inviteUrl}` : ""}`);
+      setInviteResult(res.emailSent
+        ? "✅ تم إرسال الدعوة بالبريد الإلكتروني"
+        : `🔗 رابط الدعوة: ${res.inviteUrl || ""}`);
+      resetInvite({ email: "", role: "viewer" });
     },
+    onError: (err: any) => setInviteResult(`❌ ${err.message}`),
   });
 
   const createUserMut = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/projects/create-user", data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/projects/users-list"] }),
+    onSuccess: (_, vars: any) => {
+      qc.invalidateQueries({ queryKey: ["/api/projects/users-list"] });
+      setCreateResult({ ok: true, msg: `✅ تم إنشاء حساب ${vars.fullName} بنجاح` });
+      resetUser({ fullName: "", email: "", password: "", role: "viewer" });
+      setTimeout(() => setCreateResult(null), 4000);
+    },
+    onError: (err: any) => setCreateResult({ ok: false, msg: `❌ ${err.message}` }),
   });
 
   const deleteUserMut = useMutation({
@@ -58,10 +104,21 @@ export function GlobalSettings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/projects/users-list"] }),
   });
 
+  const ROLE_LABEL: Record<string, string> = {
+    admin: "مدير",
+    editor: "محرر",
+    viewer: "مشاهد",
+  };
+  const ROLE_VARIANT: Record<string, "default" | "outline" | "secondary"> = {
+    admin: "default",
+    editor: "outline",
+    viewer: "secondary",
+  };
+
   const tabs = [
     { key: "general", label: "عام", icon: Globe },
-    { key: "smtp", label: "البريد", icon: Mail },
-    { key: "users", label: "المستخدمون", icon: Users },
+    { key: "smtp",    label: "البريد", icon: Mail },
+    { key: "users",   label: "المستخدمون", icon: Users },
   ] as const;
 
   return (
@@ -75,26 +132,46 @@ export function GlobalSettings() {
         {/* Tab buttons */}
         <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
           {tabs.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t.key ? "bg-white dark:bg-slate-700 shadow-sm text-primary" : "text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300"}`}
-              data-testid={`tab-${t.key}`}>
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${
+                tab === t.key
+                  ? "bg-white dark:bg-slate-700 shadow-sm text-primary"
+                  : "text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300"
+              }`}
+              data-testid={`tab-${t.key}`}
+            >
               <t.icon className="h-4 w-4" />
               {t.label}
             </button>
           ))}
         </div>
 
+        {/* ─── General Tab ─── */}
         {tab === "general" && (
           <form onSubmit={hsGeneral(d => saveMut.mutate(d))}>
             <Card className="p-5 space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-xs">اسم التطبيق</Label>
-                <Input {...regGeneral("appName")} data-testid="input-appName" />
+                <Label className="text-xs">اسم التطبيق / المنصة</Label>
+                <Input {...regGeneral("appName")} placeholder="منصة نواة" data-testid="input-appName" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">مدة صلاحية دعوة المستخدمين (ساعة)</Label>
-                <Input {...regGeneral("invitationExpiryHours")} type="number" data-testid="input-invitationHours" />
+                <Input
+                  {...regGeneral("invitationExpiryHours")}
+                  type="number" min={1} max={720}
+                  placeholder="72"
+                  data-testid="input-invitationHours"
+                />
               </div>
+              {saveResult && (
+                <div className={`text-sm p-2 rounded border flex items-center gap-2 ${
+                  saveResult.ok
+                    ? "bg-green-50 dark:bg-green-900/20 border-green-200 text-green-700 dark:text-green-400"
+                    : "bg-red-50 dark:bg-red-900/20 border-red-200 text-red-700 dark:text-red-400"
+                }`}>{saveResult.msg}</div>
+              )}
               <Button type="submit" disabled={saveMut.isPending} data-testid="button-save-general">
                 {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Save className="h-4 w-4 ml-1" />}
                 حفظ
@@ -103,9 +180,13 @@ export function GlobalSettings() {
           </form>
         )}
 
+        {/* ─── SMTP Tab ─── */}
         {tab === "smtp" && (
           <form onSubmit={hsSmtp(d => saveMut.mutate(d))}>
             <Card className="p-5 space-y-4">
+              <p className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                📧 إعدادات SMTP تُستخدم لإرسال دعوات المستخدمين. اتركها فارغة إن لم تكن تستخدم إرسال البريد.
+              </p>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs">SMTP Host</Label>
@@ -118,18 +199,30 @@ export function GlobalSettings() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">اسم المستخدم</Label>
-                  <Input {...regSmtp("smtpUser")} data-testid="input-smtpUser" />
+                  <Label className="text-xs">اسم المستخدم (البريد)</Label>
+                  <Input {...regSmtp("smtpUser")} placeholder="user@gmail.com" data-testid="input-smtpUser" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">كلمة المرور</Label>
-                  <Input {...regSmtp("smtpPass")} type="password" placeholder="اتركه فارغاً للإبقاء على القديم" data-testid="input-smtpPass" />
+                  <Input
+                    {...regSmtp("smtpPass")}
+                    type="password"
+                    placeholder="اتركه فارغاً للإبقاء على القديم"
+                    data-testid="input-smtpPass"
+                  />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">اسم المرسل</Label>
-                <Input {...regSmtp("smtpFromName")} data-testid="input-smtpFromName" />
+                <Input {...regSmtp("smtpFromName")} placeholder="منصة نواة" data-testid="input-smtpFromName" />
               </div>
+              {saveResult && (
+                <div className={`text-sm p-2 rounded border ${
+                  saveResult.ok
+                    ? "bg-green-50 dark:bg-green-900/20 border-green-200 text-green-700 dark:text-green-400"
+                    : "bg-red-50 dark:bg-red-900/20 border-red-200 text-red-700 dark:text-red-400"
+                }`}>{saveResult.msg}</div>
+              )}
               <Button type="submit" disabled={saveMut.isPending} data-testid="button-save-smtp">
                 {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Save className="h-4 w-4 ml-1" />}
                 حفظ إعدادات البريد
@@ -138,64 +231,193 @@ export function GlobalSettings() {
           </form>
         )}
 
+        {/* ─── Users Tab ─── */}
         {tab === "users" && (
           <div className="space-y-4">
-            {/* Existing users */}
-            <Card className="overflow-hidden">
-              <div className="p-4 border-b border-slate-100 dark:border-slate-700">
-                <h3 className="text-sm font-semibold">المستخدمون الحاليون</h3>
-              </div>
-              <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                {userList.map(u => (
-                  <div key={u.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
-                      <p className="text-sm font-semibold">{u.fullName}</p>
-                      <p className="text-xs text-muted-foreground">{u.email} • {u.role === "admin" ? "مدير" : u.role === "editor" ? "محرر" : "مشاهد"}</p>
-                    </div>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600" onClick={() => deleteUserMut.mutate(u.id)} data-testid={`button-delete-user-${u.id}`}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </Card>
 
-            {/* Invite user */}
-            <Card className="p-5 space-y-4">
-              <h3 className="text-sm font-semibold">دعوة مستخدم بالبريد الإلكتروني</h3>
-              <form onSubmit={hsInvite(d => inviteMut.mutate(d))} className="flex gap-3">
-                <Input {...regInvite("email")} placeholder="البريد الإلكتروني" type="email" className="flex-1" data-testid="input-invite-email" />
-                <select {...regInvite("role")} className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm">
-                  <option value="viewer">مشاهد</option>
-                  <option value="editor">محرر</option>
-                  <option value="admin">مدير</option>
-                </select>
-                <Button type="submit" disabled={inviteMut.isPending} data-testid="button-invite">
-                  {inviteMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                </Button>
-              </form>
+            {/* Users table */}
+            <Card className="overflow-hidden">
+              <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                <h3 className="text-sm font-semibold">المستخدمون الحاليون</h3>
+                <Badge variant="secondary">{userList.length}</Badge>
+              </div>
+              {userList.length === 0 ? (
+                <div className="py-8 text-center text-muted-foreground text-sm">لا يوجد مستخدمون بعد</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700">
+                      <tr>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">الاسم</th>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground hidden md:table-cell">البريد</th>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">الدور</th>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground hidden lg:table-cell">آخر دخول</th>
+                        <th className="px-4 py-2.5 w-12" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                      {userList.map(u => (
+                        <tr key={u.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors" data-testid={`row-user-${u.id}`}>
+                          <td className="px-4 py-2.5 font-medium text-sm">{u.fullName}</td>
+                          <td className="px-4 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{u.email}</td>
+                          <td className="px-4 py-2.5">
+                            <Badge variant={ROLE_VARIANT[u.role] || "secondary"}>
+                              {ROLE_LABEL[u.role] || u.role}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-muted-foreground hidden lg:table-cell">
+                            {formatDate(u.lastLoginAt)}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {deleteUserMut.isPending
+                              ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                              : (
+                                <Button
+                                  variant="ghost" size="icon"
+                                  className="h-7 w-7 text-red-400 hover:text-red-600"
+                                  onClick={() => {
+                                    if (confirm(`حذف مستخدم "${u.fullName}"؟`)) deleteUserMut.mutate(u.id);
+                                  }}
+                                  data-testid={`button-delete-user-${u.id}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </Card>
 
             {/* Create user directly */}
             <Card className="p-5 space-y-4">
-              <h3 className="text-sm font-semibold">إنشاء مستخدم مباشرة</h3>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Plus className="h-4 w-4 text-green-600" />
+                إنشاء مستخدم مباشرة
+              </h3>
               <form onSubmit={hsUser(d => createUserMut.mutate(d))} className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
-                  <Input {...regUser("fullName")} placeholder="الاسم الكامل" data-testid="input-new-fullName" />
-                  <Input {...regUser("email")} placeholder="البريد الإلكتروني" type="email" data-testid="input-new-email" />
+                  <div className="space-y-1">
+                    <Label className="text-xs">الاسم الكامل</Label>
+                    <Input
+                      {...regUser("fullName", { required: true })}
+                      placeholder="محمد أحمد"
+                      data-testid="input-new-fullName"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">البريد الإلكتروني</Label>
+                    <Input
+                      {...regUser("email", { required: true })}
+                      type="email"
+                      placeholder="user@example.com"
+                      data-testid="input-new-email"
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <Input {...regUser("password")} placeholder="كلمة المرور" type="password" data-testid="input-new-password" />
-                  <select {...regUser("role")} className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm">
+                  <div className="space-y-1">
+                    <Label className="text-xs">كلمة المرور</Label>
+                    <div className="relative">
+                      <Input
+                        {...regUser("password", { required: true, minLength: 8 })}
+                        type={showPass ? "text" : "password"}
+                        placeholder="8 أحرف على الأقل"
+                        data-testid="input-new-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPass(v => !v)}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-slate-700"
+                        tabIndex={-1}
+                      >
+                        {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {userErrors.password && (
+                      <p className="text-xs text-red-500">8 أحرف على الأقل</p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">الدور</Label>
+                    <select
+                      {...regUser("role")}
+                      className="w-full h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
+                      data-testid="select-new-role"
+                    >
+                      <option value="viewer">مشاهد</option>
+                      <option value="editor">محرر</option>
+                      <option value="admin">مدير</option>
+                    </select>
+                  </div>
+                </div>
+                {createResult && (
+                  <div className={`text-sm p-2 rounded border flex items-center gap-2 ${
+                    createResult.ok
+                      ? "bg-green-50 dark:bg-green-900/20 border-green-200 text-green-700 dark:text-green-400"
+                      : "bg-red-50 dark:bg-red-900/20 border-red-200 text-red-700 dark:text-red-400"
+                  }`}>
+                    {createResult.ok ? <Check className="h-4 w-4 shrink-0" /> : <X className="h-4 w-4 shrink-0" />}
+                    {createResult.msg}
+                  </div>
+                )}
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={createUserMut.isPending}
+                  className="bg-green-600 hover:bg-green-700"
+                  data-testid="button-create-user"
+                >
+                  {createUserMut.isPending
+                    ? <Loader2 className="h-4 w-4 animate-spin ml-1" />
+                    : <Plus className="h-4 w-4 ml-1" />}
+                  إنشاء مستخدم
+                </Button>
+              </form>
+            </Card>
+
+            {/* Invite via email */}
+            <Card className="p-5 space-y-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Send className="h-4 w-4 text-blue-600" />
+                دعوة مستخدم بالبريد الإلكتروني
+              </h3>
+              <form onSubmit={hsInvite(d => inviteMut.mutate(d))} className="space-y-3">
+                <div className="flex gap-3">
+                  <Input
+                    {...regInvite("email", { required: true })}
+                    placeholder="user@example.com"
+                    type="email"
+                    className="flex-1"
+                    data-testid="input-invite-email"
+                  />
+                  <select
+                    {...regInvite("role")}
+                    className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
+                    data-testid="select-invite-role"
+                  >
                     <option value="viewer">مشاهد</option>
                     <option value="editor">محرر</option>
                     <option value="admin">مدير</option>
                   </select>
+                  <Button type="submit" disabled={inviteMut.isPending} data-testid="button-invite">
+                    {inviteMut.isPending
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Send className="h-4 w-4" />}
+                  </Button>
                 </div>
-                <Button type="submit" size="sm" disabled={createUserMut.isPending} data-testid="button-create-user">
-                  {createUserMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Plus className="h-4 w-4 ml-1" />}
-                  إنشاء مستخدم
-                </Button>
+                {inviteResult && (
+                  <div className={`text-sm p-2 rounded border break-all ${
+                    inviteResult.startsWith("✅") || inviteResult.startsWith("🔗")
+                      ? "bg-green-50 dark:bg-green-900/20 border-green-200 text-green-700 dark:text-green-400"
+                      : "bg-red-50 dark:bg-red-900/20 border-red-200 text-red-700 dark:text-red-400"
+                  }`}>
+                    {inviteResult}
+                  </div>
+                )}
               </form>
             </Card>
           </div>
