@@ -207,12 +207,37 @@ router.get("/:id/records", requireAuth, async (req: Request, res: Response) => {
       .where(eq(projectRecords.projectId, String(req.params.id)))
       .orderBy(desc(projectRecords.submittedAt));
 
+    // Full-text search
     if (search) {
       const s = search.toLowerCase();
       allRecords = allRecords.filter(r => {
         const data = r.data as Record<string, any>;
         return Object.values(data).some(v => String(v || "").toLowerCase().includes(s));
       });
+    }
+
+    // Field-level filters: filter_<key>=value
+    for (const [qKey, qVal] of Object.entries(req.query)) {
+      if (!qKey.startsWith("filter_") || !qVal) continue;
+      const fieldKey = qKey.slice(7);
+      const filterVal = String(qVal).toLowerCase();
+      allRecords = allRecords.filter(r => {
+        const d = r.data as Record<string, any>;
+        return String(d[fieldKey] ?? "").toLowerCase().includes(filterVal);
+      });
+    }
+
+    // Date range filter on submittedAt
+    const dateFrom = req.query.dateFrom as string;
+    const dateTo = req.query.dateTo as string;
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      allRecords = allRecords.filter(r => r.submittedAt && r.submittedAt >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      allRecords = allRecords.filter(r => r.submittedAt && r.submittedAt <= to);
     }
 
     const total = allRecords.length;
@@ -405,18 +430,56 @@ router.get("/:id/export", requireAuth, async (req: Request, res: Response) => {
   try {
     const format = (req.query.format as string) || "xlsx";
     const pid = String(req.params.id);
+    const customFilename = req.query.filename as string;
+    const columnsParam = req.query.columns as string;
+    const groupByKey = req.query.groupBy as string;
 
     const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, pid));
-    const fields = await db.select().from(projectFields).where(eq(projectFields.projectId, pid)).orderBy(projectFields.stepNumber, projectFields.orderIndex);
-    const records = await db.select().from(projectRecords)
+    const allFields = await db.select().from(projectFields)
+      .where(eq(projectFields.projectId, pid))
+      .orderBy(projectFields.stepNumber, projectFields.orderIndex);
+
+    // Filter to requested columns only
+    const selectedKeys = columnsParam ? columnsParam.split(",").map(s => s.trim()).filter(Boolean) : null;
+    const fields = selectedKeys
+      ? allFields.filter(f => selectedKeys.includes(f.key))
+      : allFields;
+
+    // Fetch records with filters
+    let allRecords = await db.select().from(projectRecords)
       .where(eq(projectRecords.projectId, pid))
       .orderBy(desc(projectRecords.submittedAt));
 
-    const safeFilename = (proj?.name || "بيانات").replace(/[^a-zA-Z0-9_\u0600-\u06FF\s-]/g, "").trim();
+    // Field-level filters
+    for (const [qKey, qVal] of Object.entries(req.query)) {
+      if (!qKey.startsWith("filter_") || !qVal) continue;
+      const fieldKey = qKey.slice(7);
+      const fv = String(qVal).toLowerCase();
+      allRecords = allRecords.filter(r => {
+        const d = r.data as Record<string, any>;
+        return String(d[fieldKey] ?? "").toLowerCase().includes(fv);
+      });
+    }
+
+    // Date range
+    const dateFrom = req.query.dateFrom as string;
+    const dateTo = req.query.dateTo as string;
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      allRecords = allRecords.filter(r => r.submittedAt && r.submittedAt >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      allRecords = allRecords.filter(r => r.submittedAt && r.submittedAt <= to);
+    }
+
+    const safeFilename = (customFilename || proj?.name || "بيانات")
+      .replace(/[^a-zA-Z0-9_\u0600-\u06FF\s\-]/g, "").trim();
 
     if (format === "csv") {
       const headers = ["م", ...fields.map(f => f.label)];
-      const rows = records.map((r, i) => {
+      const rows = allRecords.map((r, i) => {
         const data = r.data as Record<string, any>;
         return [String(r.sequentialNumber || i + 1), ...fields.map(f => String(data[f.key] ?? ""))];
       });
@@ -428,24 +491,48 @@ router.get("/:id/export", requireAuth, async (req: Request, res: Response) => {
     }
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet(proj?.name || "بيانات", { views: [{ rightToLeft: true }] });
 
-    sheet.columns = [
-      { header: "م", key: "seq", width: 8 },
-      ...fields.map(f => ({ header: f.label, key: f.key, width: 20 })),
-    ];
+    const styleHeaderRow = (sheet: ExcelJS.Worksheet) => {
+      const hr = sheet.getRow(1);
+      hr.height = 30;
+      hr.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
+      hr.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11, name: "Arial" };
+      hr.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    };
 
-    const headerRow = sheet.getRow(1);
-    headerRow.height = 30;
-    headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { theme: 9, tint: -0.249977111117893 } as any };
-    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 12, name: "Arial" };
-    headerRow.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    const addSheetData = (sheetName: string, records: typeof allRecords) => {
+      const ws = workbook.addWorksheet(sheetName.slice(0, 31), { views: [{ rightToLeft: true }] });
+      ws.columns = [
+        { header: "م", key: "seq", width: 8 },
+        ...fields.map(f => ({ header: f.label, key: f.key, width: 22 })),
+        { header: "تاريخ التسجيل", key: "_date", width: 16 },
+      ];
+      styleHeaderRow(ws);
+      for (const [i, r] of records.entries()) {
+        const data = r.data as Record<string, any>;
+        const rowData: any = { seq: r.sequentialNumber || i + 1 };
+        for (const f of fields) rowData[f.key] = data[f.key] ?? "";
+        rowData._date = r.submittedAt ? r.submittedAt.toISOString().slice(0, 10) : "";
+        ws.addRow(rowData);
+      }
+    };
 
-    for (const [i, r] of records.entries()) {
-      const data = r.data as Record<string, any>;
-      const rowData: any = { seq: r.sequentialNumber || i + 1 };
-      for (const f of fields) rowData[f.key] = data[f.key] ?? "";
-      sheet.addRow(rowData);
+    if (groupByKey) {
+      // Group records by the field value and create a sheet per group
+      const groupMap = new Map<string, typeof allRecords>();
+      for (const r of allRecords) {
+        const d = r.data as Record<string, any>;
+        const groupVal = String(d[groupByKey] ?? "غير محدد");
+        if (!groupMap.has(groupVal)) groupMap.set(groupVal, []);
+        groupMap.get(groupVal)!.push(r);
+      }
+      // Summary sheet first
+      addSheetData("الكل", allRecords);
+      for (const [groupVal, groupRecords] of groupMap) {
+        addSheetData(groupVal, groupRecords);
+      }
+    } else {
+      addSheetData(proj?.name || "بيانات", allRecords);
     }
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

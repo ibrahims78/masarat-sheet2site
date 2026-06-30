@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { apiRequest } from "@/lib/queryClient";
 import {
   Save, Loader2, Users, Mail, Globe, Plus, Trash2,
-  Eye, EyeOff, Send, Check, X,
+  Eye, EyeOff, Send, Check, X, RefreshCw, KeyRound,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { User } from "@shared/schema";
@@ -24,6 +25,20 @@ function formatDate(d?: string | Date | null) {
 export function GlobalSettings() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"general" | "smtp" | "users">("general");
+  const [showPass, setShowPass] = useState(false);
+  const [createResult, setCreateResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [inviteResult, setInviteResult] = useState<string | null>(null);
+  const [saveResult, setSaveResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [smtpTestResult, setSmtpTestResult] = useState<string | null>(null);
+  const [smtpTesting, setSmtpTesting] = useState(false);
+
+  // Reset password dialog
+  const [resetUserId, setResetUserId] = useState<string | null>(null);
+  const [resetUserName, setResetUserName] = useState("");
+  const [newPass, setNewPass] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetResult, setResetResult] = useState<string | null>(null);
+  const [showNewPass, setShowNewPass] = useState(false);
 
   const { data: settings } = useQuery<any>({
     queryKey: ["/api/projects/global-settings"],
@@ -36,18 +51,17 @@ export function GlobalSettings() {
   });
 
   const { register: regGeneral, handleSubmit: hsGeneral, reset: resetGeneral } = useForm<any>();
-  const { register: regSmtp, handleSubmit: hsSmtp, reset: resetSmtp } = useForm<any>();
-  const { register: regInvite, handleSubmit: hsInvite, reset: resetInvite } = useForm<{ email: string; role: string }>({
-    defaultValues: { email: "", role: "viewer" },
+  const {
+    register: regSmtp, handleSubmit: hsSmtp, reset: resetSmtp, getValues: getSmtpValues,
+  } = useForm<any>();
+  const {
+    register: regInvite, handleSubmit: hsInvite, reset: resetInvite,
+  } = useForm<{ email: string; role: string }>({ defaultValues: { email: "", role: "viewer" } });
+  const {
+    register: regUser, handleSubmit: hsUser, reset: resetUser, formState: { errors: userErrors },
+  } = useForm<{ fullName: string; email: string; password: string; role: string }>({
+    defaultValues: { fullName: "", email: "", password: "", role: "viewer" },
   });
-  const { register: regUser, handleSubmit: hsUser, reset: resetUser, formState: { errors: userErrors } } = useForm<{
-    fullName: string; email: string; password: string; role: string;
-  }>({ defaultValues: { fullName: "", email: "", password: "", role: "viewer" } });
-
-  const [showPass, setShowPass] = useState(false);
-  const [createResult, setCreateResult] = useState<{ ok: boolean; msg: string } | null>(null);
-  const [inviteResult, setInviteResult] = useState<string | null>(null);
-  const [saveResult, setSaveResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     if (settings) {
@@ -72,9 +86,7 @@ export function GlobalSettings() {
       setSaveResult({ ok: true, msg: "✅ تم الحفظ بنجاح" });
       setTimeout(() => setSaveResult(null), 3000);
     },
-    onError: (err: any) => {
-      setSaveResult({ ok: false, msg: `❌ ${err.message}` });
-    },
+    onError: (err: any) => setSaveResult({ ok: false, msg: `❌ ${err.message}` }),
   });
 
   const inviteMut = useMutation({
@@ -104,22 +116,57 @@ export function GlobalSettings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/projects/users-list"] }),
   });
 
+  const testSmtp = async () => {
+    setSmtpTesting(true);
+    setSmtpTestResult(null);
+    const vals = getSmtpValues();
+    const res: any = await apiRequest("POST", "/api/projects/test-email", {
+      host: vals.smtpHost,
+      port: vals.smtpPort,
+      user: vals.smtpUser,
+      pass: vals.smtpPass,
+    }).catch(e => ({ ok: false, message: `❌ ${e.message}` }));
+    setSmtpTestResult(res.message);
+    setSmtpTesting(false);
+  };
+
+  const doResetPassword = async () => {
+    if (!resetUserId || newPass.length < 8) return;
+    setResetLoading(true);
+    setResetResult(null);
+    const res: any = await apiRequest("POST", `/api/projects/reset-password/${resetUserId}`, { password: newPass })
+      .catch(e => ({ ok: false, message: `❌ ${e.message}` }));
+    setResetResult(res.ok ? "✅ تم تغيير كلمة المرور بنجاح" : res.message || "❌ فشل");
+    setResetLoading(false);
+    if (res.ok) {
+      setNewPass("");
+      setTimeout(() => { setResetUserId(null); setResetResult(null); }, 2000);
+    }
+  };
+
   const ROLE_LABEL: Record<string, string> = {
-    admin: "مدير",
-    editor: "محرر",
-    viewer: "مشاهد",
+    admin: "مدير", editor: "محرر", viewer: "مشاهد",
   };
   const ROLE_VARIANT: Record<string, "default" | "outline" | "secondary"> = {
-    admin: "default",
-    editor: "outline",
-    viewer: "secondary",
+    admin: "default", editor: "outline", viewer: "secondary",
   };
 
   const tabs = [
     { key: "general", label: "عام", icon: Globe },
-    { key: "smtp",    label: "البريد", icon: Mail },
-    { key: "users",   label: "المستخدمون", icon: Users },
+    { key: "smtp", label: "البريد", icon: Mail },
+    { key: "users", label: "المستخدمون", icon: Users },
   ] as const;
+
+  const ResultBox = ({ msg }: { msg: string }) => (
+    <div className={`text-sm p-2.5 rounded-lg border flex items-start gap-2 ${
+      msg.startsWith("✅") || msg.startsWith("🔗")
+        ? "bg-green-50 dark:bg-green-900/20 border-green-200 text-green-700 dark:text-green-400"
+        : "bg-red-50 dark:bg-red-900/20 border-red-200 text-red-700 dark:text-red-400"
+    }`}>
+      {msg.startsWith("✅") ? <Check className="h-4 w-4 shrink-0 mt-0.5" /> : <X className="h-4 w-4 shrink-0 mt-0.5" />}
+      <span className="break-all">{msg}</span>
+    </div>
+  );
 
   return (
     <Layout>
@@ -129,12 +176,11 @@ export function GlobalSettings() {
           <p className="text-sm text-muted-foreground">إعدادات النظام على مستوى المنصة</p>
         </div>
 
-        {/* Tab buttons */}
         <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
           {tabs.map(t => (
             <button
               key={t.key}
-              onClick={() => setTab(t.key)}
+              onClick={() => { setTab(t.key); setSaveResult(null); setSmtpTestResult(null); }}
               className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${
                 tab === t.key
                   ? "bg-white dark:bg-slate-700 shadow-sm text-primary"
@@ -157,24 +203,28 @@ export function GlobalSettings() {
                 <Input {...regGeneral("appName")} placeholder="منصة نواة" data-testid="input-appName" />
               </div>
               <div className="space-y-1.5">
+                <Label className="text-xs">اللغة الافتراضية</Label>
+                <select {...regGeneral("defaultLanguage")}
+                  className="w-full h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
+                  data-testid="select-language">
+                  <option value="ar">العربية</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
                 <Label className="text-xs">مدة صلاحية دعوة المستخدمين (ساعة)</Label>
                 <Input
                   {...regGeneral("invitationExpiryHours")}
                   type="number" min={1} max={720}
                   placeholder="72"
+                  className="w-40"
                   data-testid="input-invitationHours"
                 />
               </div>
-              {saveResult && (
-                <div className={`text-sm p-2 rounded border flex items-center gap-2 ${
-                  saveResult.ok
-                    ? "bg-green-50 dark:bg-green-900/20 border-green-200 text-green-700 dark:text-green-400"
-                    : "bg-red-50 dark:bg-red-900/20 border-red-200 text-red-700 dark:text-red-400"
-                }`}>{saveResult.msg}</div>
-              )}
+              {saveResult && <ResultBox msg={saveResult.msg} />}
               <Button type="submit" disabled={saveMut.isPending} data-testid="button-save-general">
                 {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Save className="h-4 w-4 ml-1" />}
-                حفظ
+                حفظ الإعدادات
               </Button>
             </Card>
           </form>
@@ -184,9 +234,9 @@ export function GlobalSettings() {
         {tab === "smtp" && (
           <form onSubmit={hsSmtp(d => saveMut.mutate(d))}>
             <Card className="p-5 space-y-4">
-              <p className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+              <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300">
                 📧 إعدادات SMTP تُستخدم لإرسال دعوات المستخدمين. اتركها فارغة إن لم تكن تستخدم إرسال البريد.
-              </p>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs">SMTP Host</Label>
@@ -207,7 +257,7 @@ export function GlobalSettings() {
                   <Input
                     {...regSmtp("smtpPass")}
                     type="password"
-                    placeholder="اتركه فارغاً للإبقاء على القديم"
+                    placeholder={settings?.hasSmtpPass ? "محفوظة — اتركها فارغة للإبقاء" : "كلمة المرور"}
                     data-testid="input-smtpPass"
                   />
                 </div>
@@ -216,17 +266,28 @@ export function GlobalSettings() {
                 <Label className="text-xs">اسم المرسل</Label>
                 <Input {...regSmtp("smtpFromName")} placeholder="منصة نواة" data-testid="input-smtpFromName" />
               </div>
-              {saveResult && (
-                <div className={`text-sm p-2 rounded border ${
-                  saveResult.ok
-                    ? "bg-green-50 dark:bg-green-900/20 border-green-200 text-green-700 dark:text-green-400"
-                    : "bg-red-50 dark:bg-red-900/20 border-red-200 text-red-700 dark:text-red-400"
-                }`}>{saveResult.msg}</div>
-              )}
-              <Button type="submit" disabled={saveMut.isPending} data-testid="button-save-smtp">
-                {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Save className="h-4 w-4 ml-1" />}
-                حفظ إعدادات البريد
-              </Button>
+
+              {smtpTestResult && <ResultBox msg={smtpTestResult} />}
+              {saveResult && <ResultBox msg={saveResult.msg} />}
+
+              <div className="flex gap-2 flex-wrap">
+                <Button type="submit" disabled={saveMut.isPending} data-testid="button-save-smtp">
+                  {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Save className="h-4 w-4 ml-1" />}
+                  حفظ
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={smtpTesting}
+                  onClick={testSmtp}
+                  data-testid="button-test-smtp"
+                >
+                  {smtpTesting
+                    ? <Loader2 className="h-4 w-4 animate-spin ml-1" />
+                    : <RefreshCw className="h-4 w-4 ml-1" />}
+                  اختبار الاتصال
+                </Button>
+              </div>
             </Card>
           </form>
         )}
@@ -252,7 +313,7 @@ export function GlobalSettings() {
                         <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground hidden md:table-cell">البريد</th>
                         <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">الدور</th>
                         <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground hidden lg:table-cell">آخر دخول</th>
-                        <th className="px-4 py-2.5 w-12" />
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground w-28">إجراءات</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -269,20 +330,32 @@ export function GlobalSettings() {
                             {formatDate(u.lastLoginAt)}
                           </td>
                           <td className="px-4 py-2.5">
-                            {deleteUserMut.isPending
-                              ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                              : (
-                                <Button
-                                  variant="ghost" size="icon"
-                                  className="h-7 w-7 text-red-400 hover:text-red-600"
-                                  onClick={() => {
-                                    if (confirm(`حذف مستخدم "${u.fullName}"؟`)) deleteUserMut.mutate(u.id);
-                                  }}
-                                  data-testid={`button-delete-user-${u.id}`}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost" size="icon"
+                                className="h-7 w-7 text-blue-400 hover:text-blue-600"
+                                title="إعادة تعيين كلمة المرور"
+                                onClick={() => {
+                                  setResetUserId(u.id);
+                                  setResetUserName(u.fullName);
+                                  setResetResult(null);
+                                  setNewPass("");
+                                }}
+                                data-testid={`button-reset-pass-${u.id}`}
+                              >
+                                <KeyRound className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost" size="icon"
+                                className="h-7 w-7 text-red-400 hover:text-red-600"
+                                onClick={() => {
+                                  if (confirm(`حذف مستخدم "${u.fullName}"؟`)) deleteUserMut.mutate(u.id);
+                                }}
+                                data-testid={`button-delete-user-${u.id}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -354,16 +427,7 @@ export function GlobalSettings() {
                     </select>
                   </div>
                 </div>
-                {createResult && (
-                  <div className={`text-sm p-2 rounded border flex items-center gap-2 ${
-                    createResult.ok
-                      ? "bg-green-50 dark:bg-green-900/20 border-green-200 text-green-700 dark:text-green-400"
-                      : "bg-red-50 dark:bg-red-900/20 border-red-200 text-red-700 dark:text-red-400"
-                  }`}>
-                    {createResult.ok ? <Check className="h-4 w-4 shrink-0" /> : <X className="h-4 w-4 shrink-0" />}
-                    {createResult.msg}
-                  </div>
-                )}
+                {createResult && <ResultBox msg={createResult.msg} />}
                 <Button
                   type="submit"
                   size="sm"
@@ -409,20 +473,74 @@ export function GlobalSettings() {
                       : <Send className="h-4 w-4" />}
                   </Button>
                 </div>
-                {inviteResult && (
-                  <div className={`text-sm p-2 rounded border break-all ${
-                    inviteResult.startsWith("✅") || inviteResult.startsWith("🔗")
-                      ? "bg-green-50 dark:bg-green-900/20 border-green-200 text-green-700 dark:text-green-400"
-                      : "bg-red-50 dark:bg-red-900/20 border-red-200 text-red-700 dark:text-red-400"
-                  }`}>
-                    {inviteResult}
-                  </div>
-                )}
+                {inviteResult && <ResultBox msg={inviteResult} />}
               </form>
             </Card>
           </div>
         )}
       </div>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetUserId} onOpenChange={v => { if (!v) { setResetUserId(null); setResetResult(null); setNewPass(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-blue-500" />
+              إعادة تعيين كلمة المرور
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              إعادة تعيين كلمة مرور المستخدم: <strong>{resetUserName}</strong>
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs">كلمة المرور الجديدة</Label>
+              <div className="relative">
+                <Input
+                  type={showNewPass ? "text" : "password"}
+                  value={newPass}
+                  onChange={e => setNewPass(e.target.value)}
+                  placeholder="8 أحرف على الأقل"
+                  data-testid="input-new-pass"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPass(v => !v)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-slate-700"
+                >
+                  {showNewPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {newPass && newPass.length < 8 && (
+                <p className="text-xs text-red-500">كلمة المرور يجب أن تكون 8 أحرف على الأقل</p>
+              )}
+            </div>
+            {resetResult && (
+              <div className={`p-2.5 rounded-lg text-sm border flex items-center gap-2 ${
+                resetResult.startsWith("✅")
+                  ? "bg-green-50 dark:bg-green-900/20 border-green-200 text-green-700"
+                  : "bg-red-50 dark:bg-red-900/20 border-red-200 text-red-700"
+              }`}>
+                {resetResult.startsWith("✅") ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                {resetResult}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setResetUserId(null); setResetResult(null); setNewPass(""); }}>
+              إلغاء
+            </Button>
+            <Button
+              onClick={doResetPassword}
+              disabled={resetLoading || newPass.length < 8}
+              data-testid="button-confirm-reset-pass"
+            >
+              {resetLoading ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <KeyRound className="h-4 w-4 ml-1" />}
+              تغيير كلمة المرور
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
