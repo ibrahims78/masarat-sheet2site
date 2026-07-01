@@ -55,6 +55,7 @@ function AppRoutes() {
         <Route path="/admin/register/:token" component={AdminRegister} />
         <Route path="/admin/login" component={Login} />
         <Route path="/admin" component={() => <Redirect to="/admin/projects" />} />
+        <Route path="/admin/dashboard" component={() => <Redirect to="/admin/projects" />} />
 
         {/* Public project forms */}
         <Route path="/p/:projectId/register" component={ProjectRegister} />
