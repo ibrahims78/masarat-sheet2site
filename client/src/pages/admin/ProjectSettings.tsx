@@ -296,13 +296,24 @@ export function ProjectSettings() {
                       </Button>
                     </div>
                     {(f.fieldType === "select" || f.fieldType === "radio") && (
-                      <div className="pr-6">
-                        <Input
-                          value={(f.options as string[] | null || []).join(",")}
-                          onChange={e => updateField(idx, { options: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
-                          placeholder="الخيارات مفصولة بفاصلة: خيار1,خيار2,خيار3"
-                          className="text-xs h-7"
+                      <div className="pr-6 space-y-1">
+                        <p className="text-[11px] text-muted-foreground">الخيارات — كل خيار في سطر منفصل</p>
+                        <Textarea
+                          key={`${f.id}-opts`}
+                          defaultValue={(f.options as string[] | null || []).join("\n")}
+                          onBlur={e => updateField(idx, { options: e.target.value.split("\n").map((s: string) => s.trim()).filter(Boolean) })}
+                          placeholder={"خيار 1\nخيار 2\nخيار 3"}
+                          className="text-xs"
+                          rows={3}
+                          data-testid={`field-options-${idx}`}
                         />
+                        {(f.options as string[] | null || []).length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {(f.options as string[]).map((opt, oi) => (
+                              <span key={oi} className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium">{opt}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
