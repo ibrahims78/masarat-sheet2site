@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import {
   Loader2, CheckCircle, ChevronLeft, ChevronRight, Shield,
   User, Briefcase, MapPin, ClipboardCheck, ClipboardList,
-  FileText, Building2, Copy,
+  FileText, Building2, Copy, Printer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ProjectField } from "@shared/schema";
@@ -116,6 +116,218 @@ export function ProjectRegister() {
   const goToStepForEdit = (si: number) => {
     setFromReview(true);
     setStep(si);
+  };
+
+  const printReport = () => {
+    const vals = getValues();
+    const printSteps = steps.slice(0, -1);
+    const date = new Date().toLocaleDateString("ar-SY", { year: "numeric", month: "long", day: "numeric" });
+
+    const sectionsHtml = printSteps.map((stepName, si) => {
+      const stepFields = getStepFields(si + 1);
+      if (stepFields.length === 0) return "";
+      const rows = stepFields.map(f => {
+        const val = vals[f.key];
+        const display = (val !== undefined && val !== "" && val !== null) ? String(val) : "—";
+        return `<tr>
+          <td class="label-cell">${f.label}</td>
+          <td class="value-cell">${display}</td>
+        </tr>`;
+      }).join("");
+      return `
+        <div class="section">
+          <div class="section-header">
+            <span class="section-num">${si + 1}</span>
+            <span class="section-title">${stepName}</span>
+          </div>
+          <table class="data-table">
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <title>تقرير بيانات — ${project?.formTitle || ""}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 11pt;
+      color: #1e293b;
+      background: #fff;
+      direction: rtl;
+    }
+    .page { max-width: 210mm; margin: 0 auto; padding: 12mm 15mm; }
+
+    /* ── Header ── */
+    .report-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 3px solid #1d4ed8;
+      padding-bottom: 10mm;
+      margin-bottom: 8mm;
+    }
+    .report-header-right { display: flex; align-items: center; gap: 12px; }
+    .logo-circle {
+      width: 52px; height: 52px;
+      background: #1d4ed8;
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 22px; font-weight: 900;
+      flex-shrink: 0;
+    }
+    .report-title { font-size: 16pt; font-weight: 900; color: #1d4ed8; line-height: 1.3; }
+    .report-subtitle { font-size: 9pt; color: #64748b; margin-top: 2px; }
+    .report-meta { text-align: left; font-size: 9pt; color: #64748b; line-height: 1.8; }
+    .report-meta strong { color: #1e293b; }
+
+    /* ── Status bar ── */
+    .status-bar {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 8px 14px;
+      margin-bottom: 7mm;
+      font-size: 9.5pt;
+      color: #15803d;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Sections ── */
+    .section { margin-bottom: 6mm; break-inside: avoid; }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #1d4ed8;
+      color: #fff;
+      padding: 6px 12px;
+      border-radius: 6px 6px 0 0;
+    }
+    .section-num {
+      width: 22px; height: 22px;
+      background: rgba(255,255,255,0.25);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9pt; font-weight: 700; flex-shrink: 0;
+    }
+    .section-title { font-size: 11pt; font-weight: 700; }
+
+    /* ── Table ── */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #e2e8f0;
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      overflow: hidden;
+    }
+    .data-table tbody tr:nth-child(odd)  { background: #f8fafc; }
+    .data-table tbody tr:nth-child(even) { background: #fff; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .label-cell {
+      width: 38%;
+      padding: 6px 12px;
+      font-size: 9.5pt;
+      color: #475569;
+      border-bottom: 1px solid #e2e8f0;
+      border-left: 1px solid #e2e8f0;
+      font-weight: 500;
+    }
+    .value-cell {
+      width: 62%;
+      padding: 6px 12px;
+      font-size: 9.5pt;
+      color: #0f172a;
+      border-bottom: 1px solid #e2e8f0;
+      font-weight: 600;
+    }
+    .value-cell.empty { color: #94a3b8; font-weight: 400; }
+
+    /* ── Footer ── */
+    .report-footer {
+      margin-top: 10mm;
+      padding-top: 6mm;
+      border-top: 1.5px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      font-size: 8.5pt;
+      color: #94a3b8;
+    }
+    .signature-box {
+      border: 1px dashed #cbd5e1;
+      border-radius: 6px;
+      padding: 8px 20px;
+      text-align: center;
+      font-size: 8pt;
+      color: #94a3b8;
+      min-width: 120px;
+    }
+    .signature-box .sig-line { border-top: 1px solid #cbd5e1; margin-top: 20px; padding-top: 5px; }
+
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .page { padding: 8mm 12mm; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="report-header">
+    <div class="report-header-right">
+      <div class="logo-circle">ن</div>
+      <div>
+        <div class="report-title">${project?.formTitle || "نموذج التسجيل"}</div>
+        <div class="report-subtitle">${project?.formSubtitle || "منصة نواة لإدارة بيانات الكوادر الصحية"}</div>
+      </div>
+    </div>
+    <div class="report-meta">
+      <div>تاريخ الطباعة: <strong>${date}</strong></div>
+      <div>الحالة: <strong style="color:#15803d">في انتظار الإرسال</strong></div>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="status-bar">
+    <div class="status-dot"></div>
+    تقرير مراجعة البيانات — يُرجى التحقق من صحة جميع المعلومات قبل الإرسال النهائي
+  </div>
+
+  <!-- Sections -->
+  ${sectionsHtml}
+
+  <!-- Footer -->
+  <div class="report-footer">
+    <div>
+      <div>هذا التقرير تم إنشاؤه تلقائياً بتاريخ ${date}</div>
+      <div style="margin-top:3px">منصة نواة · نظام بيانات الكوادر الصحية</div>
+    </div>
+    <div class="signature-box">
+      توقيع المسؤول
+      <div class="sig-line">التوقيع والختم</div>
+    </div>
+  </div>
+
+</div>
+<script>window.onload = () => { window.print(); }<\/script>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (win) { win.document.write(html); win.document.close(); }
   };
 
   const copyLink = () => {
@@ -349,14 +561,23 @@ export function ProjectRegister() {
               /* Review — read-only summary grouped by step */
               <div className="space-y-4">
                 {/* Header */}
-                <div className="flex items-center gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-2xl p-4">
+                <div className="flex items-start gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-2xl p-4">
                   <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0">
                     <ClipboardCheck className="h-5 w-5 text-green-600" />
                   </div>
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <h2 className="font-bold text-slate-800 dark:text-slate-100">مراجعة وتعديل البيانات</h2>
                     <p className="text-xs text-muted-foreground">راجع بياناتك قبل الإرسال النهائي، واضغط "تعديل" لتغيير أي قسم</p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={printReport}
+                    data-testid="button-print-report"
+                    className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600 px-3 py-2 rounded-xl transition shadow-sm shrink-0"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    طباعة التقرير
+                  </button>
                 </div>
 
                 {/* One card per step */}
