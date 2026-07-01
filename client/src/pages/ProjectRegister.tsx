@@ -37,6 +37,7 @@ export function ProjectRegister() {
   const [tokenHours, setTokenHours] = useState(48);
   const [verifying, setVerifying] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [fromReview, setFromReview] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(200);
 
@@ -102,7 +103,19 @@ export function ProjectRegister() {
     const stepFields = getStepFields(step + 1);
     const keys = stepFields.map(f => f.key);
     const valid = await trigger(keys);
-    if (valid) setStep(s => Math.min(s + 1, totalSteps - 1));
+    if (valid) {
+      if (fromReview) {
+        setFromReview(false);
+        setStep(totalSteps - 1);
+      } else {
+        setStep(s => Math.min(s + 1, totalSteps - 1));
+      }
+    }
+  };
+
+  const goToStepForEdit = (si: number) => {
+    setFromReview(true);
+    setStep(si);
   };
 
   const copyLink = () => {
@@ -333,7 +346,7 @@ export function ProjectRegister() {
           <form onSubmit={handleSubmit(d => submitMut.mutate(d))}>
 
             {isReviewStep ? (
-              /* Review — editable fields grouped by step */
+              /* Review — read-only summary grouped by step */
               <div className="space-y-4">
                 {/* Header */}
                 <div className="flex items-center gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-2xl p-4">
@@ -342,7 +355,7 @@ export function ProjectRegister() {
                   </div>
                   <div>
                     <h2 className="font-bold text-slate-800 dark:text-slate-100">مراجعة وتعديل البيانات</h2>
-                    <p className="text-xs text-muted-foreground">يمكنك تعديل أي حقل مباشرةً قبل الإرسال النهائي</p>
+                    <p className="text-xs text-muted-foreground">راجع بياناتك قبل الإرسال النهائي، واضغط "تعديل" لتغيير أي قسم</p>
                   </div>
                 </div>
 
@@ -351,29 +364,46 @@ export function ProjectRegister() {
                   const stepFields = getStepFields(si + 1);
                   if (stepFields.length === 0) return null;
                   const StepIcon = STEP_ICONS[si % STEP_ICONS.length];
+                  const vals = allValues;
                   return (
                     <Card key={si} className="overflow-hidden shadow-sm">
-                      {/* Step header with "Go to step" button */}
-                      <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                          <StepIcon className="h-4 w-4 text-primary" />
+                      {/* Card header */}
+                      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                            <StepIcon className="h-4 w-4 text-primary" />
+                          </div>
+                          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{stepName}</span>
                         </div>
-                        <span className="flex-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{stepName}</span>
                         <button
                           type="button"
-                          onClick={() => setStep(si)}
-                          className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition"
-                          data-testid={`button-goto-step-${si}`}
+                          onClick={() => goToStepForEdit(si)}
+                          className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition px-2 py-1 rounded-lg hover:bg-primary/5"
+                          data-testid={`button-edit-step-${si}`}
                         >
-                          <ChevronLeft className="h-3.5 w-3.5" />
-                          الانتقال للخطوة
+                          ✏️ تعديل
                         </button>
                       </div>
-                      {/* Editable fields */}
-                      <div className="p-5">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {stepFields.map(f => renderField(f))}
-                        </div>
+                      {/* Read-only rows */}
+                      <div className="px-5 py-3">
+                        <dl>
+                          {stepFields.map(f => (
+                            <div
+                              key={f.id}
+                              className="flex items-start gap-3 py-2.5 border-b border-slate-100 dark:border-slate-700/60 last:border-0"
+                            >
+                              <dt className="text-xs text-muted-foreground w-40 shrink-0 text-right pt-0.5 leading-relaxed">
+                                {f.label}
+                              </dt>
+                              <dd className="flex-1 text-sm font-medium text-slate-800 dark:text-slate-200 break-words">
+                                {vals[f.key] !== undefined && vals[f.key] !== "" && vals[f.key] !== null
+                                  ? String(vals[f.key])
+                                  : <span className="text-slate-400 dark:text-slate-500 font-normal">—</span>
+                                }
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
                       </div>
                     </Card>
                   );
@@ -441,6 +471,12 @@ export function ProjectRegister() {
                 : <CheckCircle className="h-4 w-4" />
               }
               إرسال البيانات
+            </Button>
+          ) : fromReview ? (
+            <Button type="button" onClick={nextStep}
+              data-testid="button-back-to-review" className="gap-2 h-11 px-8 bg-green-600 hover:bg-green-700 text-white">
+              <CheckCircle className="h-4 w-4" />
+              العودة للمراجعة
             </Button>
           ) : (
             <Button type="button" onClick={nextStep}
