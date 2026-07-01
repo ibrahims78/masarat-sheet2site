@@ -1,7 +1,7 @@
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import type { ProjectField } from "@shared/schema";
 
 interface FormInfo {
-  project: { id: string; name: string; formTitle: string; formSubtitle?: string; formEnabled: boolean; formDisabledMessage?: string; steps: string[] };
+  project: { id: string; name: string; formTitle: string; formSubtitle?: string; formEnabled: boolean; formDisabledMessage?: string; steps: string[]; requiresCode: boolean };
   fields: ProjectField[];
 }
 
@@ -20,6 +20,7 @@ export function ProjectRegister() {
   const { projectId } = useParams<{ projectId: string }>();
   const [step, setStep] = useState(0);
   const [codeVerified, setCodeVerified] = useState(false);
+  const [codeSkipped, setCodeSkipped] = useState(false);
   const [invitationCode, setInvitationCode] = useState("");
   const [codeError, setCodError] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -38,6 +39,13 @@ export function ProjectRegister() {
   const fields = formInfo?.fields || [];
   const steps = project?.steps || ["التسجيل"];
   const totalSteps = steps.length;
+
+  useEffect(() => {
+    if (project && !project.requiresCode && !codeVerified && !codeSkipped) {
+      setCodeSkipped(true);
+      setCodeVerified(true);
+    }
+  }, [project]);
 
   const getStepFields = (stepNum: number) => fields.filter(f => (f.stepNumber || 1) === stepNum);
   const isLastStep = step === totalSteps - 1;

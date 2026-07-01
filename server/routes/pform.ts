@@ -23,6 +23,7 @@ router.get("/:projectId/info", async (req: Request, res: Response) => {
       formEnabled: projects.formEnabled,
       formDisabledMessage: projects.formDisabledMessage,
       steps: projects.steps,
+      invitationCode: projects.invitationCode,
     }).from(projects).where(eq(projects.id, pid));
 
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
@@ -31,7 +32,8 @@ router.get("/:projectId/info", async (req: Request, res: Response) => {
       .where(and(eq(projectFields.projectId, pid), eq(projectFields.isVisible, true)))
       .orderBy(projectFields.stepNumber, projectFields.orderIndex);
 
-    res.json({ project: proj, fields });
+    const { invitationCode, ...safeProj } = proj;
+    res.json({ project: { ...safeProj, requiresCode: !!(invitationCode?.trim()) }, fields });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -50,7 +52,9 @@ router.post("/:projectId/verify-code", verifyLimiter, async (req: Request, res: 
 
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
     if (!proj.formEnabled) return res.status(403).json({ error: proj.formDisabledMessage || "النموذج متوقف مؤقتاً" });
-    if (code?.trim() !== proj.invitationCode) return res.status(401).json({ error: "رمز الدعوة غير صحيح" });
+    if (proj.invitationCode?.trim() && code?.trim() !== proj.invitationCode) {
+      return res.status(401).json({ error: "رمز الدعوة غير صحيح" });
+    }
 
     (req.session as any)[`code_${pid}`] = true;
     res.json({ ok: true });
@@ -63,7 +67,10 @@ router.post("/:projectId/verify-code", verifyLimiter, async (req: Request, res: 
 router.post("/:projectId/submit", submitLimiter, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.projectId);
-    if (!(req.session as any)[`code_${pid}`]) {
+    const [projCheck] = await db.select({ invitationCode: projects.invitationCode })
+      .from(projects).where(eq(projects.id, pid));
+    const needsCode = !!(projCheck?.invitationCode?.trim());
+    if (needsCode && !(req.session as any)[`code_${pid}`]) {
       return res.status(401).json({ error: "يجب التحقق من رمز الدعوة أولاً" });
     }
 
