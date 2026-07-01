@@ -33,7 +33,7 @@ export function Login() {
     setError("");
     try {
       await login(data.email, data.password, data.rememberMe);
-      nav("/admin/dashboard");
+      nav("/admin/projects");
     } catch (err: any) {
       setError(err.message);
     } finally {
