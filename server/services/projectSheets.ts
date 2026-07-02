@@ -11,6 +11,11 @@ async function getSheetsClient(projectId: string, extraScopes: string[] = []) {
     throw new Error("لم يتم إعداد Google Sheets لهذا المشروع");
   }
 
+  // Normalise the stored Sheet ID — user may have pasted a full URL
+  if (proj.googleSheetId) {
+    proj.googleSheetId = extractSpreadsheetId(proj.googleSheetId);
+  }
+
   const keyJson = decrypt(proj.googleServiceAccountKeyEnc);
   const credentials = JSON.parse(keyJson);
 
@@ -33,6 +38,21 @@ async function getProjectFields(projectId: string) {
 }
 
 /** Wrap sheet name in single quotes so spaces/special chars work in range notation */
+/**
+ * Extract a bare spreadsheet ID from either a bare ID or a full Google Sheets URL.
+ * e.g. "https://docs.google.com/spreadsheets/d/ABC123/edit" → "ABC123"
+ */
+export function extractSpreadsheetId(input: string): string {
+  const trimmed = (input || "").trim();
+  // Full URL pattern: /spreadsheets/d/<ID>
+  const urlMatch = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (urlMatch) return urlMatch[1];
+  // Already a bare ID (alphanumeric + _ -)
+  if (/^[a-zA-Z0-9_-]+$/.test(trimmed)) return trimmed;
+  // Unknown format — return trimmed and let Google reject it with a clear error
+  return trimmed;
+}
+
 /**
  * Sanitize a string for use as a Google Sheets tab name.
  * Rules: max 100 chars, no \ / ? * [ ] :, not empty, not "History".
@@ -177,9 +197,26 @@ export async function testProjectSheetsConnection(projectId: string): Promise<{ 
     const { sheets, proj } = await getSheetsClient(projectId);
     if (!proj.googleSheetId) return { ok: false, message: "لم يتم إدخال Sheet ID" };
 
-    await sheets.spreadsheets.get({ spreadsheetId: proj.googleSheetId });
+    const spreadsheetId = extractSpreadsheetId(proj.googleSheetId);
+    if (spreadsheetId !== proj.googleSheetId) {
+      // Auto-heal: persist the clean ID so future calls use it
+      await db.update(projects).set({ googleSheetId: spreadsheetId }).where(eq(projects.id, projectId));
+    }
+
+    await sheets.spreadsheets.get({ spreadsheetId });
     return { ok: true, message: "✅ تم الاتصال بـ Google Sheets بنجاح" };
   } catch (err: any) {
+    const is400 = /invalid argument/i.test(err.message) || err?.code === 400 || err?.status === 400;
+    if (is400) {
+      return {
+        ok: false,
+        message:
+          "❌ معرف الـ Sheet غير صالح (400) — يبدو أن Sheet ID المُدخَل تالف أو يحتوي على رابط كامل.\n" +
+          "الصحيح: أدخل فقط الـ ID من رابط الـ Sheet، مثال:\n" +
+          "الرابط: https://docs.google.com/spreadsheets/d/ABC123xyz/edit\n" +
+          "الـ ID فقط: ABC123xyz",
+      };
+    }
     return { ok: false, message: `❌ ${err.message}` };
   }
 }

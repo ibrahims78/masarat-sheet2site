@@ -143,6 +143,12 @@ router.patch("/:id", requireAdmin, async (req: Request, res: Response) => {
       if (field in body) update[field] = body[field];
     }
 
+    // Sanitize Sheet ID: accept full URL or bare ID, always store bare ID
+    if ("googleSheetId" in update && update.googleSheetId) {
+      const { extractSpreadsheetId } = await import("../services/projectSheets.js");
+      update.googleSheetId = extractSpreadsheetId(update.googleSheetId);
+    }
+
     if (body.googleServiceAccountKey) update.googleServiceAccountKeyEnc = encrypt(body.googleServiceAccountKey);
     if (body.telegramBotToken) update.telegramBotTokenEnc = encrypt(body.telegramBotToken);
 
