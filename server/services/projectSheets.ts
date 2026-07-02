@@ -274,7 +274,7 @@ export async function createProjectSheet(projectId: string, isBackground = false
     const folderId = folderIdMatch ? folderIdMatch[1] : rawFolder;
     console.log("[ProjectSheets] rawFolder:", rawFolder, "| folderId:", folderId);
 
-    let spreadsheetId: string;
+    let spreadsheetId: string = "";
     let inFolder = false;
     let folderNote = "";
 
