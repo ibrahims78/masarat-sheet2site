@@ -105,7 +105,7 @@ export function EmployeeDetails() {
 
         {/* Print Header */}
         <div className="hidden print:block text-center mb-6 pb-4 border-b-2">
-          <h1 className="text-xl font-bold">نموذج منصة نواة لمديريات الصحة والهيئات</h1>
+          <h1 className="text-xl font-bold">نموذج التسجيل — منصة مسار</h1>
           <p className="text-sm text-gray-500">
             {emp.firstName} {emp.fatherName} {emp.familyName} — رقم وطني: {emp.nationalId}
           </p>

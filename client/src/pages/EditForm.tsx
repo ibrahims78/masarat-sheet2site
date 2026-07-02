@@ -107,7 +107,7 @@ export function EditForm() {
       <header className="sticky top-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-b border-slate-200 dark:border-slate-700 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <h1 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-            {lang === "ar" ? "🏥 تعديل بيانات نموذج منصة نواة لمديريات الصحة والهيئات" : "🏥 Edit Nawah Platform Form Data"}
+            {lang === "ar" ? "✏️ تعديل بيانات النموذج — منصة مسار" : "✏️ Edit Form Data — Masar Platform"}
           </h1>
           <div className="flex items-center gap-2">
             <ThemeToggle />

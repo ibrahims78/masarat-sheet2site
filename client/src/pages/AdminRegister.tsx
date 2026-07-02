@@ -63,7 +63,7 @@ export function AdminRegister() {
           </div>
           <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100">إنشاء حسابك</h1>
           <p className="text-muted-foreground text-sm mt-1.5">
-            تم دعوتك للانضمام إلى نظام الكوادر الصحية
+            تم دعوتك للانضمام إلى منصة مسار
           </p>
         </div>
 
@@ -150,7 +150,7 @@ export function AdminRegister() {
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-5">
-          نظام بيانات الكوادر الصحية · منصة نواة
+          منصة مسار
         </p>
       </div>
     </div>

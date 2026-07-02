@@ -61,7 +61,7 @@ export function Setup() {
       <div className="absolute top-4 right-4">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 backdrop-blur-sm shadow-sm">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">منصة نواة</span>
+          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">مسار</span>
         </div>
       </div>
 
@@ -194,7 +194,7 @@ export function Setup() {
         </form>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          نظام بيانات الكوادر الصحية · منصة نواة
+          منصة مسار
         </p>
       </div>
     </div>

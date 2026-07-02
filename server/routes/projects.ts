@@ -713,7 +713,7 @@ router.post("/send-invitation", requireAdmin, async (req: Request, res: Response
     const { email, role } = req.body;
     const [s] = await db.select().from(systemSettings).where(eq(systemSettings.id, "singleton"));
     const expiryHours = s?.invitationExpiryHours ?? 72;
-    const appName = s?.appName || "منصة نواة";
+    const appName = s?.appName || "مسار";
     const token = uuidv4();
     const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000);
 

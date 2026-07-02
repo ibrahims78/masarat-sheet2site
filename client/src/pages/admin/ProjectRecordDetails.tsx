@@ -92,7 +92,7 @@ export function ProjectRecordDetails() {
 
         {/* Print header (only visible when printing) */}
         <div className="hidden print:block mb-6">
-          <h1 className="text-xl font-bold">{project?.name || "بيانات الكوادر الصحية"}</h1>
+          <h1 className="text-xl font-bold">{project?.name || "بيانات التسجيل"}</h1>
           <p className="text-sm text-gray-500">السجل #{record?.sequentialNumber} — {record?.submittedAt ? new Date(record.submittedAt).toLocaleDateString("ar") : ""}</p>
         </div>
 

@@ -11,8 +11,8 @@ interface LangCtx {
 
 const translations: Record<string, Record<Lang, string>> = {
   // Common
-  "app.name": { ar: "نظام بيانات الكوادر الصحية", en: "Healthcare Staff System" },
-  "app.subtitle": { ar: "منصة نواة — وزارة الصحة", en: "Nawah Platform — Ministry of Health" },
+  "app.name": { ar: "منصة مسار", en: "Masar Platform" },
+  "app.subtitle": { ar: "منصة مسار — إدارة نماذج التسجيل والبيانات", en: "Masar — Forms & Data Management" },
   "btn.next": { ar: "متابعة", en: "Next" },
   "btn.back": { ar: "رجوع", en: "Back" },
   "btn.submit": { ar: "إرسال البيانات", en: "Submit" },

@@ -54,7 +54,7 @@ export function Layout({ children, projectId }: LayoutProps) {
         </div>
         {sidebarOpen && (
           <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate leading-tight">منصة نواة</p>
+            <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate leading-tight">مسار</p>
             <p className="text-[10px] text-muted-foreground">نظام إدارة المشاريع</p>
           </div>
         )}

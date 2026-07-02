@@ -44,7 +44,7 @@ async function getTransporter(): Promise<{ transporter: nodemailer.Transporter; 
   });
   return {
     transporter,
-    fromName: settings.smtpFromName || "نظام الكوادر الصحية",
+    fromName: settings.smtpFromName || "منصة مسار",
     fromUser: settings.smtpUser,
   };
 }
@@ -61,7 +61,7 @@ export async function sendInvitationEmail(
   role: string,
   appUrl: string,
   expiryHours: number = 72,
-  appName: string = "نظام بيانات الكوادر الصحية"
+  appName: string = "منصة مسار"
 ): Promise<boolean> {
   try {
     const { transporter, fromName, fromUser } = await getTransporter();

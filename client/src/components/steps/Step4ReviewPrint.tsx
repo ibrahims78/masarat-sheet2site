@@ -48,7 +48,7 @@ export function Step4ReviewPrint({ onEditStep, onSubmit, submitting }: Step4Prop
       <div className="print-container">
         {/* Print header */}
         <div className="hidden print:block text-center mb-6 pb-4 border-b-2 border-slate-800">
-          <h1 className="text-xl font-bold">نموذج منصة نواة لمديريات الصحة والهيئات</h1>
+          <h1 className="text-xl font-bold">نموذج التسجيل — منصة مسار</h1>
           <p className="text-sm text-gray-600">تاريخ الطباعة: {new Date().toLocaleDateString("ar-SY")}</p>
         </div>
 

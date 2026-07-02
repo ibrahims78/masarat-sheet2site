@@ -58,7 +58,7 @@ export function Login() {
       <div className="absolute top-4 right-4">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 backdrop-blur-sm shadow-sm">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">منصة نواة</span>
+          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">مسار</span>
         </div>
       </div>
 
@@ -72,7 +72,7 @@ export function Login() {
             لوحة الإدارة
           </h1>
           <p className="text-muted-foreground text-sm mt-1.5">
-            نظام بيانات الكوادر الصحية
+            منصة إدارة نماذج التسجيل والبيانات
           </p>
         </div>
 
@@ -163,7 +163,7 @@ export function Login() {
 
         <div className="text-center mt-5 space-y-1">
           <p className="text-xs text-muted-foreground">
-            نظام بيانات الكوادر الصحية · منصة نواة &copy; {new Date().getFullYear()}
+            منصة مسار &copy; {new Date().getFullYear()}
           </p>
           <p className="text-xs text-slate-400 dark:text-slate-500">
             تصميم وبرمجة{" "}

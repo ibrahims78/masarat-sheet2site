@@ -516,7 +516,7 @@ export function Settings() {
                   <p className="text-xs text-muted-foreground mt-1">من رابط الجدول: /d/<strong>ID</strong>/edit</p>
                 </FieldRow>
                 <FieldRow label="اسم الـ Sheet (تبويب)">
-                  <Input value={settings.googleSheetName || ""} onChange={e => set("googleSheetName", e.target.value)} placeholder="بيانات الكوادر الصحية" />
+                  <Input value={settings.googleSheetName || ""} onChange={e => set("googleSheetName", e.target.value)} placeholder="بيانات التسجيل" />
                   <p className="text-xs text-muted-foreground mt-1">اسم التبويب في أسفل الجدول</p>
                 </FieldRow>
                 <FieldRow label="بريد Service Account">
@@ -883,8 +883,8 @@ export function Settings() {
 
               {/* What gets sent */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                <p className="font-semibold text-slate-700 dark:text-slate-300">📨 محتوى الإشعار عند تسجيل موظف جديد:</p>
-                <pre className="font-sans leading-relaxed whitespace-pre-wrap">{`🏥 تسجيل جديد — نظام الكوادر الصحية
+                <p className="font-semibold text-slate-700 dark:text-slate-300">📨 محتوى الإشعار عند تسجيل جديد:</p>
+                <pre className="font-sans leading-relaxed whitespace-pre-wrap">{`📋 تسجيل جديد — منصة مسار
 
 👤 الاسم: محمد أحمد الخطيب
 🆔 الرقم الوطني: 0123456789
@@ -925,7 +925,7 @@ export function Settings() {
                     onClick={() => {
                       set("smtpHost", "smtp.gmail.com");
                       set("smtpPort", 465);
-                      set("smtpFromName", settings.smtpFromName || "نظام الكوادر الصحية");
+                      set("smtpFromName", settings.smtpFromName || "منصة مسار");
                     }}
                   >
                     ⚡ تعبئة إعدادات Gmail تلقائياً
@@ -981,7 +981,7 @@ export function Settings() {
                   }
                 </FieldRow>
                 <FieldRow label={ar ? "اسم المرسل" : "From Name"}>
-                  <Input value={settings.smtpFromName || ""} onChange={e => set("smtpFromName", e.target.value)} placeholder="نظام الكوادر الصحية" />
+                  <Input value={settings.smtpFromName || ""} onChange={e => set("smtpFromName", e.target.value)} placeholder="منصة مسار" />
                 </FieldRow>
               </div>
 

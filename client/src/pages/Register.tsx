@@ -221,7 +221,7 @@ export function Register() {
       {/* Footer credit */}
       <footer className="no-print text-center py-4 border-t border-slate-100 dark:border-slate-800 mt-4">
         <p className="text-xs text-slate-400 dark:text-slate-600">
-          منصة نواة · نظام بيانات الكوادر الصحية &copy; {new Date().getFullYear()}
+          منصة مسار &copy; {new Date().getFullYear()}
           &ensp;|&ensp;
           تصميم وبرمجة{" "}
           <span className="font-semibold text-primary/70">إبراهيم الصيداوي</span>
