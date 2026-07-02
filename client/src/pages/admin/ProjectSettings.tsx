@@ -587,7 +587,7 @@ export function ProjectSettings() {
                     {testing ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Plus className="h-4 w-4 ml-1" />}
                     {project?.googleSheetId ? "إنشاء Sheet جديد" : "إنشاء Sheet تلقائياً ✨"}
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={testSheets} disabled={testing || !project?.hasGoogleKey} data-testid="button-test-sheets">
+                  <Button type="button" variant="outline" size="sm" onClick={testSheets} disabled={testing || !project?.hasGoogleKey || !project?.googleSheetId} title={!project?.googleSheetId ? "أنشئ Sheet أولاً" : ""} data-testid="button-test-sheets">
                     {testing ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <RefreshCw className="h-4 w-4 ml-1" />}
                     اختبار الاتصال
                   </Button>
@@ -608,6 +608,9 @@ export function ProjectSettings() {
                 {!project?.hasGoogleKey && (
                   <p className="text-[11px] text-amber-600 dark:text-amber-400">⚠️ احفظ مفتاح الـ Service Account أولاً لتفعيل هذه الأزرار</p>
                 )}
+                {project?.hasGoogleKey && !project?.googleSheetId && (
+                  <p className="text-[11px] text-blue-600 dark:text-blue-400">← اضغط "إنشاء Sheet تلقائياً" لإنشاء الملف وتفعيل بقية الأزرار</p>
+                )}
               </Card>
             </form>
 
@@ -618,7 +621,7 @@ export function ProjectSettings() {
                 فحص تطابق الأعمدة
               </h3>
               <p className="text-xs text-muted-foreground">يقارن ترويسات الـ Sheet الحالية مع حقول المشروع ويُظهر الأعمدة الناقصة والإضافية.</p>
-              <Button size="sm" variant="outline" onClick={checkColumns} disabled={sheetsLoading === "check"} data-testid="button-check-columns">
+              <Button size="sm" variant="outline" onClick={checkColumns} disabled={sheetsLoading === "check" || !project?.googleSheetId} title={!project?.googleSheetId ? "أنشئ Sheet أولاً" : ""} data-testid="button-check-columns">
                 {sheetsLoading === "check" ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <TableProperties className="h-4 w-4 ml-1" />}
                 فحص تطابق الأعمدة
               </Button>
