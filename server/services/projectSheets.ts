@@ -191,15 +191,30 @@ export async function createProjectSheet(projectId: string): Promise<{
     let inFolder = false;
 
     if (folderId) {
+      // Verify folder exists and is accessible before attempting to create inside it
+      try {
+        await drive.files.get({ fileId: folderId, fields: "id, name", supportsAllDrives: true } as any);
+      } catch (e: any) {
+        return {
+          ok: false,
+          message:
+            `❌ لم يتم العثور على المجلد أو الـ Service Account لا يملك صلاحية الوصول إليه.\n` +
+            `تأكد من:\n` +
+            `1. أن الـ Folder ID صحيح (${folderId})\n` +
+            `2. أنك شاركت المجلد مع بريد الـ Service Account (${proj.googleServiceAccountEmail}) كـ "محرر"`,
+        };
+      }
+
       // Create file DIRECTLY inside the target folder — no move needed, no permission issues
       const driveFile = await drive.files.create({
         requestBody: {
           name: proj.name,
           mimeType: "application/vnd.google-apps.spreadsheet",
-          parents: [proj.googleDriveFolderId],
+          parents: [folderId],
         },
         fields: "id",
-      });
+        supportsAllDrives: true,
+      } as any);
       spreadsheetId = driveFile.data.id!;
       inFolder = true;
 
