@@ -275,27 +275,55 @@ export async function createProjectSheet(projectId: string): Promise<{
 
         const isQuotaErr = driveErrReason === "storageQuotaExceeded" || driveErrReason === "storageQuota" || /storagequota/i.test(driveErrReason);
 
-        // ── Attempt 2A: If quota and existing sheet — move it to folder (no new storage needed) ──
+        // ── Attempt 2A: If quota and existing sheet — try moving it (no new storage needed) ──
         if (isQuotaErr && proj.googleSheetId) {
-          console.log("[ProjectSheets] Quota error + existing sheet — trying to move existing sheet to folder...");
-          const moved = await moveFileToFolder(proj.googleSheetId);
-          if (moved) {
-            spreadsheetId = proj.googleSheetId;
-            inFolder = true;
-            console.log("[ProjectSheets] Existing sheet moved to folder successfully");
+          console.log("[ProjectSheets] Quota error + stored sheet ID — checking if file still exists...");
+          let fileExists = false;
+          try {
+            await drive.files.get({ fileId: proj.googleSheetId, fields: "id", supportsAllDrives: true } as any);
+            fileExists = true;
+          } catch { /* file was deleted or inaccessible */ }
+
+          if (fileExists) {
+            const moved = await moveFileToFolder(proj.googleSheetId);
+            if (moved) {
+              spreadsheetId = proj.googleSheetId;
+              inFolder = true;
+              console.log("[ProjectSheets] Existing sheet moved to folder successfully");
+            } else {
+              const sheetUrl = `https://docs.google.com/spreadsheets/d/${proj.googleSheetId}/edit`;
+              return {
+                ok: false,
+                sheetId: proj.googleSheetId,
+                sheetUrl,
+                message: `⚠️ حصة Drive الـ Service Account ممتلئة وتعذّر نقل الملف الموجود للمجلد.\n\nتأكد من مشاركة المجلد مع (${proj.googleServiceAccountEmail}) كـ "محرر"`,
+              };
+            }
           } else {
-            // Move also failed — explain clearly
-            const sheetUrl = `https://docs.google.com/spreadsheets/d/${proj.googleSheetId}/edit`;
-            return {
-              ok: false,
-              sheetId: proj.googleSheetId,
-              sheetUrl,
-              message: `⚠️ حصة Drive الـ Service Account ممتلئة ولا يمكن إنشاء ملفات جديدة.\n\nتم محاولة نقل الـ Sheet الموجود للمجلد لكن فشل أيضاً.\n\nتأكد من:\n• مشاركة المجلد مع (${proj.googleServiceAccountEmail}) كـ "محرر"\n• أو تنظيف Drive الـ SA لحذف الملفات غير الضرورية`,
-            };
+            // File was deleted — clear stored ID and fall through to fresh creation below
+            console.log("[ProjectSheets] Stored sheet ID not found (deleted) — clearing and creating fresh...");
+            await db.update(projects).set({ googleSheetId: null }).where(eq(projects.id, projectId));
+            // Fall through to Sheets API creation attempt
+            try {
+              const newSheet = await sheets.spreadsheets.create({
+                requestBody: {
+                  properties: { title: proj.name },
+                  sheets: [{ properties: { title: sheetName } }],
+                },
+              });
+              spreadsheetId = newSheet.data.spreadsheetId!;
+              console.log("[ProjectSheets] Fresh Sheets API create OK — id:", spreadsheetId);
+              inFolder = await moveFileToFolder(spreadsheetId);
+              if (!inFolder) {
+                folderNote = `\n(ملاحظة: الملف أُنشئ لكن تعذّر نقله للمجلد. تأكد من مشاركة المجلد مع ${proj.googleServiceAccountEmail} كـ "محرر")`;
+              }
+            } catch (sheetsErr: any) {
+              return { ok: false, message: `❌ حصة Drive لا تزال ممتلئة حتى بعد حذف الملف القديم.\n\nيرجى تنظيف Drive الـ SA يدوياً أو استخدام Service Account مختلف.` };
+            }
           }
         } else if (isQuotaErr && !proj.googleSheetId) {
-          // ── Attempt 2B: Quota + no existing sheet — try Sheets API (may bypass quota) ──
-          console.log("[ProjectSheets] Quota error, no existing sheet — trying Sheets API create...");
+          // ── Attempt 2B: Quota + no stored sheet — try Sheets API (may bypass quota) ──
+          console.log("[ProjectSheets] Quota error, no stored sheet — trying Sheets API create...");
           try {
             const newSheet = await sheets.spreadsheets.create({
               requestBody: {
@@ -305,7 +333,6 @@ export async function createProjectSheet(projectId: string): Promise<{
             });
             spreadsheetId = newSheet.data.spreadsheetId!;
             console.log("[ProjectSheets] Sheets API create OK — id:", spreadsheetId);
-            // Try to move the new sheet to folder
             inFolder = await moveFileToFolder(spreadsheetId);
             if (!inFolder) {
               folderNote = `\n(ملاحظة: الملف في Drive الـ SA — تعذّر نقله للمجلد. تأكد من مشاركة المجلد مع ${proj.googleServiceAccountEmail} كـ "محرر")`;
