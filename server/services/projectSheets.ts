@@ -473,6 +473,25 @@ export async function createProjectSheet(projectId: string, isBackground = false
     };
   } catch (err: any) {
     console.error("[ProjectSheets] createProjectSheet unexpected error:", err.message);
+
+    const msg: string = (err.message || "").toLowerCase();
+    const isPermission =
+      /caller does not have permission/i.test(err.message) ||
+      /insufficient permission/i.test(err.message) ||
+      err?.code === 403 || err?.status === 403;
+
+    if (isPermission) {
+      return {
+        ok: false,
+        message:
+          "❌ خطأ في الصلاحيات (403) — تحقق من الخطوات التالية:\n" +
+          "١. تأكد من تفعيل «Google Sheets API» في Google Cloud Console.\n" +
+          "٢. تأكد من تفعيل «Google Drive API» في Google Cloud Console.\n" +
+          "٣. إذا حددت مجلد Drive: شارك المجلد مع بريد الـ Service Account بصلاحية «محرر».\n" +
+          "٤. إذا لم تحدد مجلداً: لا يزال Drive API مطلوباً لإنشاء الملف في Drive الـ SA.",
+      };
+    }
+
     return { ok: false, message: `❌ ${err.message}` };
   }
 }
