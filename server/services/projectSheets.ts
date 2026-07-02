@@ -183,12 +183,25 @@ export async function createProjectSheet(projectId: string): Promise<{
     const drive = google.drive({ version: "v3", auth });
 
     // Accept either a full Drive URL or a bare folder ID
-    const rawFolder = proj.googleDriveFolderId || "";
+    const rawFolder = (proj.googleDriveFolderId || "").trim();
     const folderIdMatch = rawFolder.match(/folders\/([a-zA-Z0-9_-]+)/);
-    const folderId = folderIdMatch ? folderIdMatch[1] : rawFolder.trim();
+    const folderId = folderIdMatch ? folderIdMatch[1] : rawFolder;
+    console.log("[ProjectSheets] rawFolder:", rawFolder);
+    console.log("[ProjectSheets] folderId extracted:", folderId);
 
     let spreadsheetId: string;
     let inFolder = false;
+
+    // Delete old sheet owned by the Service Account to free quota
+    if (proj.googleSheetId) {
+      try {
+        await drive.files.delete({ fileId: proj.googleSheetId } as any);
+        console.log("[ProjectSheets] deleted old sheet:", proj.googleSheetId);
+      } catch (delErr: any) {
+        // Non-fatal — old file may already be deleted or not owned by Service Account
+        console.warn("[ProjectSheets] could not delete old sheet:", delErr.message);
+      }
+    }
 
     if (folderId) {
       // Create file DIRECTLY inside the target folder
