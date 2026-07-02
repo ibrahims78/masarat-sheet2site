@@ -56,7 +56,9 @@ export function GlobalSettings() {
   const { register: regGeneral, handleSubmit: hsGeneral, reset: resetGeneral } = useForm<any>();
   const {
     register: regSmtp, handleSubmit: hsSmtp, reset: resetSmtp, getValues: getSmtpValues,
+    setValue: setSmtpValue, watch: watchSmtp,
   } = useForm<any>();
+  const smtpPortVal = Number(watchSmtp("smtpPort")) || 587;
   const {
     register: regInvite, handleSubmit: hsInvite, reset: resetInvite,
   } = useForm<{ email: string; role: string }>({ defaultValues: { email: "", role: "viewer" } });
@@ -239,34 +241,114 @@ export function GlobalSettings() {
         {tab === "smtp" && (
           <form onSubmit={hsSmtp(d => saveMut.mutate(d))}>
             <Card className="p-5 space-y-4">
-              <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300">
-                {ar ? "📧 إعدادات SMTP تُستخدم لإرسال دعوات المستخدمين. اتركها فارغة إن لم تكن تستخدم إرسال البريد." : "📧 SMTP settings are used to send user invitations. Leave empty if you are not using email delivery."}
+
+              {/* Gmail step-by-step guide */}
+              <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-blue-200 dark:border-blue-800">
+                  <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                    {ar ? "⚡ دليل إعداد Gmail خطوة بخطوة" : "⚡ Gmail Setup Guide"}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs border-blue-300 text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:text-blue-300"
+                    onClick={() => {
+                      setSmtpValue("smtpHost", "smtp.gmail.com");
+                      setSmtpValue("smtpPort", 465);
+                    }}
+                  >
+                    ⚡ {ar ? "تعبئة إعدادات Gmail تلقائياً" : "Auto-fill Gmail settings"}
+                  </Button>
+                </div>
+                <div className="px-4 py-3 space-y-1.5 text-xs text-blue-700 dark:text-blue-300" dir="rtl">
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold">١</span>
+                    <span>
+                      {ar
+                        ? <>افتح <strong>إعدادات حساب Google</strong> ← <strong>Security</strong> ← فعّل <strong>2-Step Verification</strong></>
+                        : <>Open <strong>Google Account</strong> → <strong>Security</strong> → enable <strong>2-Step Verification</strong></>}
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold">٢</span>
+                    <span>
+                      {ar
+                        ? <>في نفس صفحة <strong>Security</strong> ابحث عن <strong>App passwords</strong> ← اختر "Mail"</>
+                        : <>On the same <strong>Security</strong> page, find <strong>App passwords</strong> → choose "Mail"</>}
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold">٣</span>
+                    <span>
+                      {ar
+                        ? <>انسخ كلمة المرور المكوّنة من 16 حرفاً واستخدمها أدناه <strong>بدلاً</strong> من كلمة المرور <strong>العادية</strong></>
+                        : <>Copy the 16-character password and use it below <strong>instead</strong> of your <strong>regular</strong> password</>}
+                    </span>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-700 text-[11px] text-blue-500 dark:text-blue-400 leading-5">
+                    Host: <code className="font-mono">smtp.gmail.com</code> · Port: <code className="font-mono">465</code> (SSL) &nbsp;|&nbsp;
+                    Username: <code className="font-mono">بريدك@gmail.com</code> &nbsp;|&nbsp;
+                    Password: <code className="font-mono">كلمة مرور التطبيق (16 حرفاً)</code>
+                  </div>
+                </div>
               </div>
+
+              {/* Host + Port */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs">SMTP Host</Label>
                   <Input {...regSmtp("smtpHost")} placeholder="smtp.gmail.com" data-testid="input-smtpHost" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Port</Label>
-                  <Input {...regSmtp("smtpPort")} type="number" placeholder="587" data-testid="input-smtpPort" />
+                  <Label className="text-xs">SMTP Port</Label>
+                  {/* hidden input keeps the form value in sync */}
+                  <input type="hidden" {...regSmtp("smtpPort")} />
+                  <div className="flex gap-0 rounded-md overflow-hidden border border-input">
+                    {([465, 587] as const).map(p => (
+                      <button
+                        key={p}
+                        type="button"
+                        data-testid={`btn-port-${p}`}
+                        onClick={() => setSmtpValue("smtpPort", p)}
+                        className={`flex-1 py-2 text-sm font-medium transition-colors
+                          ${smtpPortVal === p
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground hover:bg-muted"}`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    465 (SSL/TLS) &nbsp;·&nbsp; 587 (STARTTLS)
+                  </p>
                 </div>
               </div>
+
+              {/* Username + App Password */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">{ar ? "اسم المستخدم (البريد)" : "Username (Email)"}</Label>
-                  <Input {...regSmtp("smtpUser")} placeholder="user@gmail.com" data-testid="input-smtpUser" />
+                  <Label className="text-xs">{ar ? "بريدك الإلكتروني" : "Your Email"}</Label>
+                  <Input {...regSmtp("smtpUser")} placeholder="yourname@gmail.com" data-testid="input-smtpUser" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">{ar ? "كلمة المرور" : "Password"}</Label>
+                  <Label className="text-xs">{ar ? "كلمة مرور التطبيق (App Password)" : "App Password"}</Label>
                   <Input
                     {...regSmtp("smtpPass")}
                     type="password"
-                    placeholder={settings?.hasSmtpPass ? (ar ? "محفوظة — اتركها فارغة للإبقاء" : "Saved — leave empty to keep") : (ar ? "كلمة المرور" : "Password")}
+                    placeholder={settings?.hasSmtpPass
+                      ? (ar ? "محفوظة — اتركها فارغة للإبقاء" : "Saved — leave empty to keep")
+                      : "XXXX XXXX XXXX XXXX"}
                     data-testid="input-smtpPass"
                   />
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                    ⚠️ {ar ? "استخدم App Password وليس كلمة المرور العادية" : "Use App Password, not your regular password"}
+                  </p>
                 </div>
               </div>
+
+              {/* Sender name */}
               <div className="space-y-1.5">
                 <Label className="text-xs">{ar ? "اسم المرسل" : "Sender Name"}</Label>
                 <Input {...regSmtp("smtpFromName")} placeholder={ar ? "مسارات" : "Masar"} data-testid="input-smtpFromName" />
