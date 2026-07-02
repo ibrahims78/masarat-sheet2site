@@ -192,17 +192,6 @@ export async function createProjectSheet(projectId: string): Promise<{
     let spreadsheetId: string;
     let inFolder = false;
 
-    // Delete old sheet owned by the Service Account to free quota
-    if (proj.googleSheetId) {
-      try {
-        await drive.files.delete({ fileId: proj.googleSheetId } as any);
-        console.log("[ProjectSheets] deleted old sheet:", proj.googleSheetId);
-      } catch (delErr: any) {
-        // Non-fatal — old file may already be deleted or not owned by Service Account
-        console.warn("[ProjectSheets] could not delete old sheet:", delErr.message);
-      }
-    }
-
     if (folderId) {
       // Create file DIRECTLY inside the target folder
       let driveFile: any;
@@ -218,12 +207,14 @@ export async function createProjectSheet(projectId: string): Promise<{
         } as any);
       } catch (e: any) {
         console.error("[ProjectSheets] drive.files.create error:", e.code, e.message);
-        const hint =
-          e.code === 403 || e.status === 403
-            ? `خطأ 403: تأكد من تفعيل "Google Drive API" في Google Cloud Console (APIs & Services → Enable APIs → Google Drive API). أيضاً تأكد من مشاركة المجلد مع (${proj.googleServiceAccountEmail}) كـ "محرر"`
-            : e.code === 404 || e.status === 404
-            ? `خطأ 404: المجلد ID (${folderId}) غير موجود أو غير مُشارَك مع (${proj.googleServiceAccountEmail})`
-            : `${e.message} (code: ${e.code ?? e.status ?? "?"})`;
+        const isQuota = /quota/i.test(e.message) || /storageQuota/i.test(e.message);
+        const hint = isQuota
+          ? `حصة التخزين الخاصة بالـ Service Account ممتلئة. اضغط على زر "تنظيف Drive" لحذف الملفات المؤقتة الفارغة التي أنشأها النظام تلقائياً (لن تُحذف ملفات البيانات)`
+          : e.code === 403 || e.status === 403
+          ? `خطأ 403: تأكد من مشاركة المجلد مع (${proj.googleServiceAccountEmail}) كـ "محرر"، وأن Google Drive API مفعَّل`
+          : e.code === 404 || e.status === 404
+          ? `خطأ 404: المجلد ID (${folderId}) غير موجود أو غير مُشارَك مع (${proj.googleServiceAccountEmail})`
+          : `${e.message} (code: ${e.code ?? e.status ?? "?"})`;
         return { ok: false, message: `❌ ${hint}` };
       }
       spreadsheetId = driveFile.data.id!;
@@ -401,5 +392,65 @@ export async function importFromProjectSheet(
     };
   } catch (err: any) {
     return { ok: false, message: `❌ ${err.message}`, added: 0, updated: 0, skipped: 0 };
+  }
+}
+
+/**
+ * Deletes orphaned Google Sheets files owned by the Service Account that are
+ * NOT inside any user folder (i.e., they have no parents other than "root").
+ * These are temporary files created during setup/testing that contain no data.
+ * Files inside a shared folder (the user's target folder) are never touched.
+ */
+export async function cleanupServiceAccountDrive(projectId: string): Promise<{
+  ok: boolean; message: string; deleted: number; skipped: number;
+}> {
+  try {
+    const { auth, proj } = await getSheetsClient(projectId, [
+      "https://www.googleapis.com/auth/drive",
+    ]);
+    const drive = google.drive({ version: "v3", auth });
+
+    // List all Google Sheets files in Service Account's Drive
+    const listRes = await drive.files.list({
+      q: "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
+      fields: "files(id, name, parents)",
+      pageSize: 100,
+    } as any);
+
+    const files = listRes.data.files || [];
+    const currentSheetId = proj.googleSheetId;
+
+    // Extract folder IDs that are referenced by any project
+    const allProjects = await db.select({ sheetId: projects.googleSheetId }).from(projects);
+    const knownSheetIds = new Set(allProjects.map(p => p.sheetId).filter(Boolean));
+
+    let deleted = 0;
+    let skipped = 0;
+
+    for (const file of files) {
+      if (!file.id) continue;
+      // Skip files that are known/current sheet IDs
+      if (knownSheetIds.has(file.id)) { skipped++; continue; }
+      // Skip files that have parents (they're inside a folder = user's data)
+      if (file.parents && file.parents.length > 0) { skipped++; continue; }
+
+      try {
+        await drive.files.delete({ fileId: file.id } as any);
+        deleted++;
+        console.log("[ProjectSheets] cleanup deleted orphaned file:", file.id, file.name);
+      } catch (err: any) {
+        console.warn("[ProjectSheets] cleanup could not delete:", file.id, err.message);
+        skipped++;
+      }
+    }
+
+    return {
+      ok: true,
+      deleted,
+      skipped,
+      message: `✅ تم التنظيف: حُذف ${deleted} ملف مؤقت فارغ، تجاوز ${skipped} ملف محمي`,
+    };
+  } catch (err: any) {
+    return { ok: false, deleted: 0, skipped: 0, message: `❌ ${err.message}` };
   }
 }

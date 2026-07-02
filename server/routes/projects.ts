@@ -615,6 +615,12 @@ router.post("/:id/create-sheet", requireAdmin, async (req: Request, res: Respons
   res.json(result);
 });
 
+router.post("/:id/cleanup-drive", requireAdmin, async (req: Request, res: Response) => {
+  const { cleanupServiceAccountDrive } = await import("../services/projectSheets.js");
+  const result = await cleanupServiceAccountDrive(String(req.params.id));
+  res.json(result);
+});
+
 router.post("/:id/test-telegram", requireAdmin, async (req: Request, res: Response) => {
   try {
     const { token, chatId } = req.body;

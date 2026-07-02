@@ -119,6 +119,14 @@ export function ProjectSettings() {
     setTesting(false);
   };
 
+  const cleanupDrive = async () => {
+    if (!window.confirm("سيحذف هذا الزر فقط الملفات المؤقتة الفارغة التي أنشأها النظام تلقائياً خارج أي مجلد مشارَك.\nلن تُحذف ملفات البيانات الموجودة داخل المجلد.\nهل تريد المتابعة؟")) return;
+    setSheetsLoading("cleanup"); setTestResult(null);
+    const res: any = await apiRequest("POST", `/api/projects/${id}/cleanup-drive`, {}).catch(e => ({ message: `❌ ${e.message}` }));
+    setTestResult(res.message);
+    setSheetsLoading(null);
+  };
+
   const checkColumns = async () => {
     setSheetsLoading("check"); setCheckResult(null);
     const res: any = await apiRequest("POST", `/api/projects/${id}/check-sheet-columns`, {}).catch(e => ({ ok: false, message: `❌ ${e.message}` }));
@@ -528,11 +536,24 @@ export function ProjectSettings() {
                     data-testid="button-create-sheet"
                   >
                     {testing ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Plus className="h-4 w-4 ml-1" />}
-                    إنشاء Sheet تلقائياً
+                    إنشاء Sheet في المجلد
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={cleanupDrive}
+                    disabled={sheetsLoading === "cleanup" || !project?.hasGoogleKey}
+                    className="border-orange-300 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                    data-testid="button-cleanup-drive"
+                    title="يحذف فقط الملفات المؤقتة الفارغة خارج المجلد المشارَك"
+                  >
+                    {sheetsLoading === "cleanup" ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Trash2 className="h-4 w-4 ml-1" />}
+                    تنظيف Drive
                   </Button>
                 </div>
                 {!project?.hasGoogleKey && (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400">⚠️ احفظ مفتاح الـ Service Account أولاً لتفعيل زر الإنشاء التلقائي</p>
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400">⚠️ احفظ مفتاح الـ Service Account أولاً لتفعيل هذه الأزرار</p>
                 )}
               </Card>
             </form>
