@@ -204,12 +204,13 @@ export async function createProjectSheet(projectId: string): Promise<{
           supportsAllDrives: true,
         } as any);
       } catch (e: any) {
+        console.error("[ProjectSheets] drive.files.create error:", e.code, e.message);
         const hint =
           e.code === 403 || e.status === 403
-            ? `تأكد من مشاركة المجلد مع (${proj.googleServiceAccountEmail}) بصلاحية "محرر"`
+            ? `خطأ 403: تأكد من تفعيل "Google Drive API" في Google Cloud Console (APIs & Services → Enable APIs → Google Drive API). أيضاً تأكد من مشاركة المجلد مع (${proj.googleServiceAccountEmail}) كـ "محرر"`
             : e.code === 404 || e.status === 404
-            ? `المجلد ID (${folderId}) غير موجود أو غير مُشارَك مع (${proj.googleServiceAccountEmail})`
-            : e.message;
+            ? `خطأ 404: المجلد ID (${folderId}) غير موجود أو غير مُشارَك مع (${proj.googleServiceAccountEmail})`
+            : `${e.message} (code: ${e.code ?? e.status ?? "?"})`;
         return { ok: false, message: `❌ ${hint}` };
       }
       spreadsheetId = driveFile.data.id!;
