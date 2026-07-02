@@ -42,18 +42,11 @@ externalPort = 3002
 localPort = 5000
 externalPort = 80
 
-[[ports]]
-localPort = 5001
-externalPort = 3003
-
 [deployment]
 deploymentTarget = "autoscale"
 run = ["node", "./dist/index.cjs"]
 build = ["npm", "run", "build"]
 
 [userenv]
-
-[userenv.shared]
-ENCRYPTION_KEY = "6494a8e52b2741b6123a86b23ec9501cb10d41897259b2d9f8fbd12b893a4209"
 
 [userenv.production]
