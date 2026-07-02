@@ -255,7 +255,7 @@ export function EmployeeList() {
   const [jumpPage, setJumpPage] = useState("");
 
   // حالة تصحيح ترويسات الـ Sheet — تُحفظ في localStorage
-  const HEADERS_KEY = "nawah_headers_fixed";
+  const HEADERS_KEY = "masar_headers_fixed";
   const [headersFixed, setHeadersFixed] = useState<null | boolean>(() => {
     const v = localStorage.getItem(HEADERS_KEY);
     if (v === "true") return true;
@@ -280,7 +280,7 @@ export function EmployeeList() {
   };
 
   // ─── حالة استيراد Google Sheets ───
-  const IMPORT_KEY = "nawah_import_status";
+  const IMPORT_KEY = "masar_import_status";
   interface ImportResult { inserted: number; updated: number; skipped: number; deleted: number; total: number; }
   const [importStatus, setImportStatus] = useState<null | "success" | "error">(() => {
     const v = localStorage.getItem(IMPORT_KEY);

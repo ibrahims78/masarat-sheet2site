@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/context/ProjectContext";
 import { useLang } from "@/context/LanguageContext";
+import { useAppSettings } from "@/context/AppSettingsContext";
 import { cn } from "@/lib/utils";
 import type { Project } from "@shared/schema";
 
@@ -24,6 +25,7 @@ export function Layout({ children, projectId }: LayoutProps) {
   const { user, logout } = useAuth();
   const { currentProject, setCurrentProject, projects } = useProject();
   const { lang } = useLang();
+  const { appName } = useAppSettings();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
@@ -54,8 +56,8 @@ export function Layout({ children, projectId }: LayoutProps) {
         </div>
         {sidebarOpen && (
           <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate leading-tight">مسار</p>
-            <p className="text-[10px] text-muted-foreground">نظام إدارة المشاريع</p>
+            <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate leading-tight">{appName}</p>
+            <p className="text-[10px] text-muted-foreground">منصة إدارة نماذج التسجيل</p>
           </div>
         )}
       </div>

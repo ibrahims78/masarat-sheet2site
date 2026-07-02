@@ -443,7 +443,7 @@ export function Settings() {
                   </div>
                   <div className="mr-8 text-xs text-green-800 dark:text-green-300 space-y-1">
                     <p>افتح: <span className="font-mono bg-green-100 dark:bg-green-900 px-1 rounded">console.cloud.google.com</span></p>
-                    <p>← اضغط <strong>"New Project"</strong> ← سمّه مثلاً <strong>nawah-health</strong> ← اضغط Create</p>
+                    <p>← اضغط <strong>"New Project"</strong> ← سمّه مثلاً <strong>masar-platform</strong> ← اضغط Create</p>
                   </div>
                 </div>
 
@@ -483,7 +483,7 @@ export function Settings() {
                   <div className="mr-8 text-xs text-green-800 dark:text-green-300 space-y-1">
                     <p>افتح <span className="font-mono bg-green-100 dark:bg-green-900 px-1 rounded">sheets.google.com</span> ← أنشئ جدولاً جديداً</p>
                     <p>← اضغط <strong>Share</strong> (مشاركة) ← الصق بريد الـ Service Account</p>
-                    <p className="font-mono bg-green-100 dark:bg-green-900/40 px-2 py-1 rounded text-[11px]">مثال: nawah-health@my-project.iam.gserviceaccount.com</p>
+                    <p className="font-mono bg-green-100 dark:bg-green-900/40 px-2 py-1 rounded text-[11px]">مثال: masar-platform@my-project.iam.gserviceaccount.com</p>
                     <p>← اختر صلاحية <strong>Editor (محرِّر)</strong> ← اضغط Send</p>
                   </div>
                 </div>

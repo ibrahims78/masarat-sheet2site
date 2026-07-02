@@ -33,7 +33,7 @@ const translations: Record<string, Record<Lang, string>> = {
   // Register
   "register.enter_code": { ar: "أدخل رمز الدعوة للمتابعة", en: "Enter invitation code to continue" },
   "register.code_placeholder": { ar: "رمز الدعوة", en: "Invitation Code" },
-  "register.restricted": { ar: "هذا النموذج مخصص لموظفي وزارة الصحة المرخّصين فقط", en: "This form is for authorized Ministry of Health staff only" },
+  "register.restricted": { ar: "هذا النموذج مخصص للمسجّلين المرخّصين فقط", en: "This form is for authorized registrants only" },
   "register.success": { ar: "تم استلام بياناتك بنجاح!", en: "Your data has been submitted successfully!" },
   "register.edit_link": { ar: "رابط التعديل الشخصي", en: "Personal Edit Link" },
   "register.edit_warning": { ar: "⏱️ هذا الرابط صالح لـ 48 ساعة فقط — يظهر مرة واحدة فقط، احتفظ به الآن", en: "⏱️ This link is valid for 48 hours only — save it now" },

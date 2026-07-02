@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ProjectProvider } from "@/context/ProjectContext";
+import { AppSettingsProvider } from "@/context/AppSettingsContext";
 import { queryClient } from "@/lib/queryClient";
 import { Loader2 } from "lucide-react";
 
@@ -116,11 +117,13 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
         <LanguageProvider>
-          <AuthProvider>
-            <ProjectProvider>
-              <AppRoutes />
-            </ProjectProvider>
-          </AuthProvider>
+          <AppSettingsProvider>
+            <AuthProvider>
+              <ProjectProvider>
+                <AppRoutes />
+              </ProjectProvider>
+            </AuthProvider>
+          </AppSettingsProvider>
         </LanguageProvider>
       </ThemeProvider>
     </QueryClientProvider>

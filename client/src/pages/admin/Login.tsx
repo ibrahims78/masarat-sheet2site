@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useAuth } from "@/context/AuthContext";
+import { useAppSettings } from "@/context/AppSettingsContext";
 
 const schema = z.object({
   email: z.string().email("بريد إلكتروني غير صالح"),
@@ -21,6 +22,7 @@ type FormData = z.infer<typeof schema>;
 export function Login() {
   const [, nav] = useLocation();
   const { login } = useAuth();
+  const { appName } = useAppSettings();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -58,7 +60,7 @@ export function Login() {
       <div className="absolute top-4 right-4">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 backdrop-blur-sm shadow-sm">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">مسار</span>
+          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{appName}</span>
         </div>
       </div>
 
@@ -72,7 +74,7 @@ export function Login() {
             لوحة الإدارة
           </h1>
           <p className="text-muted-foreground text-sm mt-1.5">
-            منصة إدارة نماذج التسجيل والبيانات
+            {appName} — منصة إدارة نماذج التسجيل والبيانات
           </p>
         </div>
 
@@ -89,7 +91,7 @@ export function Login() {
                 error={!!errors.email}
                 className="mt-1.5"
                 autoFocus
-                placeholder="admin@health.gov.sy"
+                placeholder="admin@example.com"
                 data-testid="input-email"
               />
               {errors.email && (
@@ -163,7 +165,7 @@ export function Login() {
 
         <div className="text-center mt-5 space-y-2">
           <p className="text-xs text-muted-foreground">
-            منصة مسار &copy; {new Date().getFullYear()}
+            {appName} &copy; {new Date().getFullYear()}
           </p>
           <div className="flex flex-col items-center gap-1">
             <p className="text-xs text-slate-400 dark:text-slate-500">

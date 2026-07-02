@@ -307,12 +307,12 @@ export function CreateProject() {
               <div className="space-y-1.5">
                 <Label className="text-xs">اسم المشروع *</Label>
                 <Input value={projectName} onChange={e => setProjectName(e.target.value)}
-                  placeholder="مثال: الكوادر الصحية — محافظة دمشق" data-testid="input-project-name" />
+                  placeholder="مثال: تسجيل الموظفين — محافظة دمشق" data-testid="input-project-name" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">رمز الدعوة</Label>
                 <Input value={invitationCode} onChange={e => setInvitationCode(e.target.value)}
-                  placeholder="NAWAH-2026" data-testid="input-invitation-code" />
+                  placeholder="MASAR-2026" data-testid="input-invitation-code" />
               </div>
             </div>
 

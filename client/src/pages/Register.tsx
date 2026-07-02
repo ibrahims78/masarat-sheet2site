@@ -10,6 +10,7 @@ import { Step2OrgJob } from "@/components/steps/Step2OrgJob";
 import { Step3Personal } from "@/components/steps/Step3Personal";
 import { Step4ReviewPrint } from "@/components/steps/Step4ReviewPrint";
 import { useLang } from "@/context/LanguageContext";
+import { useAppSettings } from "@/context/AppSettingsContext";
 import { apiRequest } from "@/lib/queryClient";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,7 @@ interface SuccessData {
 
 export function Register() {
   const { lang } = useLang();
+  const { appName } = useAppSettings();
   const [step, setStep] = useState(0);
   const [success, setSuccess] = useState<SuccessData | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -166,9 +168,9 @@ export function Register() {
             </div>
             <div className="hidden sm:block">
               <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-tight">
-                {lang === "ar" ? "نموذج منصة نواة لمديريات الصحة والهيئات" : "Nawah Platform — Health Directorates Form"}
+                {project?.formTitle || (lang === "ar" ? "نموذج التسجيل" : "Registration Form")}
               </p>
-              <p className="text-[10px] text-muted-foreground">منصة نواة — وزارة الصحة</p>
+              <p className="text-[10px] text-muted-foreground">{project?.formSubtitle || "منصة مسار"}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -221,7 +223,7 @@ export function Register() {
       {/* Footer credit */}
       <footer className="no-print text-center py-5 border-t border-slate-100 dark:border-slate-800 mt-4 space-y-1.5">
         <p className="text-xs text-slate-400 dark:text-slate-600">
-          منصة مسار &copy; {new Date().getFullYear()}
+          {appName} &copy; {new Date().getFullYear()}
         </p>
         <p className="text-xs text-slate-400 dark:text-slate-500">
           تصميم وبرمجة{" "}

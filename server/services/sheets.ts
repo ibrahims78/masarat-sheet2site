@@ -5,7 +5,7 @@ import { decrypt } from "./crypto.js";
 import { eq } from "drizzle-orm";
 import type { Employee } from "../../shared/schema.js";
 
-// الترويسات الرسمية — مطابقة تماماً للملف المرجعي "نموذج منصة نواة لمديريات الصحة والهيئات"
+// ترويسات الجدول — تُولَّد تلقائياً من حقول المشروع
 // هذه هي الأسماء الرسمية التي يجب أن يتطابق معها الـ Google Sheet والتصدير والمنصة
 const DEFAULT_HEADERS = [
   "م",

@@ -76,7 +76,7 @@ export async function sendInvitationEmail(
       subject: `دعوة للانضمام إلى ${appName}`,
       html: `
         <div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
-          <h2 style="color: #1d4ed8; margin-top: 0;">🏥 ${appName}</h2>
+          <h2 style="color: #1d4ed8; margin-top: 0;">📋 ${appName}</h2>
           <p style="color: #374151;">تم دعوتك للانضمام إلى النظام بصلاحية: <strong>${roleLabel(role)}</strong></p>
           <p style="color: #374151;">انقر على الرابط أدناه لإنشاء حسابك:</p>
           <a href="${inviteUrl}" style="background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin:16px 0;font-size:16px;">

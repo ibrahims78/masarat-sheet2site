@@ -104,8 +104,8 @@ export function Step1InviteCode({ onVerified }: Step1Props) {
               <span className="text-primary text-lg shrink-0">ℹ</span>
               <p className="text-xs text-primary/80 dark:text-blue-300 leading-relaxed font-medium">
                 {ar
-                  ? "هذا النموذج مخصص لموظفي وزارة الصحة المرخّصين فقط. إذا لم يكن لديك رمز دعوة، تواصل مع إدارتك."
-                  : "This form is for authorized Ministry of Health employees only. Contact your department if you don't have an invitation code."}
+                  ? "هذا النموذج مخصص للمسجّلين المرخّصين فقط. إذا لم يكن لديك رمز دعوة، تواصل مع الجهة المعنية."
+                  : "This form is for authorized registrants only. Contact the relevant authority if you don't have an invitation code."}
               </p>
             </div>
           </div>

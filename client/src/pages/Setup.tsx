@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { apiRequest } from "@/lib/queryClient";
+import { useAppSettings } from "@/context/AppSettingsContext";
 
 const schema = z.object({
   fullName: z.string().min(2, "الاسم يجب أن يكون حرفين على الأقل"),
@@ -22,6 +23,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 export function Setup() {
+  const { appName } = useAppSettings();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -61,7 +63,7 @@ export function Setup() {
       <div className="absolute top-4 right-4">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 backdrop-blur-sm shadow-sm">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">مسار</span>
+          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{appName}</span>
         </div>
       </div>
 
@@ -115,7 +117,7 @@ export function Setup() {
               {...register("email")}
               error={!!errors.email}
               className="mt-1.5"
-              placeholder="admin@health.gov.sy"
+              placeholder="admin@example.com"
               data-testid="input-email"
             />
             {errors.email && (
@@ -194,7 +196,7 @@ export function Setup() {
         </form>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          منصة مسار
+          {appName}
         </p>
       </div>
     </div>

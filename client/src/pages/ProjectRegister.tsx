@@ -288,10 +288,10 @@ export function ProjectRegister() {
   <!-- Header -->
   <div class="report-header">
     <div class="report-header-right">
-      <div class="logo-circle">ن</div>
+      <div class="logo-circle">م</div>
       <div>
         <div class="report-title">${project?.formTitle || "نموذج التسجيل"}</div>
-        <div class="report-subtitle">${project?.formSubtitle || "منصة نواة لإدارة بيانات الكوادر الصحية"}</div>
+        <div class="report-subtitle">${project?.formSubtitle || "منصة مسار"}</div>
       </div>
     </div>
     <div class="report-meta">
@@ -313,7 +313,7 @@ export function ProjectRegister() {
   <div class="report-footer">
     <div>
       <div>هذا التقرير تم إنشاؤه تلقائياً بتاريخ ${date}</div>
-      <div style="margin-top:3px">منصة نواة · نظام بيانات الكوادر الصحية</div>
+      <div style="margin-top:3px">منصة مسار — إدارة نماذج التسجيل والبيانات</div>
     </div>
     <div class="signature-box">
       توقيع المسؤول
