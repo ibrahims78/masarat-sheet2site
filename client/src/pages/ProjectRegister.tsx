@@ -291,7 +291,7 @@ export function ProjectRegister() {
       <div class="logo-circle">م</div>
       <div>
         <div class="report-title">${project?.formTitle || "نموذج التسجيل"}</div>
-        <div class="report-subtitle">${project?.formSubtitle || "منصة مسار"}</div>
+        <div class="report-subtitle">${project?.formSubtitle || "منصة مسارات"}</div>
       </div>
     </div>
     <div class="report-meta">
@@ -313,7 +313,7 @@ export function ProjectRegister() {
   <div class="report-footer">
     <div>
       <div>هذا التقرير تم إنشاؤه تلقائياً بتاريخ ${date}</div>
-      <div style="margin-top:3px">منصة مسار — إدارة نماذج التسجيل والبيانات</div>
+      <div style="margin-top:3px">منصة مسارات — إدارة نماذج التسجيل والبيانات</div>
     </div>
     <div class="signature-box">
       توقيع المسؤول

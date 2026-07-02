@@ -170,7 +170,7 @@ export function Register() {
               <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-tight">
                 {project?.formTitle || (lang === "ar" ? "نموذج التسجيل" : "Registration Form")}
               </p>
-              <p className="text-[10px] text-muted-foreground">{project?.formSubtitle || "منصة مسار"}</p>
+              <p className="text-[10px] text-muted-foreground">{project?.formSubtitle || "منصة مسارات"}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">

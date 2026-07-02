@@ -38,7 +38,7 @@ export const userInvitations = pgTable("user_invitations", {
 // ============================================================
 export const systemSettings = pgTable("system_settings", {
   id: text("id").primaryKey().default("singleton"),
-  appName: text("app_name").default("مسار"),
+  appName: text("app_name").default("مسارات"),
   appLogoUrl: text("app_logo_url"),
   defaultLanguage: text("default_language").default("ar"),
   timezone: text("timezone").default("Asia/Damascus"),

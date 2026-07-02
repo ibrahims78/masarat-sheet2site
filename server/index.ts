@@ -116,7 +116,7 @@ async function initDB() {
       );
       CREATE TABLE IF NOT EXISTS system_settings (
         id TEXT PRIMARY KEY DEFAULT 'singleton',
-        app_name TEXT DEFAULT 'مسار',
+        app_name TEXT DEFAULT 'مسارات',
         app_logo_url TEXT,
         default_language TEXT DEFAULT 'ar',
         timezone TEXT DEFAULT 'Asia/Damascus',

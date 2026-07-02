@@ -9,7 +9,7 @@ export async function testTelegramBot(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
-        text: "✅ *اختبار ناجح* — منصة مسار متصلة بـ Telegram",
+        text: "✅ *اختبار ناجح* — منصة مسارات متصلة بـ Telegram",
         parse_mode: "Markdown",
       }),
     });

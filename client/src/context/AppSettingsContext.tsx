@@ -7,7 +7,7 @@ interface AppSettings {
   defaultLanguage?: string;
 }
 
-const DEFAULT: AppSettings = { appName: "مسار" };
+const DEFAULT: AppSettings = { appName: "مسارات" };
 const PUBLIC_KEY = ["/api/projects/app-info"];
 
 const AppSettingsContext = createContext<AppSettings>(DEFAULT);

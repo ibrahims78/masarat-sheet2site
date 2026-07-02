@@ -200,7 +200,7 @@ export function GlobalSettings() {
             <Card className="p-5 space-y-4">
               <div className="space-y-1.5">
                 <Label className="text-xs">اسم التطبيق / المنصة</Label>
-                <Input {...regGeneral("appName")} placeholder="مسار" data-testid="input-appName" />
+                <Input {...regGeneral("appName")} placeholder="مسارات" data-testid="input-appName" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">اللغة الافتراضية</Label>
@@ -264,7 +264,7 @@ export function GlobalSettings() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">اسم المرسل</Label>
-                <Input {...regSmtp("smtpFromName")} placeholder="مسار" data-testid="input-smtpFromName" />
+                <Input {...regSmtp("smtpFromName")} placeholder="مسارات" data-testid="input-smtpFromName" />
               </div>
 
               {smtpTestResult && <ResultBox msg={smtpTestResult} />}

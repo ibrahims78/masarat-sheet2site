@@ -48,10 +48,10 @@ export function Step1InviteCode({ onVerified }: Step1Props) {
               <ShieldCheck className="h-8 w-8 text-white" />
             </div>
             <h1 className="text-xl font-black text-white leading-tight">
-              {ar ? "نموذج التسجيل — منصة مسار" : "Registration Form — Masar Platform"}
+              {ar ? "نموذج التسجيل — منصة مسارات" : "Registration Form — Masarat Platform"}
             </h1>
             <p className="text-white/75 text-sm mt-1 font-medium">
-              {ar ? "منصة مسار لإدارة نماذج التسجيل والبيانات" : "Masar — Forms & Data Management"}
+              {ar ? "منصة مسارات لإدارة نماذج التسجيل والبيانات" : "Masarat — Forms & Data Management"}
             </p>
           </div>
 

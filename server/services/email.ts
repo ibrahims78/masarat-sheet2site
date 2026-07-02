@@ -44,7 +44,7 @@ async function getTransporter(): Promise<{ transporter: nodemailer.Transporter; 
   });
   return {
     transporter,
-    fromName: settings.smtpFromName || "منصة مسار",
+    fromName: settings.smtpFromName || "منصة مسارات",
     fromUser: settings.smtpUser,
   };
 }
@@ -61,7 +61,7 @@ export async function sendInvitationEmail(
   role: string,
   appUrl: string,
   expiryHours: number = 72,
-  appName: string = "منصة مسار"
+  appName: string = "منصة مسارات"
 ): Promise<boolean> {
   try {
     const { transporter, fromName, fromUser } = await getTransporter();

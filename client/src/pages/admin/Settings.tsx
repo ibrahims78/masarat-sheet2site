@@ -884,7 +884,7 @@ export function Settings() {
               {/* What gets sent */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-600 dark:text-slate-400 space-y-1">
                 <p className="font-semibold text-slate-700 dark:text-slate-300">📨 محتوى الإشعار عند تسجيل جديد:</p>
-                <pre className="font-sans leading-relaxed whitespace-pre-wrap">{`📋 تسجيل جديد — منصة مسار
+                <pre className="font-sans leading-relaxed whitespace-pre-wrap">{`📋 تسجيل جديد — منصة مسارات
 
 👤 الاسم: محمد أحمد الخطيب
 🆔 الرقم الوطني: 0123456789
@@ -925,7 +925,7 @@ export function Settings() {
                     onClick={() => {
                       set("smtpHost", "smtp.gmail.com");
                       set("smtpPort", 465);
-                      set("smtpFromName", settings.smtpFromName || "منصة مسار");
+                      set("smtpFromName", settings.smtpFromName || "منصة مسارات");
                     }}
                   >
                     ⚡ تعبئة إعدادات Gmail تلقائياً
@@ -981,7 +981,7 @@ export function Settings() {
                   }
                 </FieldRow>
                 <FieldRow label={ar ? "اسم المرسل" : "From Name"}>
-                  <Input value={settings.smtpFromName || ""} onChange={e => set("smtpFromName", e.target.value)} placeholder="منصة مسار" />
+                  <Input value={settings.smtpFromName || ""} onChange={e => set("smtpFromName", e.target.value)} placeholder="منصة مسارات" />
                 </FieldRow>
               </div>
 

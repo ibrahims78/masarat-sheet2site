@@ -11,8 +11,8 @@ interface LangCtx {
 
 const translations: Record<string, Record<Lang, string>> = {
   // Common
-  "app.name": { ar: "منصة مسار", en: "Masar Platform" },
-  "app.subtitle": { ar: "منصة مسار — إدارة نماذج التسجيل والبيانات", en: "Masar — Forms & Data Management" },
+  "app.name": { ar: "منصة مسارات", en: "Masarat Platform" },
+  "app.subtitle": { ar: "منصة مسارات — إدارة نماذج التسجيل والبيانات", en: "Masarat — Forms & Data Management" },
   "btn.next": { ar: "متابعة", en: "Next" },
   "btn.back": { ar: "رجوع", en: "Back" },
   "btn.submit": { ar: "إرسال البيانات", en: "Submit" },
