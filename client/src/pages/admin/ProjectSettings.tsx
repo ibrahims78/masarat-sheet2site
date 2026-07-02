@@ -29,6 +29,8 @@ export function ProjectSettings() {
   const [fields, setFields] = useState<ProjectField[]>([]);
   const [showGuide, setShowGuide] = useState(false);
 
+  const [showManualSheetId, setShowManualSheetId] = useState(false);
+
   // Sheets-specific state
   const [checkResult, setCheckResult] = useState<{
     ok: boolean; message: string;
@@ -127,6 +129,7 @@ export function ProjectSettings() {
       qc.invalidateQueries({ queryKey: ["/api/projects", id] });
       if (res.sheetUrl) setCreatedSheetUrl(res.sheetUrl);
     }
+    if (res.needsManualId) setShowManualSheetId(true);
     setTesting(false);
   };
 
@@ -537,7 +540,7 @@ export function ProjectSettings() {
                   <Input {...register("googleSheetName")} placeholder="بيانات" data-testid="input-googleSheetName" />
                 </div>
 
-                {/* Sheet status — auto-managed, show open link only */}
+                {/* Sheet status — auto-managed */}
                 {project?.googleSheetId && (
                   <div className="flex items-center gap-2 p-2.5 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                     <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
@@ -552,6 +555,30 @@ export function ProjectSettings() {
                       <ExternalLink className="h-3 w-3" />
                       فتح الملف
                     </a>
+                  </div>
+                )}
+
+                {/* Manual Sheet ID entry — shown when auto-create fails or toggled */}
+                {(showManualSheetId || !project?.googleSheetId) && (
+                  <div className="border border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-slate-600 dark:text-slate-400">إدخال Sheet ID يدوياً</p>
+                      {project?.googleSheetId && (
+                        <button type="button" onClick={() => setShowManualSheetId(false)} className="text-[10px] text-slate-400 hover:text-slate-600">إخفاء</button>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Input
+                        {...register("googleSheetId")}
+                        placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
+                        dir="ltr"
+                        className="font-mono text-xs"
+                        data-testid="input-googleSheetId-manual"
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        أنشئ Sheet يدوياً، شاركه مع الـ SA كـ "محرر"، ثم الصق الـ ID هنا واضغط "حفظ الإعدادات"
+                      </p>
+                    </div>
                   </div>
                 )}
 

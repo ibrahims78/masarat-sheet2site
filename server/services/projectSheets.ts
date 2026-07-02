@@ -340,7 +340,24 @@ export async function createProjectSheet(projectId: string): Promise<{
               folderNote = `\n(ملاحظة: الملف في Drive الـ SA — تعذّر نقله للمجلد. تأكد من مشاركة المجلد مع ${proj.googleServiceAccountEmail} كـ "محرر")`;
             }
           } catch (sheetsErr: any) {
-            return { ok: false, message: `❌ ${hint}\n\nبعد تفريغ سلة المهملات لا يزال الإنشاء يفشل.\nالسبب: ${sheetsErr.message}` };
+            const sheetsErrMsg = sheetsErr.message || "";
+            const noPermission = /permission|forbidden|403/i.test(sheetsErrMsg);
+            const diagnostic = noPermission
+              ? `❌ تعذّر إنشاء Google Sheet — يوجد مشكلتان في الـ Service Account:\n\n` +
+                `① حصة Drive = صفر (storageQuotaExceeded)\n` +
+                `② Google Sheets API غير مُفعَّل في مشروع GCP\n\n` +
+                `للحل — اختر أحد الخيارين:\n\n` +
+                `الخيار أ) تفعيل Sheets API:\n` +
+                `• اذهب إلى console.cloud.google.com\n` +
+                `• APIs & Services → Enable APIs\n` +
+                `• ابحث عن "Google Sheets API" وفعّله\n` +
+                `• ثم اضغط "إنشاء Sheet" مجدداً\n\n` +
+                `الخيار ب) إنشاء Sheet يدوياً (أسرع):\n` +
+                `• أنشئ ملف Google Sheet جديداً\n` +
+                `• شاركه مع (${proj.googleServiceAccountEmail}) كـ "محرر"\n` +
+                `• أدخل Sheet ID يدوياً في الحقل أدناه`
+              : `❌ ${hint}\n\nبعد تفريغ سلة المهملات لا يزال الإنشاء يفشل.\nالسبب: ${sheetsErrMsg}`;
+            return { ok: false, needsManualId: noPermission, message: diagnostic };
           }
         } else if (!isQuotaErr) {
           // Non-quota error (permission/not found) — return immediately with hint
