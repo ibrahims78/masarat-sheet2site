@@ -12,6 +12,7 @@ import { ArrowRight, Plus, Loader2, CheckCircle2 } from "lucide-react";
 import type { ProjectField, Project } from "@shared/schema";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useLang } from "@/context/LanguageContext";
 
 function FieldInput({ f, register, errors, watch }: {
   f: ProjectField;
@@ -109,6 +110,8 @@ export function ProjectAddRecord() {
   const { id } = useParams<{ id: string }>();
   const [, nav] = useLocation();
   const qc = useQueryClient();
+  const { lang } = useLang();
+  const ar = lang === "ar";
   const [success, setSuccess] = useState(false);
 
   const { data: project } = useQuery<Project>({
@@ -151,10 +154,10 @@ export function ProjectAddRecord() {
         <div className="flex items-center gap-3">
           <Button type="button" variant="ghost" size="sm" onClick={() => nav(`/admin/projects/${id}/records`)}>
             <ArrowRight className="h-4 w-4 ml-1" />
-            السجلات
+            {ar ? "السجلات" : "Records"}
           </Button>
           <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
-          <h1 className="text-lg font-bold">إضافة سجل جديد</h1>
+          <h1 className="text-lg font-bold">{ar ? "إضافة سجل جديد" : "Add New Record"}</h1>
           <div className="flex-1" />
           <Button
             type="button"
@@ -165,44 +168,36 @@ export function ProjectAddRecord() {
             data-testid="button-submit-and-another"
             className="hidden sm:flex"
           >
-            إضافة وجديد
+            {ar ? "إضافة وجديد" : "Add & New"}
           </Button>
           <Button type="submit" size="sm" disabled={addMut.isPending} data-testid="button-submit">
             {addMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Plus className="h-4 w-4 ml-1" />}
-            إضافة
+            {ar ? "إضافة" : "Add"}
           </Button>
         </div>
 
         {success && (
           <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-sm flex items-center gap-2" data-testid="alert-success">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
-            تم إضافة السجل بنجاح
+            {ar ? "تم إضافة السجل بنجاح" : "Record added successfully"}
           </div>
         )}
 
         {addMut.isError && (
           <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm">
-            {(addMut.error as any)?.message || "حدث خطأ أثناء الإضافة"}
+            {(addMut.error as any)?.message || (ar ? "حدث خطأ أثناء الإضافة" : "An error occurred while adding the record")}
           </div>
         )}
 
         {stepNums.length === 0 && fields.length === 0 && (
           <Card className="p-10 text-center text-muted-foreground text-sm">
-            لا يوجد حقول. أضف حقولاً من{" "}
-            <button
-              type="button"
-              className="text-primary underline"
-              onClick={() => nav(`/admin/projects/${id}/settings`)}
-            >
-              إعدادات المشروع
-            </button>
-            {" "}أولاً.
+            {ar ? <>لا يوجد حقول. أضف حقولاً من{" "}<button type="button" className="text-primary underline" onClick={() => nav(`/admin/projects/${id}/settings`)}>إعدادات المشروع</button>{" "}أولاً.</> : <>No fields found. Add fields from{" "}<button type="button" className="text-primary underline" onClick={() => nav(`/admin/projects/${id}/settings`)}>Project Settings</button>{" "}first.</>}
           </Card>
         )}
 
         {stepNums.map(s => {
           const stepFields = grouped[s] || [];
-          const stepName = steps[s - 1] || `الخطوة ${s}`;
+          const stepName = steps[s - 1] || (ar ? `الخطوة ${s}` : `Step ${s}`);
           return (
             <Card key={s} className="p-5">
               <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 pb-2 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
@@ -231,10 +226,10 @@ export function ProjectAddRecord() {
           <div className="flex gap-2">
             <Button type="submit" disabled={addMut.isPending} className="flex-1" data-testid="button-submit-bottom">
               {addMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Plus className="h-4 w-4 ml-1" />}
-              {addMut.isPending ? "جاري الإضافة..." : "إضافة السجل"}
+              {addMut.isPending ? (ar ? "جاري الإضافة..." : "Adding...") : (ar ? "إضافة السجل" : "Add Record")}
             </Button>
             <Button type="button" variant="outline" onClick={() => nav(`/admin/projects/${id}/records`)}>
-              إلغاء
+              {ar ? "إلغاء" : "Cancel"}
             </Button>
           </div>
         )}

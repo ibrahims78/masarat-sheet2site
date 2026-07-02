@@ -13,6 +13,7 @@ import type { ProjectRecord, ProjectField, Project } from "@shared/schema";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useLang } from "@/context/LanguageContext";
 
 function FieldInput({ f, register, errors, watch }: {
   f: ProjectField;
@@ -110,6 +111,8 @@ export function ProjectRecordEdit() {
   const { id, recordId } = useParams<{ id: string; recordId: string }>();
   const [, nav] = useLocation();
   const qc = useQueryClient();
+  const { lang } = useLang();
+  const ar = lang === "ar";
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -176,11 +179,11 @@ export function ProjectRecordEdit() {
             onClick={() => nav(`/admin/projects/${id}/records/${recordId}`)}
           >
             <ArrowRight className="h-4 w-4 ml-1" />
-            تفاصيل السجل
+            {ar ? "تفاصيل السجل" : "Record Details"}
           </Button>
           <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
           <h1 className="text-lg font-bold">
-            تعديل السجل{" "}
+            {ar ? "تعديل السجل" : "Edit Record"}{" "}
             {data?.record?.sequentialNumber && (
               <span className="text-muted-foreground font-normal text-base">#{data.record.sequentialNumber}</span>
             )}
@@ -195,23 +198,23 @@ export function ProjectRecordEdit() {
             data-testid="button-delete"
           >
             <Trash2 className="h-4 w-4 ml-1" />
-            حذف
+            {ar ? "حذف" : "Delete"}
           </Button>
           <Button type="submit" size="sm" disabled={saveMut.isPending} data-testid="button-save">
             {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Save className="h-4 w-4 ml-1" />}
-            حفظ
+            {ar ? "حفظ" : "Save"}
           </Button>
         </div>
 
         {saveMut.isError && (
           <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm">
-            {(saveMut.error as any)?.message || "حدث خطأ أثناء الحفظ"}
+            {(saveMut.error as any)?.message || (ar ? "حدث خطأ أثناء الحفظ" : "An error occurred while saving")}
           </div>
         )}
 
         {stepNums.map(s => {
           const stepFields = grouped[s] || [];
-          const stepName = steps[s - 1] || `الخطوة ${s}`;
+          const stepName = steps[s - 1] || (ar ? `الخطوة ${s}` : `Step ${s}`);
           return (
             <Card key={s} className="p-5">
               <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 pb-2 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
@@ -238,7 +241,7 @@ export function ProjectRecordEdit() {
 
         {fields.length === 0 && (
           <Card className="p-10 text-center text-muted-foreground text-sm">
-            لا يوجد حقول محددة لهذا المشروع
+            {ar ? "لا يوجد حقول محددة لهذا المشروع" : "No fields defined for this project"}
           </Card>
         )}
 
@@ -246,14 +249,14 @@ export function ProjectRecordEdit() {
           <div className="flex gap-2">
             <Button type="submit" disabled={saveMut.isPending} className="flex-1" data-testid="button-save-bottom">
               {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Save className="h-4 w-4 ml-1" />}
-              {saveMut.isPending ? "جاري الحفظ..." : "حفظ التعديلات"}
+              {saveMut.isPending ? (ar ? "جاري الحفظ..." : "Saving...") : (ar ? "حفظ التعديلات" : "Save Changes")}
             </Button>
             <Button
               type="button"
               variant="outline"
               onClick={() => nav(`/admin/projects/${id}/records/${recordId}`)}
             >
-              إلغاء
+              {ar ? "إلغاء" : "Cancel"}
             </Button>
           </div>
         )}
@@ -263,14 +266,16 @@ export function ProjectRecordEdit() {
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>تأكيد الحذف</DialogTitle>
+            <DialogTitle>{ar ? "تأكيد الحذف" : "Delete Record"}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            هل أنت متأكد من حذف السجل #{data?.record?.sequentialNumber}؟ لا يمكن التراجع عن هذا الإجراء.
+            {ar
+              ? `هل أنت متأكد من حذف السجل #${data?.record?.sequentialNumber}؟ لا يمكن التراجع عن هذا الإجراء.`
+              : `Are you sure you want to delete record #${data?.record?.sequentialNumber}? This action cannot be undone.`}
           </p>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setDeleteOpen(false)} data-testid="button-cancel-delete">
-              إلغاء
+              {ar ? "إلغاء" : "Cancel"}
             </Button>
             <Button
               variant="destructive"
@@ -283,7 +288,7 @@ export function ProjectRecordEdit() {
               data-testid="button-confirm-delete"
             >
               {deleting ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Trash2 className="h-4 w-4 ml-1" />}
-              حذف
+              {ar ? "حذف" : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>

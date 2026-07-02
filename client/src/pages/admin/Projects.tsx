@@ -14,8 +14,11 @@ import { apiRequest } from "@/lib/queryClient";
 import type { Project } from "@shared/schema";
 import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useLang } from "@/context/LanguageContext";
 
 export function Projects() {
+  const { lang } = useLang();
+  const ar = lang === "ar";
   const [, nav] = useLocation();
   const qc = useQueryClient();
   const { setCurrentProject } = useProject();
@@ -61,14 +64,14 @@ export function Projects() {
       <div className="max-w-5xl mx-auto space-y-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">المشاريع</h1>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{ar ? "المشاريع" : "Projects"}</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {isLoading ? "جاري التحميل..." : `${projects.length} مشروع`}
+              {isLoading ? (ar ? "جاري التحميل..." : "Loading...") : (ar ? `${projects.length} مشروع` : `${projects.length} project${projects.length !== 1 ? "s" : ""}`)}
             </p>
           </div>
           <Button onClick={() => nav("/admin/projects/new")} data-testid="button-new-project">
             <Plus className="h-4 w-4 ml-2" />
-            مشروع جديد
+            {ar ? "مشروع جديد" : "New Project"}
           </Button>
         </div>
 
@@ -79,7 +82,7 @@ export function Projects() {
             <Input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="بحث في المشاريع..."
+              placeholder={ar ? "بحث في المشاريع..." : "Search projects..."}
               className="pr-9"
               data-testid="input-search-projects"
             />
@@ -93,18 +96,18 @@ export function Projects() {
         ) : filtered.length === 0 && search ? (
           <Card className="p-10 text-center text-muted-foreground">
             <Search className="h-8 w-8 mx-auto mb-3 opacity-30" />
-            <p>لا توجد مشاريع مطابقة لـ "{search}"</p>
+            <p>{ar ? `لا توجد مشاريع مطابقة لـ "${search}"` : `No projects match "${search}"`}</p>
           </Card>
         ) : projects.length === 0 ? (
           <Card className="flex flex-col items-center justify-center py-20 text-center">
             <FolderKanban className="h-16 w-16 text-slate-300 dark:text-slate-600 mb-4" />
             <h3 className="text-lg font-semibold text-slate-600 dark:text-slate-400 mb-2">
-              لا يوجد مشاريع بعد
+              {ar ? "لا يوجد مشاريع بعد" : "No projects yet"}
             </h3>
-            <p className="text-sm text-muted-foreground mb-6">أنشئ مشروعك الأول لبدء جمع البيانات</p>
+            <p className="text-sm text-muted-foreground mb-6">{ar ? "أنشئ مشروعك الأول لبدء جمع البيانات" : "Create your first project to start collecting data"}</p>
             <Button onClick={() => nav("/admin/projects/new")}>
               <Plus className="h-4 w-4 ml-2" />
-              إنشاء مشروع
+              {ar ? "إنشاء مشروع" : "Create Project"}
             </Button>
           </Card>
         ) : (
@@ -169,11 +172,11 @@ export function Projects() {
                     variant={p.formEnabled ? "default" : "secondary"}
                     className={`text-[10px] ${p.formEnabled ? "bg-green-500/90 hover:bg-green-500" : ""}`}
                   >
-                    {p.formEnabled ? "🟢 مفعّل" : "متوقف"}
+                    {p.formEnabled ? (ar ? "🟢 مفعّل" : "🟢 Active") : (ar ? "متوقف" : "Inactive")}
                   </Badge>
                   {Array.isArray((p as any).steps) && (
                     <Badge variant="outline" className="text-[10px]">
-                      {(p as any).steps.length} خطوات
+                      {(p as any).steps.length} {ar ? "خطوات" : "steps"}
                     </Badge>
                   )}
                 </div>
@@ -186,7 +189,7 @@ export function Projects() {
                     data-testid={`button-open-${p.id}`}
                   >
                     <LayoutDashboard className="h-3.5 w-3.5 ml-1" />
-                    فتح
+                    {ar ? "فتح" : "Open"}
                   </Button>
                   <Button
                     size="sm" variant="outline" className="h-8 px-2"
@@ -214,17 +217,15 @@ export function Projects() {
         <Dialog open={!!deleteId} onOpenChange={v => { if (!v) setDeleteId(null); }}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>تأكيد حذف المشروع</DialogTitle>
+              <DialogTitle>{ar ? "تأكيد حذف المشروع" : "Delete Project"}</DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              هل أنت متأكد من حذف المشروع{" "}
-              <strong>"{projects.find(p => p.id === deleteId)?.name}"</strong>؟
-              <br />
-              سيتم حذف <span className="text-red-500 font-semibold">جميع السجلات والبيانات</span> المرتبطة به نهائياً.
+              {ar ? <>هل أنت متأكد من حذف المشروع{" "}<strong>"{projects.find(p => p.id === deleteId)?.name}"</strong>؟<br />سيتم حذف <span className="text-red-500 font-semibold">جميع السجلات والبيانات</span> المرتبطة به نهائياً.</>
+                 : <>Are you sure you want to delete <strong>"{projects.find(p => p.id === deleteId)?.name}"</strong>?<br />All <span className="text-red-500 font-semibold">records and data</span> will be permanently deleted.</>}
             </p>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setDeleteId(null)} data-testid="button-cancel-delete">
-                إلغاء
+                {ar ? "إلغاء" : "Cancel"}
               </Button>
               <Button
                 variant="destructive"
@@ -240,7 +241,7 @@ export function Projects() {
                 {(deleting || deleteMut.isPending)
                   ? <Loader2 className="h-4 w-4 animate-spin ml-1" />
                   : <Trash2 className="h-4 w-4 ml-1" />}
-                حذف المشروع
+                {ar ? "حذف المشروع" : "Delete Project"}
               </Button>
             </DialogFooter>
           </DialogContent>
