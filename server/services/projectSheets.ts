@@ -227,6 +227,30 @@ export async function createProjectSheet(projectId: string): Promise<{
     let inFolder = false;
     let folderNote = "";
 
+    /** Helper: move a file into folderId, returns true on success */
+    const moveFileToFolder = async (fileId: string): Promise<boolean> => {
+      try {
+        let removeParents: string | undefined;
+        try {
+          const meta = await drive.files.get({ fileId, fields: "parents", supportsAllDrives: true } as any);
+          const parr: string[] = (meta.data as any).parents || [];
+          if (parr.length > 0) removeParents = parr.join(",");
+        } catch { /* skip removeParents */ }
+        await drive.files.update({
+          fileId,
+          addParents: folderId,
+          ...(removeParents ? { removeParents } : {}),
+          supportsAllDrives: true,
+          fields: "id,parents",
+        } as any);
+        console.log("[ProjectSheets] Moved", fileId, "→ folder", folderId);
+        return true;
+      } catch (moveErr: any) {
+        console.error("[ProjectSheets] Move failed:", classifyDriveError(moveErr, { folderId, saEmail: proj.googleServiceAccountEmail ?? "" }));
+        return false;
+      }
+    };
+
     if (folderId) {
       // ── Attempt 1: Drive API — create directly inside the folder ──
       let driveCreateOk = false;
@@ -245,63 +269,52 @@ export async function createProjectSheet(projectId: string): Promise<{
         driveCreateOk = true;
         console.log("[ProjectSheets] Drive create OK — id:", spreadsheetId);
       } catch (driveErr: any) {
+        const driveErrReason = googleErrorReason(driveErr);
         const hint = classifyDriveError(driveErr, { folderId, saEmail: proj.googleServiceAccountEmail ?? "" });
         console.warn("[ProjectSheets] Drive create failed:", hint);
 
-        // ── Attempt 2: Sheets API fallback — create without folder, then move ──
-        console.log("[ProjectSheets] Trying Sheets API fallback...");
-        try {
-          const newSheet = await sheets.spreadsheets.create({
-            requestBody: {
-              properties: { title: proj.name },
-              sheets: [{ properties: { title: sheetName } }],
-            },
-          });
-          spreadsheetId = newSheet.data.spreadsheetId!;
-          console.log("[ProjectSheets] Sheets API create OK — id:", spreadsheetId);
+        const isQuotaErr = driveErrReason === "storageQuotaExceeded" || driveErrReason === "storageQuota" || /storagequota/i.test(driveErrReason);
 
-          // ── Attempt 3: Move the newly created sheet into the folder ──
-          try {
-            // Get current parents — needed to remove from root after move
-            let removeParents: string | undefined;
-            try {
-              const fileMeta = await drive.files.get({
-                fileId: spreadsheetId,
-                fields: "parents",
-                supportsAllDrives: true,
-              } as any);
-              const parentsArr: string[] = (fileMeta.data as any).parents || [];
-              if (parentsArr.length > 0) removeParents = parentsArr.join(",");
-            } catch {
-              // If we can't get parents, skip removeParents — just add to folder
-            }
-
-            await drive.files.update({
-              fileId: spreadsheetId,
-              addParents: folderId,
-              ...(removeParents ? { removeParents } : {}),
-              supportsAllDrives: true,
-              fields: "id,parents",
-            } as any);
+        // ── Attempt 2A: If quota and existing sheet — move it to folder (no new storage needed) ──
+        if (isQuotaErr && proj.googleSheetId) {
+          console.log("[ProjectSheets] Quota error + existing sheet — trying to move existing sheet to folder...");
+          const moved = await moveFileToFolder(proj.googleSheetId);
+          if (moved) {
+            spreadsheetId = proj.googleSheetId;
             inFolder = true;
-            console.log("[ProjectSheets] Move to folder OK — inFolder:", folderId);
-          } catch (moveErr: any) {
-            const moveHint = classifyDriveError(moveErr, { folderId, saEmail: proj.googleServiceAccountEmail ?? "" });
-            console.error("[ProjectSheets] Move to folder FAILED:", moveHint);
-            // Save the sheet ID that was already created so user can manually place it
-            await db.update(projects)
-              .set({ googleSheetId: spreadsheetId })
-              .where(eq(projects.id, projectId));
-            const sheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
+            console.log("[ProjectSheets] Existing sheet moved to folder successfully");
+          } else {
+            // Move also failed — explain clearly
+            const sheetUrl = `https://docs.google.com/spreadsheets/d/${proj.googleSheetId}/edit`;
             return {
               ok: false,
-              sheetId: spreadsheetId,
+              sheetId: proj.googleSheetId,
               sheetUrl,
-              message: `⚠️ تم إنشاء الـ Sheet بنجاح لكن تعذّر نقله للمجلد المحدد.\n\nالسبب: ${moveHint}\n\nSheet ID تم حفظه: ${spreadsheetId}\nرابط الملف: ${sheetUrl}\n\nيمكنك نقل الملف يدوياً للمجلد أو مراجعة صلاحيات المجلد.`,
+              message: `⚠️ حصة Drive الـ Service Account ممتلئة ولا يمكن إنشاء ملفات جديدة.\n\nتم محاولة نقل الـ Sheet الموجود للمجلد لكن فشل أيضاً.\n\nتأكد من:\n• مشاركة المجلد مع (${proj.googleServiceAccountEmail}) كـ "محرر"\n• أو تنظيف Drive الـ SA لحذف الملفات غير الضرورية`,
             };
           }
-        } catch (sheetsErr: any) {
-          // Both paths failed — return the original Drive error as it's more informative
+        } else if (isQuotaErr && !proj.googleSheetId) {
+          // ── Attempt 2B: Quota + no existing sheet — try Sheets API (may bypass quota) ──
+          console.log("[ProjectSheets] Quota error, no existing sheet — trying Sheets API create...");
+          try {
+            const newSheet = await sheets.spreadsheets.create({
+              requestBody: {
+                properties: { title: proj.name },
+                sheets: [{ properties: { title: sheetName } }],
+              },
+            });
+            spreadsheetId = newSheet.data.spreadsheetId!;
+            console.log("[ProjectSheets] Sheets API create OK — id:", spreadsheetId);
+            // Try to move the new sheet to folder
+            inFolder = await moveFileToFolder(spreadsheetId);
+            if (!inFolder) {
+              folderNote = `\n(ملاحظة: الملف في Drive الـ SA — تعذّر نقله للمجلد. تأكد من مشاركة المجلد مع ${proj.googleServiceAccountEmail} كـ "محرر")`;
+            }
+          } catch (sheetsErr: any) {
+            return { ok: false, message: `❌ ${hint}\n\nتفاصيل: ${sheetsErr.message}` };
+          }
+        } else if (!isQuotaErr) {
+          // Non-quota error (permission/not found) — return immediately with hint
           return { ok: false, message: `❌ ${hint}` };
         }
       }
@@ -511,14 +524,14 @@ export async function cleanupServiceAccountDrive(projectId: string): Promise<{
     const allProjects = await db.select({ sheetId: projects.googleSheetId }).from(projects);
     const knownSheetIds = new Set(allProjects.map(p => p.sheetId).filter(Boolean));
 
-    // Paginate through ALL files owned by the SA (all types, all drives)
+    // Paginate through files OWNED BY the SA only (not shared folders/files)
     const allFiles: Array<{ id: string; name: string }> = [];
     let pageToken: string | undefined;
 
     do {
       const listRes: any = await drive.files.list({
-        // No mimeType filter — find ALL file types
-        q: "trashed=false",
+        // Only files owned by the SA — excludes shared folders/files the SA can see
+        q: "'me' in owners and trashed=false",
         fields: "nextPageToken, files(id, name, mimeType)",
         pageSize: 200,
         includeItemsFromAllDrives: true,
