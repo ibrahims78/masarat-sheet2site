@@ -520,14 +520,49 @@ export async function createProjectSheet(projectId: string, isBackground = false
         }
       }
     } else {
-      // No folder specified — create normally via Sheets API
-      const newSheet = await sheets.spreadsheets.create({
-        requestBody: {
-          properties: { title: proj.name },
-          sheets: [{ properties: { title: sheetName } }],
-        },
-      });
-      spreadsheetId = newSheet.data.spreadsheetId!;
+      // No folder specified — create via Drive API (more permissive than sheets.spreadsheets.create)
+      try {
+        const driveFile = await drive.files.create({
+          requestBody: {
+            name: proj.name || sheetName,
+            mimeType: "application/vnd.google-apps.spreadsheet",
+          },
+          fields: "id",
+        } as any);
+        spreadsheetId = driveFile.data.id!;
+        console.log("[ProjectSheets] Drive create (no-folder) OK — id:", spreadsheetId);
+      } catch (driveNoFolderErr: any) {
+        const hint = classifyDriveError(driveNoFolderErr, { saEmail: proj.googleServiceAccountEmail ?? "" });
+        console.error("[ProjectSheets] Drive create (no-folder) failed:", hint);
+        console.error("[ProjectSheets] Full error:", JSON.stringify(driveNoFolderErr?.response?.data ?? driveNoFolderErr?.message));
+        // Fall back to Sheets API as last resort
+        console.log("[ProjectSheets] Falling back to sheets.spreadsheets.create()...");
+        const newSheet = await sheets.spreadsheets.create({
+          requestBody: {
+            properties: { title: proj.name || sheetName },
+            sheets: [{ properties: { title: sheetName } }],
+          },
+        });
+        spreadsheetId = newSheet.data.spreadsheetId!;
+        console.log("[ProjectSheets] Sheets fallback create OK — id:", spreadsheetId);
+      }
+
+      // Rename default tab to sheetName if needed
+      try {
+        const meta = await sheets.spreadsheets.get({ spreadsheetId });
+        const defaultSheetId = meta.data.sheets?.[0]?.properties?.sheetId ?? 0;
+        const currentTitle = meta.data.sheets?.[0]?.properties?.title ?? "";
+        if (currentTitle !== sheetName) {
+          await sheets.spreadsheets.batchUpdate({
+            spreadsheetId,
+            requestBody: {
+              requests: [{ updateSheetProperties: { properties: { sheetId: defaultSheetId, title: sheetName }, fields: "title" } }],
+            },
+          });
+        }
+      } catch (renameErr: any) {
+        console.warn("[ProjectSheets] Tab rename (no-folder) failed (non-fatal):", renameErr.message);
+      }
     }
 
     // Persist new spreadsheet ID
@@ -553,6 +588,7 @@ export async function createProjectSheet(projectId: string, isBackground = false
     };
   } catch (err: any) {
     console.error("[ProjectSheets] createProjectSheet unexpected error:", err.message);
+    console.error("[ProjectSheets] Full error response:", JSON.stringify(err?.response?.data ?? err?.errors ?? "no-data"));
 
     const isPermission =
       /caller does not have permission/i.test(err.message) ||
