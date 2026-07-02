@@ -911,82 +911,167 @@ export function Settings() {
 
           {/* Email Tab */}
           <TabsContent value="email">
-            <div className="section-card space-y-4">
-              <h3 className="font-semibold">{ar ? "إعدادات البريد الإلكتروني (SMTP)" : "Email Settings (SMTP)"}</h3>
+            <div className="section-card space-y-5">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">{ar ? "إعدادات البريد الإلكتروني (SMTP)" : "Email Settings (SMTP)"}</h3>
+                {/* Connection status badges */}
+                <div className="flex gap-2 flex-wrap justify-end">
+                  <span className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium ${settings.smtpHost ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-700 dark:text-green-300" : "bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-700"}`}>
+                    {settings.smtpHost ? "✅" : "○"} Host
+                  </span>
+                  <span className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium ${settings.smtpUser ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-700 dark:text-green-300" : "bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-700"}`}>
+                    {settings.smtpUser ? "✅" : "○"} {ar ? "البريد" : "Email"}
+                  </span>
+                  <span className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium ${settings.hasSmtpPass ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-700 dark:text-green-300" : "bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-700"}`}>
+                    {settings.hasSmtpPass ? "✅" : "○"} {ar ? "كلمة المرور" : "Password"}
+                  </span>
+                  {settings.smtpHost && settings.smtpUser && settings.hasSmtpPass ? (
+                    <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-300 font-medium">
+                      📬 {ar ? "البريد مفعّل" : "Email active"}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/20 dark:border-amber-700 dark:text-amber-300 font-medium">
+                      ⚠️ {ar ? "الإعداد غير مكتمل" : "Setup incomplete"}
+                    </span>
+                  )}
+                </div>
+              </div>
 
               {/* Gmail step-by-step guide */}
               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold text-sm text-blue-900 dark:text-blue-200">📧 دليل إعداد Gmail خطوة بخطوة</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-semibold text-sm text-blue-900 dark:text-blue-200">
+                    📧 {ar ? "دليل إعداد Gmail خطوة بخطوة" : "Gmail Setup Guide — Step by Step"}
+                  </p>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-xs h-7 border-blue-300 text-blue-700 hover:bg-blue-100 dark:border-blue-600 dark:text-blue-300"
+                    className="shrink-0 text-xs h-7 border-blue-300 text-blue-700 hover:bg-blue-100 dark:border-blue-600 dark:text-blue-300"
                     onClick={() => {
                       set("smtpHost", "smtp.gmail.com");
                       set("smtpPort", 465);
-                      set("smtpFromName", settings.smtpFromName || "منصة مسارات");
+                      set("smtpFromName", settings.smtpFromName || (ar ? "منصة مسارات" : "Masarat Platform"));
                     }}
+                    data-testid="button-autofill-gmail"
                   >
-                    ⚡ تعبئة إعدادات Gmail تلقائياً
+                    ⚡ {ar ? "تعبئة إعدادات Gmail تلقائياً" : "Auto-fill Gmail Settings"}
                   </Button>
                 </div>
                 <div className="text-xs text-blue-800 dark:text-blue-300 space-y-2">
-                  <div className="flex gap-2">
-                    <span className="shrink-0 w-5 h-5 bg-blue-200 dark:bg-blue-800 rounded-full flex items-center justify-center font-bold text-blue-900 dark:text-blue-100 text-[10px]">١</span>
-                    <p>افتح <strong>إعدادات حساب Google</strong> ← Security ← <strong>2-Step Verification</strong> وفعّلها</p>
+                  <div className="flex gap-2.5">
+                    <span className="shrink-0 w-5 h-5 bg-blue-200 dark:bg-blue-800 rounded-full flex items-center justify-center font-bold text-blue-900 dark:text-blue-100 text-[10px]">{ar ? "١" : "1"}</span>
+                    <p>{ar ? <>افتح <strong>إعدادات حساب Google</strong> ← Security ← <strong>2-Step Verification</strong> وفعّلها</> : <>Open your <strong>Google Account Settings</strong> → Security → Enable <strong>2-Step Verification</strong></>}</p>
                   </div>
-                  <div className="flex gap-2">
-                    <span className="shrink-0 w-5 h-5 bg-blue-200 dark:bg-blue-800 rounded-full flex items-center justify-center font-bold text-blue-900 dark:text-blue-100 text-[10px]">٢</span>
-                    <p>في نفس صفحة Security ← ابحث عن <strong>App passwords</strong> ← اختر "Mail" ← انسخ كلمة المرور المكونة من 16 حرفاً</p>
+                  <div className="flex gap-2.5">
+                    <span className="shrink-0 w-5 h-5 bg-blue-200 dark:bg-blue-800 rounded-full flex items-center justify-center font-bold text-blue-900 dark:text-blue-100 text-[10px]">{ar ? "٢" : "2"}</span>
+                    <p>{ar ? <>في نفس صفحة Security ← ابحث عن <strong>App passwords</strong> ← اختر "Mail" ← انسخ كلمة المرور المكونة من 16 حرفاً</> : <>On the same Security page → find <strong>App passwords</strong> → select "Mail" → copy the 16-character password generated</>}</p>
                   </div>
-                  <div className="flex gap-2">
-                    <span className="shrink-0 w-5 h-5 bg-blue-200 dark:bg-blue-800 rounded-full flex items-center justify-center font-bold text-blue-900 dark:text-blue-100 text-[10px]">٣</span>
-                    <p>الصقها في حقل كلمة المرور أدناه <strong>بدلاً من كلمة مرور Gmail العادية</strong></p>
+                  <div className="flex gap-2.5">
+                    <span className="shrink-0 w-5 h-5 bg-blue-200 dark:bg-blue-800 rounded-full flex items-center justify-center font-bold text-blue-900 dark:text-blue-100 text-[10px]">{ar ? "٣" : "3"}</span>
+                    <p>{ar ? <>الصقها في حقل كلمة المرور أدناه <strong>بدلاً من كلمة مرور Gmail العادية</strong></> : <>Paste it in the password field below — <strong>not your regular Gmail password</strong></>}</p>
                   </div>
-                  <div className="mt-2 p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg font-mono text-[11px] space-y-0.5">
+                  <div className="mt-2 p-2.5 bg-blue-100 dark:bg-blue-900/40 rounded-lg font-mono text-[11px] leading-relaxed space-y-0.5">
                     <p>Host: <strong>smtp.gmail.com</strong> · Port: <strong>465</strong> (SSL)</p>
-                    <p>Username: <strong>بريدك@gmail.com</strong></p>
-                    <p>Password: <strong>كلمة مرور التطبيق (16 حرفاً)</strong></p>
+                    <p>Username: <strong>{ar ? "بريدك@gmail.com" : "yourname@gmail.com"}</strong></p>
+                    <p>Password: <strong>{ar ? "كلمة مرور التطبيق (16 حرفاً)" : "App Password (16 characters)"}</strong></p>
                   </div>
                 </div>
               </div>
 
+              {/* Outlook quick-fill */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg flex items-center justify-between gap-3">
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium text-slate-600 dark:text-slate-300">{ar ? "مزودون آخرون:" : "Other providers:"}</span>
+                  {" "}Outlook · Hotmail · cPanel
+                </div>
+                <div className="flex gap-1.5 shrink-0">
+                  <button
+                    onClick={() => { set("smtpHost", "smtp-mail.outlook.com"); set("smtpPort", 587); set("smtpFromName", settings.smtpFromName || (ar ? "منصة مسارات" : "Masarat Platform")); }}
+                    className="px-2.5 py-1 text-xs rounded border border-slate-300 dark:border-slate-600 hover:bg-white dark:hover:bg-slate-700 transition-colors font-medium"
+                    data-testid="button-autofill-outlook"
+                  >
+                    ⚡ Outlook
+                  </button>
+                  <button
+                    onClick={() => { set("smtpHost", "mail." + (settings.smtpUser?.split("@")[1] || "yourdomain.com")); set("smtpPort", 587); }}
+                    className="px-2.5 py-1 text-xs rounded border border-slate-300 dark:border-slate-600 hover:bg-white dark:hover:bg-slate-700 transition-colors font-medium"
+                    data-testid="button-autofill-cpanel"
+                  >
+                    ⚡ cPanel
+                  </button>
+                </div>
+              </div>
+
+              {/* SMTP Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FieldRow label="SMTP Host">
-                  <Input value={settings.smtpHost || ""} onChange={e => set("smtpHost", e.target.value)} placeholder="smtp.gmail.com" />
+                  <Input
+                    value={settings.smtpHost || ""}
+                    onChange={e => set("smtpHost", e.target.value)}
+                    placeholder="smtp.gmail.com"
+                    data-testid="input-smtp-host"
+                  />
                 </FieldRow>
                 <FieldRow label="SMTP Port">
                   <div className="flex gap-2">
-                    <Input type="number" value={settings.smtpPort || 465} onChange={e => set("smtpPort", parseInt(e.target.value))} className="flex-1" />
+                    <Input
+                      type="number"
+                      value={settings.smtpPort || 587}
+                      onChange={e => set("smtpPort", parseInt(e.target.value))}
+                      className="flex-1"
+                      data-testid="input-smtp-port"
+                    />
                     <div className="flex gap-1">
-                      <button onClick={() => set("smtpPort", 465)} className={`px-2 py-1 text-xs rounded border transition-colors ${(settings.smtpPort || 465) === 465 ? "bg-primary text-white border-primary" : "border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700"}`}>465</button>
-                      <button onClick={() => set("smtpPort", 587)} className={`px-2 py-1 text-xs rounded border transition-colors ${settings.smtpPort === 587 ? "bg-primary text-white border-primary" : "border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700"}`}>587</button>
+                      <button
+                        onClick={() => set("smtpPort", 465)}
+                        className={`px-2.5 py-1 text-xs rounded border font-semibold transition-colors ${(settings.smtpPort) === 465 ? "bg-primary text-white border-primary" : "border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700"}`}
+                        data-testid="button-port-465"
+                      >465</button>
+                      <button
+                        onClick={() => set("smtpPort", 587)}
+                        className={`px-2.5 py-1 text-xs rounded border font-semibold transition-colors ${(!settings.smtpPort || settings.smtpPort === 587) ? "bg-primary text-white border-primary" : "border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700"}`}
+                        data-testid="button-port-587"
+                      >587</button>
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">465 (SSL/TLS) · 587 (STARTTLS)</p>
                 </FieldRow>
                 <FieldRow label={ar ? "بريدك الإلكتروني" : "Your Email"}>
-                  <Input value={settings.smtpUser || ""} onChange={e => set("smtpUser", e.target.value)} placeholder="yourname@gmail.com" />
+                  <Input
+                    value={settings.smtpUser || ""}
+                    onChange={e => set("smtpUser", e.target.value)}
+                    placeholder="yourname@gmail.com"
+                    type="email"
+                    data-testid="input-smtp-user"
+                  />
                 </FieldRow>
                 <FieldRow label={ar ? "كلمة مرور التطبيق (App Password)" : "App Password"}>
                   <Input
                     type="password"
-                    placeholder={settings.hasSmtpPass ? "محفوظة — ألصق جديدة للتحديث" : "xxxx xxxx xxxx xxxx"}
+                    placeholder={settings.hasSmtpPass ? (ar ? "محفوظة — ألصق جديدة للتحديث" : "Saved — paste new to update") : "XXXX XXXX XXXX XXXX"}
                     onChange={e => { set("smtpPass", e.target.value); setSmtpPassLive(e.target.value); }}
+                    data-testid="input-smtp-pass"
                   />
-                  {settings.hasSmtpPass && !smtpPassLive
-                    ? <p className="text-xs text-green-600 mt-1">✅ كلمة مرور محفوظة</p>
-                    : <p className="text-xs text-amber-600 mt-1">⚠️ استخدم App Password وليس كلمة مرور Gmail العادية</p>
-                  }
+                  {settings.hasSmtpPass && !smtpPassLive ? (
+                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">✅ {ar ? "كلمة مرور محفوظة ومشفَّرة" : "Password saved & encrypted"}</p>
+                  ) : (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">⚠️ {ar ? "استخدم App Password وليس كلمة مرور Gmail العادية" : "Use App Password, not your regular Gmail password"}</p>
+                  )}
                 </FieldRow>
                 <FieldRow label={ar ? "اسم المرسل" : "From Name"}>
-                  <Input value={settings.smtpFromName || ""} onChange={e => set("smtpFromName", e.target.value)} placeholder="منصة مسارات" />
+                  <Input
+                    value={settings.smtpFromName || ""}
+                    onChange={e => set("smtpFromName", e.target.value)}
+                    placeholder={ar ? "منصة مسارات" : "Masarat Platform"}
+                    data-testid="input-smtp-from-name"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">{ar ? "الاسم الذي يظهر للمستلم في صندوق الوارد" : "The name recipients see in their inbox"}</p>
                 </FieldRow>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={() => { save(); setSmtpPassLive(""); }} disabled={saving}>
+              {/* Actions */}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button onClick={() => { save(); setSmtpPassLive(""); }} disabled={saving} data-testid="button-save-email">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
                   {ar ? "حفظ" : "Save"}
                 </Button>
@@ -994,7 +1079,7 @@ export function Settings() {
                   label={ar ? "اختبار الاتصال" : "Test Connection"}
                   onTest={() => apiRequest("POST", "/api/settings/test-email", {
                     host: settings.smtpHost,
-                    port: settings.smtpPort || 465,
+                    port: settings.smtpPort || 587,
                     user: settings.smtpUser,
                     pass: smtpPassLive || undefined,
                   })}
@@ -1002,7 +1087,7 @@ export function Settings() {
               </div>
               {!smtpPassLive && settings.hasSmtpPass && (
                 <p className="text-xs text-muted-foreground">
-                  💡 سيستخدم الاختبار كلمة المرور المحفوظة — إذا استمر الفشل، الصق كلمة مرور جديدة ثم اختبر
+                  💡 {ar ? "سيستخدم الاختبار كلمة المرور المحفوظة — إذا استمر الفشل، الصق كلمة مرور جديدة ثم اختبر" : "The test will use the saved password — if it keeps failing, paste a new password first then test again"}
                 </p>
               )}
             </div>
