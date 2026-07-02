@@ -5,17 +5,21 @@ const ALGORITHM = "aes-256-gcm";
 function loadKey(): Buffer {
   const envKey = process.env.ENCRYPTION_KEY;
   if (!envKey) {
-    console.warn(
-      "⚠️  ENCRYPTION_KEY env var is not set. " +
-      "A random key will be used — existing encrypted values in the DB will become unreadable after restart. " +
-      "Set a stable 64-char hex ENCRYPTION_KEY in your environment secrets."
+    console.error(
+      "❌ ENCRYPTION_KEY is not set. Refusing to start. " +
+      "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\" " +
+      "and save it in Replit Secrets."
     );
-    return Buffer.from(crypto.randomBytes(32).toString("hex"), "hex");
+    process.exit(1);
   }
-  if (envKey.length < 64) {
-    console.warn("⚠️  ENCRYPTION_KEY should be at least 64 hex characters. Padding key.");
+  if (!/^[0-9a-fA-F]{64}$/.test(envKey)) {
+    console.error(
+      "❌ ENCRYPTION_KEY must be exactly 64 hex characters (256-bit). " +
+      "Generate a valid key with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+    );
+    process.exit(1);
   }
-  return Buffer.from(envKey.slice(0, 64).padEnd(64, "0"), "hex");
+  return Buffer.from(envKey, "hex");
 }
 
 const KEY = loadKey();
