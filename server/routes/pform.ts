@@ -1,8 +1,9 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db.js";
 import { projects, projectFields, projectRecords, projectAuditLog } from "../../shared/schema.js";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { appendRecordToSheet, updateRecordRow } from "../services/projectSheets.js";
+import { insertRecordAtomic } from "../services/recordInsert.js";
 import { decrypt } from "../services/crypto.js";
 import rateLimit from "express-rate-limit";
 
@@ -92,17 +93,9 @@ router.post("/:projectId/submit", submitLimiter, async (req: Request, res: Respo
     const tokenHours = proj.editTokenHours ?? 48;
     const tokenExpiresAt = new Date(Date.now() + tokenHours * 60 * 60 * 1000);
 
-    const [maxSeq] = await db.select({ max: sql<number>`COALESCE(MAX(sequential_number), 0)` })
-      .from(projectRecords).where(eq(projectRecords.projectId, pid));
-    const seqNum = (maxSeq?.max || 0) + 1;
-
-    const [record] = await db.insert(projectRecords).values({
-      projectId: pid,
-      data: req.body,
-      sequentialNumber: seqNum,
-      tokenExpiresAt,
-      submittedAt: new Date(),
-    }).returning();
+    // Atomically assign sequential number and insert (advisory lock prevents duplicates)
+    const record = await insertRecordAtomic(pid, req.body, tokenExpiresAt);
+    const seqNum = record.sequential_number;
 
     await db.insert(projectAuditLog).values({
       projectId: pid,
@@ -113,7 +106,7 @@ router.post("/:projectId/submit", submitLimiter, async (req: Request, res: Respo
     });
 
     // Google Sheets (non-blocking)
-    appendRecordToSheet(pid, record.data as any, seqNum).then(async (rowIndex) => {
+    appendRecordToSheet(pid, req.body as any, seqNum).then(async (rowIndex) => {
       if (rowIndex) {
         await db.update(projectRecords).set({ sheetsRowIndex: rowIndex }).where(eq(projectRecords.id, record.id));
       }
@@ -137,7 +130,7 @@ router.post("/:projectId/submit", submitLimiter, async (req: Request, res: Respo
     }
 
     (req.session as any)[`code_${pid}`] = false;
-    res.json({ ok: true, editToken: record.editToken, recordId: record.id, tokenHours });
+    res.json({ ok: true, editToken: record.edit_token, recordId: record.id, tokenHours });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

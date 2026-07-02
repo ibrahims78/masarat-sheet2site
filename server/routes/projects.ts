@@ -4,6 +4,7 @@ import { projects, projectFields, projectRecords, projectAuditLog, users, userIn
 import { eq, desc, count, gte, and, ilike, or, gt, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin, requireEditorOrAdmin } from "../middleware/auth.js";
 import { encrypt, decrypt } from "../services/crypto.js";
+import { insertRecordAtomic } from "../services/recordInsert.js";
 import { appendRecordToSheet, updateRecordRow, deleteRecordRow, testProjectSheetsConnection, createProjectSheet, fixProjectSheetHeaders, checkProjectSheetColumns, importFromProjectSheet, isSheetCreationPending, startBackgroundSheetCreation, cancelSheetCreationJob } from "../services/projectSheets.js";
 import { testTelegramBot, getTelegramUpdates } from "../services/telegram.js";
 import { sendInvitationEmail, testEmailConnection } from "../services/email.js";
@@ -304,28 +305,20 @@ router.post("/:id/records", requireEditorOrAdmin, async (req: Request, res: Resp
     const tokenHours = proj?.editTokenHours ?? 48;
     const tokenExpiresAt = new Date(Date.now() + tokenHours * 60 * 60 * 1000);
 
-    // Get next sequential number
-    const [maxSeq] = await db.select({ max: sql<number>`COALESCE(MAX(sequential_number), 0)` })
-      .from(projectRecords).where(eq(projectRecords.projectId, String(req.params.id)));
-    const seqNum = (maxSeq?.max || 0) + 1;
-
-    const [record] = await db.insert(projectRecords).values({
-      projectId: String(req.params.id),
-      data: req.body,
-      sequentialNumber: seqNum,
-      tokenExpiresAt,
-      submittedAt: new Date(),
-    }).returning();
+    // Atomically assign sequential number and insert (advisory lock prevents duplicates)
+    const pid = String(req.params.id);
+    const record = await insertRecordAtomic(pid, req.body, tokenExpiresAt);
+    const seqNum = record.sequential_number;
 
     await db.insert(projectAuditLog).values({
-      projectId: String(req.params.id),
+      projectId: pid,
       recordId: record.id,
       changedBy: (req.session as any).userId || "admin",
       action: "create",
       changesJson: req.body,
     });
 
-    appendRecordToSheet(String(req.params.id), record.data as any, seqNum).then(async (rowIndex) => {
+    appendRecordToSheet(pid, req.body as any, seqNum).then(async (rowIndex) => {
       if (rowIndex) {
         await db.update(projectRecords).set({ sheetsRowIndex: rowIndex }).where(eq(projectRecords.id, record.id));
       }
@@ -390,9 +383,12 @@ router.patch("/:id/records/:recordId", requireEditorOrAdmin, async (req: Request
 
 router.delete("/:id/records/:recordId", requireEditorOrAdmin, async (req: Request, res: Response) => {
   try {
+    const pid = String(req.params.id);
+    const rid = String(req.params.recordId);
     const [rec] = await db.select({ sheetsRowIndex: projectRecords.sheetsRowIndex })
-      .from(projectRecords).where(eq(projectRecords.id, String(req.params.recordId)));
-    await db.delete(projectRecords).where(eq(projectRecords.id, String(req.params.recordId)));
+      .from(projectRecords).where(and(eq(projectRecords.id, rid), eq(projectRecords.projectId, pid)));
+    if (!rec) return res.status(404).json({ error: "السجل غير موجود" });
+    await db.delete(projectRecords).where(and(eq(projectRecords.id, rid), eq(projectRecords.projectId, pid)));
 
     if (rec?.sheetsRowIndex) {
       const deletedRow = rec.sheetsRowIndex;
@@ -415,8 +411,10 @@ router.delete("/:id/records/:recordId", requireEditorOrAdmin, async (req: Reques
 router.post("/:id/records/bulk-delete", requireEditorOrAdmin, async (req: Request, res: Response) => {
   try {
     const { ids } = req.body as { ids: string[] };
+    const pid = String(req.params.id);
     for (const rid of ids) {
-      await db.delete(projectRecords).where(eq(projectRecords.id, rid));
+      // Scope deletion to this project to prevent cross-project IDOR
+      await db.delete(projectRecords).where(and(eq(projectRecords.id, rid), eq(projectRecords.projectId, pid)));
     }
     res.json({ ok: true });
   } catch (err: any) {
