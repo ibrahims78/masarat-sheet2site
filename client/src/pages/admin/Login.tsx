@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,21 +11,30 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useAuth } from "@/context/AuthContext";
 import { useAppSettings } from "@/context/AppSettingsContext";
+import { useLang } from "@/context/LanguageContext";
 
-const schema = z.object({
-  email: z.string().email("بريد إلكتروني غير صالح"),
-  password: z.string().min(1, "كلمة المرور مطلوبة"),
-  rememberMe: z.boolean().optional(),
-});
-type FormData = z.infer<typeof schema>;
+type FormData = {
+  email: string;
+  password: string;
+  rememberMe?: boolean;
+};
 
 export function Login() {
   const [, nav] = useLocation();
   const { login } = useAuth();
   const { appName } = useAppSettings();
+  const { lang } = useLang();
+  const ar = lang === "ar";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
+
+  const schema = useMemo(() => z.object({
+    email: z.string().email(ar ? "بريد إلكتروني غير صالح" : "Invalid email address"),
+    password: z.string().min(1, ar ? "كلمة المرور مطلوبة" : "Password is required"),
+    rememberMe: z.boolean().optional(),
+  }), [ar]);
+
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
@@ -71,10 +80,10 @@ export function Login() {
             <ShieldCheck className="h-10 w-10 text-white" />
           </div>
           <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">
-            لوحة الإدارة
+            {ar ? "لوحة الإدارة" : "Admin Panel"}
           </h1>
           <p className="text-muted-foreground text-sm mt-1.5">
-            {appName} — منصة إدارة نماذج التسجيل والبيانات
+            {appName} — {ar ? "منصة إدارة نماذج التسجيل والبيانات" : "Forms & Data Management Platform"}
           </p>
         </div>
 
@@ -82,7 +91,7 @@ export function Login() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <div>
               <Label htmlFor="email" required className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                البريد الإلكتروني
+                {ar ? "البريد الإلكتروني" : "Email"}
               </Label>
               <Input
                 id="email"
@@ -103,7 +112,7 @@ export function Login() {
 
             <div>
               <Label htmlFor="password" required className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                كلمة المرور
+                {ar ? "كلمة المرور" : "Password"}
               </Label>
               <div className="relative mt-1.5">
                 <Input
@@ -137,7 +146,7 @@ export function Login() {
                 data-testid="checkbox-rememberMe"
               />
               <span className="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors">
-                تذكرني لمدة 30 يوم
+                {ar ? "تذكرني لمدة 30 يوم" : "Remember me for 30 days"}
               </span>
             </label>
 
@@ -155,9 +164,9 @@ export function Login() {
               data-testid="button-login"
             >
               {loading ? (
-                <><Loader2 className="h-5 w-5 animate-spin ml-2" />جاري الدخول...</>
+                <><Loader2 className="h-5 w-5 animate-spin ml-2" />{ar ? "جاري الدخول..." : "Signing in..."}</>
               ) : (
-                <><LogIn className="h-5 w-5 ml-2" />تسجيل الدخول</>
+                <><LogIn className="h-5 w-5 ml-2" />{ar ? "تسجيل الدخول" : "Sign In"}</>
               )}
             </Button>
           </form>

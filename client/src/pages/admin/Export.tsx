@@ -14,58 +14,58 @@ import { useLang } from "@/context/LanguageContext";
 
 // ---- Column definitions (mirrors server EXPORT_COL_DEFS) ----
 const ALL_COLS = [
-  { key: "seq", label: "م" },
-  { key: "orgLevel1", label: "المستوى التنظيمي الاول" },
-  { key: "orgClassification", label: "التصنيف/ الجهة المرتبطة" },
-  { key: "orgLevel2", label: "المستوى التنظيمي الثاني" },
-  { key: "orgLevel3", label: "المستوى التنظيمي الثالث" },
-  { key: "orgLevel4", label: "المستوى التنظيمي الرابع" },
-  { key: "orgLevel5", label: "المستوى التنظيمي الخامس" },
-  { key: "workGovernorate", label: "محافظة العمل" },
-  { key: "employeeRefId", label: "الرقم الذاتي" },
-  { key: "jobTitle", label: "مسمى العمل" },
-  { key: "birthDate", label: "تاريخ التولد" },
-  { key: "workStartDate", label: "تاريخ بدء العمل بالدولة" },
-  { key: "permanentDate", label: "تاريخ التثبيت في الدولة" },
-  { key: "contractDate", label: "تاريخ التعاقد في الدولة" },
-  { key: "firstName", label: "الاسم" },
-  { key: "fatherName", label: "اسم الأب" },
-  { key: "familyName", label: "النسبة" },
-  { key: "motherFullName", label: "اسم الأم الكامل" },
-  { key: "nationalId", label: "الرقم الوطني" },
-  { key: "gender", label: "الجنس" },
-  { key: "mobile", label: "رقم الجوال" },
-  { key: "residenceArea", label: "منطقة السكن" },
-  { key: "residenceDetail", label: "تفصيل مكان السكن" },
-  { key: "maritalStatus", label: "الوضع العائلي" },
-  { key: "jobCategory", label: "الفئة الوظيفية" },
-  { key: "employmentStatus", label: "مثبت أو متعاقد" },
-  { key: "appointmentPattern", label: "نمط التعيين أو التعاقد" },
-  { key: "mergeDetails", label: "تفاصيل دمج" },
-  { key: "hasDisability", label: "هل لديك إعاقة" },
-  { key: "disabilityType", label: "نوع الإعاقة" },
-  { key: "disabilityCard", label: "بطاقة الإعاقة" },
-  { key: "registryNumber", label: "رقم القيد" },
-  { key: "registryPlace", label: "مكان القيد" },
-  { key: "birthCountry", label: "دولة الولادة" },
-  { key: "governorate", label: "المحافظة" },
-  { key: "cityDistrict", label: "المنطقة_المدينة" },
-  { key: "subDistrict", label: "الناحية" },
-  { key: "lastQualification", label: "آخر مؤهل علمي معين على أساسه" },
-  { key: "status", label: "الحالة" },
-  { key: "statusDetail", label: "تفصيل الحالة" },
-  { key: "shamCashAccount", label: "حساب شام كاش" },
-  { key: "childrenCount", label: "عدد الأبناء" },
-  { key: "wivesCount", label: "عدد الزوجات" },
-  { key: "centralNotes", label: "ملاحظات مركزية" },
+  { key: "seq",              label: "م",                             labelEn: "#" },
+  { key: "orgLevel1",        label: "المستوى التنظيمي الاول",        labelEn: "Org Level 1" },
+  { key: "orgClassification",label: "التصنيف/ الجهة المرتبطة",       labelEn: "Classification" },
+  { key: "orgLevel2",        label: "المستوى التنظيمي الثاني",       labelEn: "Org Level 2" },
+  { key: "orgLevel3",        label: "المستوى التنظيمي الثالث",       labelEn: "Org Level 3" },
+  { key: "orgLevel4",        label: "المستوى التنظيمي الرابع",       labelEn: "Org Level 4" },
+  { key: "orgLevel5",        label: "المستوى التنظيمي الخامس",       labelEn: "Org Level 5" },
+  { key: "workGovernorate",  label: "محافظة العمل",                   labelEn: "Work Governorate" },
+  { key: "employeeRefId",    label: "الرقم الذاتي",                   labelEn: "Ref. ID" },
+  { key: "jobTitle",         label: "مسمى العمل",                     labelEn: "Job Title" },
+  { key: "birthDate",        label: "تاريخ التولد",                   labelEn: "Birth Date" },
+  { key: "workStartDate",    label: "تاريخ بدء العمل بالدولة",        labelEn: "Work Start Date" },
+  { key: "permanentDate",    label: "تاريخ التثبيت في الدولة",        labelEn: "Permanent Date" },
+  { key: "contractDate",     label: "تاريخ التعاقد في الدولة",        labelEn: "Contract Date" },
+  { key: "firstName",        label: "الاسم",                          labelEn: "First Name" },
+  { key: "fatherName",       label: "اسم الأب",                       labelEn: "Father's Name" },
+  { key: "familyName",       label: "النسبة",                         labelEn: "Family Name" },
+  { key: "motherFullName",   label: "اسم الأم الكامل",                labelEn: "Mother's Name" },
+  { key: "nationalId",       label: "الرقم الوطني",                   labelEn: "National ID" },
+  { key: "gender",           label: "الجنس",                          labelEn: "Gender" },
+  { key: "mobile",           label: "رقم الجوال",                     labelEn: "Mobile" },
+  { key: "residenceArea",    label: "منطقة السكن",                    labelEn: "Residence Area" },
+  { key: "residenceDetail",  label: "تفصيل مكان السكن",               labelEn: "Residence Detail" },
+  { key: "maritalStatus",    label: "الوضع العائلي",                  labelEn: "Marital Status" },
+  { key: "jobCategory",      label: "الفئة الوظيفية",                 labelEn: "Job Category" },
+  { key: "employmentStatus", label: "مثبت أو متعاقد",                 labelEn: "Employment Status" },
+  { key: "appointmentPattern",label: "نمط التعيين أو التعاقد",        labelEn: "Appointment Pattern" },
+  { key: "mergeDetails",     label: "تفاصيل دمج",                     labelEn: "Merge Details" },
+  { key: "hasDisability",    label: "هل لديك إعاقة",                  labelEn: "Has Disability" },
+  { key: "disabilityType",   label: "نوع الإعاقة",                    labelEn: "Disability Type" },
+  { key: "disabilityCard",   label: "بطاقة الإعاقة",                  labelEn: "Disability Card" },
+  { key: "registryNumber",   label: "رقم القيد",                      labelEn: "Registry Number" },
+  { key: "registryPlace",    label: "مكان القيد",                     labelEn: "Registry Place" },
+  { key: "birthCountry",     label: "دولة الولادة",                   labelEn: "Birth Country" },
+  { key: "governorate",      label: "المحافظة",                       labelEn: "Governorate" },
+  { key: "cityDistrict",     label: "المنطقة_المدينة",                 labelEn: "City/District" },
+  { key: "subDistrict",      label: "الناحية",                        labelEn: "Sub-District" },
+  { key: "lastQualification",label: "آخر مؤهل علمي معين على أساسه",  labelEn: "Last Qualification" },
+  { key: "status",           label: "الحالة",                         labelEn: "Status" },
+  { key: "statusDetail",     label: "تفصيل الحالة",                   labelEn: "Status Detail" },
+  { key: "shamCashAccount",  label: "حساب شام كاش",                   labelEn: "Sham Cash Account" },
+  { key: "childrenCount",    label: "عدد الأبناء",                    labelEn: "Children Count" },
+  { key: "wivesCount",       label: "عدد الزوجات",                    labelEn: "Wives Count" },
+  { key: "centralNotes",     label: "ملاحظات مركزية",                 labelEn: "Central Notes" },
 ];
 
 const COL_GROUPS = [
-  { label: "تنظيمية", keys: ["seq", "orgLevel1", "orgClassification", "orgLevel2", "orgLevel3", "orgLevel4", "orgLevel5"] },
-  { label: "وظيفية", keys: ["workGovernorate", "employeeRefId", "jobTitle", "workStartDate", "permanentDate", "contractDate", "jobCategory", "employmentStatus", "appointmentPattern", "mergeDetails"] },
-  { label: "شخصية", keys: ["firstName", "fatherName", "familyName", "motherFullName", "nationalId", "gender", "birthDate", "maritalStatus", "childrenCount", "wivesCount", "mobile"] },
-  { label: "إقامة", keys: ["residenceArea", "residenceDetail", "registryNumber", "registryPlace", "birthCountry", "governorate", "cityDistrict", "subDistrict"] },
-  { label: "مؤهلات وحالة", keys: ["lastQualification", "hasDisability", "disabilityType", "disabilityCard", "status", "statusDetail", "shamCashAccount", "centralNotes"] },
+  { label: "تنظيمية", labelEn: "Organizational", keys: ["seq", "orgLevel1", "orgClassification", "orgLevel2", "orgLevel3", "orgLevel4", "orgLevel5"] },
+  { label: "وظيفية", labelEn: "Job", keys: ["workGovernorate", "employeeRefId", "jobTitle", "workStartDate", "permanentDate", "contractDate", "jobCategory", "employmentStatus", "appointmentPattern", "mergeDetails"] },
+  { label: "شخصية", labelEn: "Personal", keys: ["firstName", "fatherName", "familyName", "motherFullName", "nationalId", "gender", "birthDate", "maritalStatus", "childrenCount", "wivesCount", "mobile"] },
+  { label: "إقامة", labelEn: "Residence", keys: ["residenceArea", "residenceDetail", "registryNumber", "registryPlace", "birthCountry", "governorate", "cityDistrict", "subDistrict"] },
+  { label: "مؤهلات وحالة", labelEn: "Qualifications", keys: ["lastQualification", "hasDisability", "disabilityType", "disabilityCard", "status", "statusDetail", "shamCashAccount", "centralNotes"] },
 ];
 
 const ALL_KEYS = ALL_COLS.map(c => c.key);
@@ -78,11 +78,11 @@ const PRESETS: Record<string, string[]> = {
 };
 
 const PRESET_INFO = [
-  { id: "full", icon: "📋", label: "الملف الأساسي", desc: "جميع الـ44 عمود كما هو في الملف الأساسي" },
-  { id: "personal", icon: "👤", label: "بيانات شخصية", desc: "الاسم الثلاثي + الرقم الوطني + الجنس + الجوال" },
-  { id: "work", icon: "🏢", label: "بيانات وظيفية", desc: "الرقم الذاتي + المسمى + المحافظة + الفئة" },
-  { id: "contact", icon: "📱", label: "قائمة الاتصال", desc: "الاسم + الجوال + المحافظة + شام كاش" },
-  { id: "custom", icon: "⚙️", label: "مخصص", desc: "اختر الأعمدة يدوياً" },
+  { id: "full",     icon: "📋", label: "الملف الأساسي",  labelEn: "Full File",     desc: "جميع الـ44 عمود كما هو في الملف الأساسي",          descEn: "All 44 columns from the master file" },
+  { id: "personal", icon: "👤", label: "بيانات شخصية",   labelEn: "Personal Data", desc: "الاسم الثلاثي + الرقم الوطني + الجنس + الجوال",     descEn: "Full name + National ID + Gender + Mobile" },
+  { id: "work",     icon: "🏢", label: "بيانات وظيفية",  labelEn: "Job Data",      desc: "الرقم الذاتي + المسمى + المحافظة + الفئة",           descEn: "Ref. ID + Title + Governorate + Category" },
+  { id: "contact",  icon: "📱", label: "قائمة الاتصال",  labelEn: "Contact List",  desc: "الاسم + الجوال + المحافظة + شام كاش",               descEn: "Name + Mobile + Governorate + Sham Cash" },
+  { id: "custom",   icon: "⚙️", label: "مخصص",           labelEn: "Custom",        desc: "اختر الأعمدة يدوياً",                               descEn: "Pick columns manually" },
 ];
 
 function smartDefault() {
@@ -207,7 +207,10 @@ export function Export() {
     }
   };
 
-  const labelCol = (key: string) => ALL_COLS.find(c => c.key === key)?.label ?? key;
+  const labelCol = (key: string) => {
+    const col = ALL_COLS.find(c => c.key === key);
+    return (ar ? col?.label : col?.labelEn) ?? key;
+  };
 
   return (
     <Layout>
@@ -215,8 +218,8 @@ export function Export() {
 
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">📤 تصدير البيانات</h1>
-          <p className="text-muted-foreground text-sm mt-1">تصدير احترافي مع تحكم كامل في الفلاتر والأعمدة</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">📤 {ar ? "تصدير البيانات" : "Export Data"}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{ar ? "تصدير احترافي مع تحكم كامل في الفلاتر والأعمدة" : "Professional export with full control over filters and columns"}</p>
         </div>
 
         {/* ① File name */}
@@ -224,32 +227,31 @@ export function Export() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <FileSpreadsheet className="h-4 w-4 text-green-600" />
-              اسم الملف
+              {ar ? "اسم الملف" : "File Name"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <Input
               value={fileName}
               onChange={e => setFileName(e.target.value)}
-              placeholder="كوادر_صحية_يونيو2026"
+              placeholder={ar ? "كوادر_صحية_يونيو2026" : "health_staff_July2026"}
               data-testid="input-filename"
               dir="rtl"
             />
             <div className="flex flex-wrap gap-2">
-              <span className="text-xs text-muted-foreground self-center">أضف سريعاً:</span>
+              <span className="text-xs text-muted-foreground self-center">{ar ? "أضف سريعاً:" : "Quick add:"}</span>
               {(() => {
                 const now = new Date();
-                const months = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
                 return (
                   <>
                     <Button size="sm" variant="outline" onClick={() => addToFileName(`${now.getDate()}-${now.getMonth()+1}-${now.getFullYear()}`)}>
-                      📅 التاريخ
+                      📅 {ar ? "التاريخ" : "Date"}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => filters.governorate && addToFileName(filters.governorate)}>
-                      🏛 المحافظة
+                      🏛 {ar ? "المحافظة" : "Governorate"}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => preview && addToFileName(`${preview.total}سجل`)}>
-                      🔢 عدد السجلات
+                    <Button size="sm" variant="outline" onClick={() => preview && addToFileName(`${preview.total}`)}>
+                      🔢 {ar ? "عدد السجلات" : "Record Count"}
                     </Button>
                   </>
                 );
@@ -264,9 +266,9 @@ export function Export() {
             <CardTitle className="text-base flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-blue-600" />
-                فلترة السجلات
+                {ar ? "فلترة السجلات" : "Filter Records"}
                 {activeFilterCount > 0 && (
-                  <Badge variant="secondary">{activeFilterCount} فلتر نشط</Badge>
+                  <Badge variant="secondary">{activeFilterCount} {ar ? "فلتر نشط" : "active filters"}</Badge>
                 )}
               </span>
               {showFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -275,11 +277,11 @@ export function Export() {
           {showFilters && (
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
-                { key: "governorate", label: "محافظة العمل", placeholder: "مثال: دمشق" },
-                { key: "status", label: "الحالة", placeholder: "مثال: نشط" },
-                { key: "gender", label: "الجنس", placeholder: "ذكر / أنثى" },
-                { key: "employmentStatus", label: "مثبت أو متعاقد", placeholder: "مثبت / متعاقد" },
-                { key: "jobCategory", label: "الفئة الوظيفية", placeholder: "مثال: طبيب" },
+                { key: "governorate", label: ar ? "محافظة العمل" : "Work Governorate", placeholder: ar ? "مثال: دمشق" : "e.g. Damascus" },
+                { key: "status", label: ar ? "الحالة" : "Status", placeholder: ar ? "مثال: نشط" : "e.g. Active" },
+                { key: "gender", label: ar ? "الجنس" : "Gender", placeholder: ar ? "ذكر / أنثى" : "Male / Female" },
+                { key: "employmentStatus", label: ar ? "مثبت أو متعاقد" : "Employment Status", placeholder: ar ? "مثبت / متعاقد" : "Permanent / Contract" },
+                { key: "jobCategory", label: ar ? "الفئة الوظيفية" : "Job Category", placeholder: ar ? "مثال: طبيب" : "e.g. Doctor" },
               ].map(f => (
                 <div key={f.key} className="space-y-1">
                   <Label className="text-xs">{f.label}</Label>
@@ -292,7 +294,7 @@ export function Export() {
                 </div>
               ))}
               <div className="space-y-1">
-                <Label className="text-xs">نطاق تاريخ التسجيل</Label>
+                <Label className="text-xs">{ar ? "نطاق تاريخ التسجيل" : "Registration Date Range"}</Label>
                 <div className="flex gap-2 items-center">
                   <Input type="date" value={filters.dateFrom} onChange={e => setFilter("dateFrom", e.target.value)} className="text-sm" data-testid="filter-dateFrom" />
                   <span className="text-xs text-muted-foreground">—</span>
@@ -304,7 +306,7 @@ export function Export() {
                   <Button size="sm" variant="ghost" className="text-red-500" onClick={() =>
                     setFilters({ governorate: "", status: "", gender: "", employmentStatus: "", jobCategory: "", dateFrom: "", dateTo: "" })
                   }>
-                    ✕ مسح جميع الفلاتر
+                    ✕ {ar ? "مسح جميع الفلاتر" : "Clear All Filters"}
                   </Button>
                 </div>
               )}
@@ -317,7 +319,7 @@ export function Export() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <Columns className="h-4 w-4 text-purple-600" />
-              الأعمدة المُصدَّرة
+              {ar ? "الأعمدة المُصدَّرة" : "Export Columns"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -333,8 +335,8 @@ export function Export() {
                       : "border-slate-200 dark:border-slate-700 hover:border-blue-300"
                   }`}
                 >
-                  <div className="font-semibold">{p.icon} {p.label}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{p.desc}</div>
+                  <div className="font-semibold">{p.icon} {ar ? p.label : p.labelEn}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{ar ? p.desc : p.descEn}</div>
                 </button>
               ))}
             </div>
@@ -343,10 +345,10 @@ export function Export() {
             {preset === "custom" && (
               <div className="border rounded-xl p-3 space-y-3 bg-slate-50 dark:bg-slate-800/40">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">اختر الأعمدة ({customCols.length} / {ALL_COLS.length})</span>
+                  <span className="text-sm font-medium">{ar ? `اختر الأعمدة (${customCols.length} / ${ALL_COLS.length})` : `Select columns (${customCols.length} / ${ALL_COLS.length})`}</span>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => setCustomCols(ALL_KEYS)}>تحديد الكل</Button>
-                    <Button size="sm" variant="outline" onClick={() => setCustomCols([])}>إلغاء الكل</Button>
+                    <Button size="sm" variant="outline" onClick={() => setCustomCols(ALL_KEYS)}>{ar ? "تحديد الكل" : "Select All"}</Button>
+                    <Button size="sm" variant="outline" onClick={() => setCustomCols([])}>{ar ? "إلغاء الكل" : "Clear All"}</Button>
                   </div>
                 </div>
                 {COL_GROUPS.map(group => {
@@ -359,7 +361,7 @@ export function Export() {
                         onClick={() => toggleGroupCols(group.keys)}
                       >
                         {allOn ? <CheckSquare className="h-4 w-4 text-blue-500" /> : someOn ? <LayoutGrid className="h-4 w-4 text-blue-300" /> : <Square className="h-4 w-4 text-slate-400" />}
-                        {group.label}
+                        {ar ? group.label : group.labelEn}
                       </button>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pr-5">
                         {group.keys.map(k => (
@@ -382,7 +384,10 @@ export function Export() {
             )}
 
             <p className="text-xs text-muted-foreground">
-              سيتم تصدير <span className="font-bold text-blue-600">{activeCols.length}</span> عمود من أصل {ALL_COLS.length}
+              {ar
+                ? <>{`سيتم تصدير `}<span className="font-bold text-blue-600">{activeCols.length}</span>{` عمود من أصل ${ALL_COLS.length}`}</>
+                : <>{`Exporting `}<span className="font-bold text-blue-600">{activeCols.length}</span>{` of ${ALL_COLS.length} columns`}</>
+              }
             </p>
           </CardContent>
         </Card>
@@ -392,7 +397,7 @@ export function Export() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <FileText className="h-4 w-4 text-orange-500" />
-              صيغة التصدير
+              {ar ? "صيغة التصدير" : "Export Format"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -406,7 +411,7 @@ export function Export() {
               >
                 <div className="text-2xl mb-1">📗</div>
                 <div className="font-semibold text-sm">Excel (.xlsx)</div>
-                <div className="text-xs text-muted-foreground">تنسيق احترافي وعناوين عربية</div>
+                <div className="text-xs text-muted-foreground">{ar ? "تنسيق احترافي وعناوين عربية" : "Professional format with Arabic headers"}</div>
               </button>
               <button
                 data-testid="format-csv"
@@ -417,7 +422,7 @@ export function Export() {
               >
                 <div className="text-2xl mb-1">📄</div>
                 <div className="font-semibold text-sm">CSV</div>
-                <div className="text-xs text-muted-foreground">UTF-8 مع BOM لدعم Excel العربي</div>
+                <div className="text-xs text-muted-foreground">{ar ? "UTF-8 مع BOM لدعم Excel العربي" : "UTF-8 with BOM for Excel compatibility"}</div>
               </button>
             </div>
 
@@ -431,8 +436,8 @@ export function Export() {
                   className="accent-blue-500 w-4 h-4"
                 />
                 <div>
-                  <div className="text-sm font-medium">تجميع حسب المحافظة (Sheet منفصل لكل محافظة)</div>
-                  <div className="text-xs text-muted-foreground">مفيد عند تصدير بيانات محافظات متعددة</div>
+                  <div className="text-sm font-medium">{ar ? "تجميع حسب المحافظة (Sheet منفصل لكل محافظة)" : "Group by Governorate (separate sheet per governorate)"}</div>
+                  <div className="text-xs text-muted-foreground">{ar ? "مفيد عند تصدير بيانات محافظات متعددة" : "Useful when exporting data for multiple governorates"}</div>
                 </div>
               </label>
             )}
@@ -443,47 +448,47 @@ export function Export() {
         <Card className="border-2 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
           <CardContent className="pt-4">
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-base font-bold">📊 ملخص التصدير</span>
+              <span className="text-base font-bold">📊 {ar ? "ملخص التصدير" : "Export Summary"}</span>
               {previewLoading && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center mb-4">
               <div className="bg-white dark:bg-slate-800 rounded-xl p-3 shadow-sm">
                 <div className="text-2xl font-bold text-blue-600">{previewLoading ? "…" : (preview?.total ?? 0)}</div>
-                <div className="text-xs text-muted-foreground">إجمالي السجلات</div>
+                <div className="text-xs text-muted-foreground">{ar ? "إجمالي السجلات" : "Total Records"}</div>
               </div>
               <div className="bg-white dark:bg-slate-800 rounded-xl p-3 shadow-sm">
                 <div className="text-2xl font-bold text-indigo-600">{previewLoading ? "…" : (preview?.male ?? 0)}</div>
-                <div className="text-xs text-muted-foreground">ذكور</div>
+                <div className="text-xs text-muted-foreground">{ar ? "ذكور" : "Male"}</div>
               </div>
               <div className="bg-white dark:bg-slate-800 rounded-xl p-3 shadow-sm">
                 <div className="text-2xl font-bold text-pink-500">{previewLoading ? "…" : (preview?.female ?? 0)}</div>
-                <div className="text-xs text-muted-foreground">إناث</div>
+                <div className="text-xs text-muted-foreground">{ar ? "إناث" : "Female"}</div>
               </div>
               <div className="bg-white dark:bg-slate-800 rounded-xl p-3 shadow-sm">
                 <div className="text-2xl font-bold text-purple-600">{activeCols.length}</div>
-                <div className="text-xs text-muted-foreground">عمود مُصدَّر</div>
+                <div className="text-xs text-muted-foreground">{ar ? "عمود مُصدَّر" : "Columns"}</div>
               </div>
             </div>
 
             <div className="text-sm text-slate-600 dark:text-slate-400 mb-4 space-y-1 border rounded-lg p-3 bg-white dark:bg-slate-800">
               <div className="flex justify-between">
-                <span>اسم الملف:</span>
-                <span className="font-mono font-medium">{fileName || "كوادر_صحية"}.{format}</span>
+                <span>{ar ? "اسم الملف:" : "File name:"}</span>
+                <span className="font-mono font-medium">{fileName || (ar ? "كوادر_صحية" : "export")}.{format}</span>
               </div>
               <div className="flex justify-between">
-                <span>الصيغة:</span>
+                <span>{ar ? "الصيغة:" : "Format:"}</span>
                 <span>{format === "xlsx" ? "Excel (.xlsx)" : "CSV (UTF-8 BOM)"}</span>
               </div>
               {activeFilterCount > 0 && (
                 <div className="flex justify-between">
-                  <span>الفلاتر النشطة:</span>
-                  <span className="text-blue-600">{activeFilterCount} فلتر</span>
+                  <span>{ar ? "الفلاتر النشطة:" : "Active filters:"}</span>
+                  <span className="text-blue-600">{activeFilterCount} {ar ? "فلتر" : "filters"}</span>
                 </div>
               )}
               {sheetPerGov && format === "xlsx" && (
                 <div className="flex justify-between">
-                  <span>تجميع:</span>
-                  <span className="text-green-600">sheet لكل محافظة</span>
+                  <span>{ar ? "تجميع:" : "Grouping:"}</span>
+                  <span className="text-green-600">{ar ? "sheet لكل محافظة" : "Sheet per governorate"}</span>
                 </div>
               )}
             </div>
@@ -495,8 +500,8 @@ export function Export() {
               data-testid="button-export"
             >
               {loading
-                ? <><Loader2 className="h-5 w-5 animate-spin ml-2" /> جاري التصدير...</>
-                : <><Download className="h-5 w-5 ml-2" /> 📥 تصدير {preview?.total ?? ""} سجل الآن</>
+                ? <><Loader2 className="h-5 w-5 animate-spin ml-2" /> {ar ? "جاري التصدير..." : "Exporting..."}</>
+                : <><Download className="h-5 w-5 ml-2" /> 📥 {ar ? `تصدير ${preview?.total ?? ""} سجل الآن` : `Export ${preview?.total ?? ""} records now`}</>
               }
             </Button>
           </CardContent>

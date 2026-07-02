@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,26 +7,36 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { apiRequest } from "@/lib/queryClient";
 import { useAppSettings } from "@/context/AppSettingsContext";
+import { useLang } from "@/context/LanguageContext";
 
-const schema = z.object({
-  fullName: z.string().min(2, "الاسم يجب أن يكون حرفين على الأقل"),
-  email: z.string().email("بريد إلكتروني غير صالح"),
-  password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
-  confirmPassword: z.string(),
-}).refine(d => d.password === d.confirmPassword, {
-  message: "كلمتا المرور غير متطابقتان",
-  path: ["confirmPassword"],
-});
-
-type FormData = z.infer<typeof schema>;
+type FormData = {
+  fullName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+};
 
 export function Setup() {
   const { appName } = useAppSettings();
+  const { lang } = useLang();
+  const ar = lang === "ar";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
+
+  const schema = useMemo(() => z.object({
+    fullName: z.string().min(2, ar ? "الاسم يجب أن يكون حرفين على الأقل" : "Name must be at least 2 characters"),
+    email: z.string().email(ar ? "بريد إلكتروني غير صالح" : "Invalid email address"),
+    password: z.string().min(8, ar ? "كلمة المرور يجب أن تكون 8 أحرف على الأقل" : "Password must be at least 8 characters"),
+    confirmPassword: z.string(),
+  }).refine(d => d.password === d.confirmPassword, {
+    message: ar ? "كلمتا المرور غير متطابقتان" : "Passwords do not match",
+    path: ["confirmPassword"],
+  }), [ar]);
+
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
@@ -55,8 +65,9 @@ export function Setup() {
       <div className="auth-blob w-80 h-80 bg-secondary bottom-[-6rem] left-[-6rem]" />
 
       {/* Top controls */}
-      <div className="absolute top-4 left-4">
+      <div className="absolute top-4 left-4 flex gap-2">
         <ThemeToggle />
+        <LanguageToggle />
       </div>
 
       {/* Platform badge */}
@@ -73,13 +84,13 @@ export function Setup() {
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-secondary mb-5 shadow-glow-primary">
             <ShieldCheck className="h-10 w-10 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">إعداد النظام</h1>
-          <p className="text-muted-foreground text-sm mt-2">إنشاء حساب المسؤول الأول للبدء</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{ar ? "إعداد النظام" : "System Setup"}</h1>
+          <p className="text-muted-foreground text-sm mt-2">{ar ? "إنشاء حساب المسؤول الأول للبدء" : "Create the first admin account to get started"}</p>
         </div>
 
         {/* Steps hint */}
         <div className="flex gap-2 mb-6">
-          {["بيانات الحساب", "تأمين الدخول", "البدء"].map((s, i) => (
+          {(ar ? ["بيانات الحساب", "تأمين الدخول", "البدء"] : ["Account Info", "Secure Login", "Start"]).map((s, i) => (
             <div key={i} className="flex-1 text-center">
               <div className={`h-1 rounded-full mb-1.5 ${i === 0 ? "bg-primary" : "bg-slate-200 dark:bg-slate-700"}`} />
               <span className="text-[10px] text-muted-foreground">{s}</span>
@@ -90,14 +101,14 @@ export function Setup() {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           <div>
             <Label htmlFor="fullName" required className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-              الاسم الكامل
+              {ar ? "الاسم الكامل" : "Full Name"}
             </Label>
             <Input
               id="fullName"
               {...register("fullName")}
               error={!!errors.fullName}
               className="mt-1.5"
-              placeholder="محمد أحمد السيد"
+              placeholder={ar ? "محمد أحمد السيد" : "John Smith"}
               data-testid="input-fullName"
             />
             {errors.fullName && (
@@ -109,7 +120,7 @@ export function Setup() {
 
           <div>
             <Label htmlFor="email" required className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-              البريد الإلكتروني
+              {ar ? "البريد الإلكتروني" : "Email"}
             </Label>
             <Input
               id="email"
@@ -129,7 +140,7 @@ export function Setup() {
 
           <div>
             <Label htmlFor="password" required className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-              كلمة المرور
+              {ar ? "كلمة المرور" : "Password"}
             </Label>
             <div className="relative mt-1.5">
               <Input
@@ -137,7 +148,7 @@ export function Setup() {
                 type={showPass ? "text" : "password"}
                 {...register("password")}
                 error={!!errors.password}
-                placeholder="8 أحرف على الأقل"
+                placeholder={ar ? "8 أحرف على الأقل" : "At least 8 characters"}
                 data-testid="input-password"
               />
               <button
@@ -157,7 +168,7 @@ export function Setup() {
 
           <div>
             <Label htmlFor="confirmPassword" required className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-              تأكيد كلمة المرور
+              {ar ? "تأكيد كلمة المرور" : "Confirm Password"}
             </Label>
             <Input
               id="confirmPassword"
@@ -188,9 +199,9 @@ export function Setup() {
             data-testid="button-setup-submit"
           >
             {loading ? (
-              <><Loader2 className="h-5 w-5 animate-spin ml-2" />جاري الإنشاء...</>
+              <><Loader2 className="h-5 w-5 animate-spin ml-2" />{ar ? "جاري الإنشاء..." : "Creating..."}</>
             ) : (
-              <><CheckCircle2 className="h-5 w-5 ml-2" />إنشاء الحساب والبدء</>
+              <><CheckCircle2 className="h-5 w-5 ml-2" />{ar ? "إنشاء الحساب والبدء" : "Create Account & Start"}</>
             )}
           </Button>
         </form>

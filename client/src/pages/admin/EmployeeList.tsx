@@ -64,21 +64,21 @@ const GOVERNORATES = ["دمشق","ريف دمشق","حلب","حمص","حماة",
 const JOB_CATEGORIES = ["طبيب","صيدلاني","ممرض","مساعد طبيب","فني","إداري","تمريض","دعم صحي","أخرى"];
 
 const ALL_COLS = [
-  { key: "seq",             label: "م",                    always: true  },
-  { key: "fullName",        label: "الاسم الثلاثي",         always: true  },
-  { key: "nationalId",      label: "الرقم الوطني",          def: true     },
-  { key: "workGovernorate", label: "محافظة العمل",           def: true     },
-  { key: "jobTitle",        label: "مسمى العمل",             def: true     },
-  { key: "jobCategory",     label: "الفئة الوظيفية",         def: true     },
-  { key: "employmentStatus",label: "مثبت أو متعاقد",         def: true     },
-  { key: "status",          label: "الحالة",                 always: true  },
-  { key: "birthDate",       label: "تاريخ التولد",           def: false    },
-  { key: "gender",          label: "الجنس",                  def: false    },
-  { key: "mobile",          label: "رقم الجوال",             def: false    },
-  { key: "employeeRefId",   label: "الرقم الذاتي",           def: false    },
-  { key: "maritalStatus",   label: "الوضع العائلي",          def: false    },
-  { key: "lastQualification",label: "آخر مؤهل",              def: false    },
-  { key: "submittedAt",     label: "تاريخ التسجيل",          def: false    },
+  { key: "seq",             label: "م",                    labelEn: "#",                   always: true  },
+  { key: "fullName",        label: "الاسم الثلاثي",         labelEn: "Full Name",           always: true  },
+  { key: "nationalId",      label: "الرقم الوطني",          labelEn: "National ID",         def: true     },
+  { key: "workGovernorate", label: "محافظة العمل",           labelEn: "Work Governorate",    def: true     },
+  { key: "jobTitle",        label: "مسمى العمل",             labelEn: "Job Title",           def: true     },
+  { key: "jobCategory",     label: "الفئة الوظيفية",         labelEn: "Job Category",        def: true     },
+  { key: "employmentStatus",label: "مثبت أو متعاقد",         labelEn: "Employment Status",   def: true     },
+  { key: "status",          label: "الحالة",                 labelEn: "Status",              always: true  },
+  { key: "birthDate",       label: "تاريخ التولد",           labelEn: "Birth Date",          def: false    },
+  { key: "gender",          label: "الجنس",                  labelEn: "Gender",              def: false    },
+  { key: "mobile",          label: "رقم الجوال",             labelEn: "Mobile",              def: false    },
+  { key: "employeeRefId",   label: "الرقم الذاتي",           labelEn: "Ref. ID",             def: false    },
+  { key: "maritalStatus",   label: "الوضع العائلي",          labelEn: "Marital Status",      def: false    },
+  { key: "lastQualification",label: "آخر مؤهل",              labelEn: "Last Qualification",  def: false    },
+  { key: "submittedAt",     label: "تاريخ التسجيل",          labelEn: "Registered At",       def: false    },
 ];
 
 function highlight(text: string, term: string) {
@@ -108,9 +108,9 @@ function DetailRow({ label, value }: { label: string; value?: string | number | 
   );
 }
 
-function EmployeeDetailDialog({ emp, open, onClose, onEdit, isAdmin }: {
+function EmployeeDetailDialog({ emp, open, onClose, onEdit, isAdmin, ar }: {
   emp: Employee | null; open: boolean; onClose: () => void;
-  onEdit: () => void; isAdmin: boolean;
+  onEdit: () => void; isAdmin: boolean; ar: boolean;
 }) {
   if (!emp) return null;
   return (
@@ -123,8 +123,8 @@ function EmployeeDetailDialog({ emp, open, onClose, onEdit, isAdmin }: {
                 {emp.firstName} {emp.fatherName} {emp.familyName}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                م: {emp.sequentialNumber} | {emp.nationalId}
-                {emp.employeeRefId && ` | الرقم الذاتي: ${emp.employeeRefId}`}
+                {ar ? "م" : "#"}: {emp.sequentialNumber} | {emp.nationalId}
+                {emp.employeeRefId && ` | ${ar ? "الرقم الذاتي" : "Ref. ID"}: ${emp.employeeRefId}`}
               </p>
             </div>
             {emp.status && <Badge variant={(STATUS_BADGE[emp.status] || "outline") as any}>{emp.status}</Badge>}
@@ -132,75 +132,76 @@ function EmployeeDetailDialog({ emp, open, onClose, onEdit, isAdmin }: {
         </DialogHeader>
 
         <div className="overflow-y-auto flex-1">
-          <Tabs defaultValue="org" dir="rtl">
+          <Tabs defaultValue="org">
             <TabsList className="w-full grid grid-cols-4 sticky top-0 bg-white dark:bg-slate-800 z-10">
-              <TabsTrigger value="org">التنظيمية</TabsTrigger>
-              <TabsTrigger value="personal">الشخصية</TabsTrigger>
-              <TabsTrigger value="residence">الإقامة والقيد</TabsTrigger>
-              <TabsTrigger value="qual">المؤهلات</TabsTrigger>
+              <TabsTrigger value="org">{ar ? "التنظيمية" : "Org"}</TabsTrigger>
+              <TabsTrigger value="personal">{ar ? "الشخصية" : "Personal"}</TabsTrigger>
+              <TabsTrigger value="residence">{ar ? "الإقامة والقيد" : "Residence"}</TabsTrigger>
+              <TabsTrigger value="qual">{ar ? "المؤهلات" : "Qualifications"}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="org" className="p-4 space-y-0">
               <dl>
-                <DetailRow label="المستوى التنظيمي الاول" value={emp.orgLevel1} />
-                <DetailRow label="التصنيف/ الجهة المرتبطة" value={emp.orgClassification} />
-                <DetailRow label="المستوى التنظيمي الثاني" value={emp.orgLevel2} />
-                <DetailRow label="المستوى التنظيمي الثالث" value={emp.orgLevel3} />
-                <DetailRow label="المستوى التنظيمي الرابع" value={emp.orgLevel4} />
-                <DetailRow label="المستوى التنظيمي الخامس" value={emp.orgLevel5} />
-                <DetailRow label="محافظة العمل" value={emp.workGovernorate} />
-                <DetailRow label="الرقم الذاتي" value={emp.employeeRefId} />
-                <DetailRow label="مسمى العمل" value={emp.jobTitle} />
-                <DetailRow label="تاريخ التولد" value={emp.birthDate} />
-                <DetailRow label="تاريخ بدء العمل بالدولة" value={emp.workStartDate} />
-                <DetailRow label="تاريخ التثبيت في الدولة" value={emp.permanentDate} />
-                <DetailRow label="تاريخ التعاقد في الدولة" value={emp.contractDate} />
-                <DetailRow label="الفئة الوظيفية" value={emp.jobCategory} />
-                <DetailRow label="مثبت أو متعاقد" value={emp.employmentStatus} />
-                <DetailRow label="نمط التعيين أو التعاقد" value={emp.appointmentPattern} />
-                <DetailRow label="تفاصيل دمج" value={emp.mergeDetails} />
+                <DetailRow label={ar ? "المستوى التنظيمي الاول"    : "Org Level 1"}         value={emp.orgLevel1} />
+                <DetailRow label={ar ? "التصنيف/ الجهة المرتبطة"   : "Classification"}       value={emp.orgClassification} />
+                <DetailRow label={ar ? "المستوى التنظيمي الثاني"   : "Org Level 2"}          value={emp.orgLevel2} />
+                <DetailRow label={ar ? "المستوى التنظيمي الثالث"   : "Org Level 3"}          value={emp.orgLevel3} />
+                <DetailRow label={ar ? "المستوى التنظيمي الرابع"   : "Org Level 4"}          value={emp.orgLevel4} />
+                <DetailRow label={ar ? "المستوى التنظيمي الخامس"   : "Org Level 5"}          value={emp.orgLevel5} />
+                <DetailRow label={ar ? "محافظة العمل"               : "Work Governorate"}    value={emp.workGovernorate} />
+                <DetailRow label={ar ? "الرقم الذاتي"               : "Ref. ID"}             value={emp.employeeRefId} />
+                <DetailRow label={ar ? "مسمى العمل"                 : "Job Title"}           value={emp.jobTitle} />
+                <DetailRow label={ar ? "تاريخ التولد"               : "Birth Date"}          value={emp.birthDate} />
+                <DetailRow label={ar ? "تاريخ بدء العمل بالدولة"   : "Work Start Date"}     value={emp.workStartDate} />
+                <DetailRow label={ar ? "تاريخ التثبيت في الدولة"   : "Permanent Date"}      value={emp.permanentDate} />
+                <DetailRow label={ar ? "تاريخ التعاقد في الدولة"   : "Contract Date"}       value={emp.contractDate} />
+                <DetailRow label={ar ? "الفئة الوظيفية"             : "Job Category"}        value={emp.jobCategory} />
+                <DetailRow label={ar ? "مثبت أو متعاقد"             : "Employment Status"}   value={emp.employmentStatus} />
+                <DetailRow label={ar ? "نمط التعيين أو التعاقد"    : "Appointment Pattern"} value={emp.appointmentPattern} />
+                <DetailRow label={ar ? "تفاصيل دمج"                 : "Merge Details"}       value={emp.mergeDetails} />
               </dl>
             </TabsContent>
 
             <TabsContent value="personal" className="p-4 space-y-0">
               <dl>
-                <DetailRow label="الاسم" value={emp.firstName} />
-                <DetailRow label="اسم الأب" value={emp.fatherName} />
-                <DetailRow label="النسبة" value={emp.familyName} />
-                <DetailRow label="اسم الأم الكامل" value={emp.motherFullName} />
-                <DetailRow label="الرقم الوطني" value={emp.nationalId} />
-                <DetailRow label="الجنس" value={emp.gender} />
-                <DetailRow label="الوضع العائلي" value={emp.maritalStatus} />
-                <DetailRow label="عدد الأبناء" value={emp.childrenCount} />
-                <DetailRow label="عدد الزوجات" value={emp.wivesCount} />
-                <DetailRow label="رقم الجوال" value={emp.mobile} />
+                <DetailRow label={ar ? "الاسم"           : "First Name"}     value={emp.firstName} />
+                <DetailRow label={ar ? "اسم الأب"        : "Father's Name"}  value={emp.fatherName} />
+                <DetailRow label={ar ? "النسبة"          : "Family Name"}    value={emp.familyName} />
+                <DetailRow label={ar ? "اسم الأم الكامل" : "Mother's Name"}  value={emp.motherFullName} />
+                <DetailRow label={ar ? "الرقم الوطني"    : "National ID"}    value={emp.nationalId} />
+                <DetailRow label={ar ? "الجنس"           : "Gender"}         value={emp.gender} />
+                <DetailRow label={ar ? "الوضع العائلي"   : "Marital Status"} value={emp.maritalStatus} />
+                <DetailRow label={ar ? "عدد الأبناء"     : "Children Count"} value={emp.childrenCount} />
+                <DetailRow label={ar ? "عدد الزوجات"     : "Wives Count"}    value={emp.wivesCount} />
+                <DetailRow label={ar ? "رقم الجوال"      : "Mobile"}         value={emp.mobile} />
               </dl>
             </TabsContent>
 
             <TabsContent value="residence" className="p-4 space-y-0">
               <dl>
-                <DetailRow label="منطقة السكن" value={emp.residenceArea} />
-                <DetailRow label="تفصيل مكان السكن" value={emp.residenceDetail} />
-                <DetailRow label="رقم القيد" value={emp.registryNumber} />
-                <DetailRow label="مكان القيد" value={emp.registryPlace} />
-                <DetailRow label="دولة الولادة" value={emp.birthCountry} />
-                <DetailRow label="المحافظة" value={emp.governorate} />
-                <DetailRow label="المنطقة_المدينة" value={emp.cityDistrict} />
-                <DetailRow label="الناحية" value={emp.subDistrict} />
+                <DetailRow label={ar ? "منطقة السكن"      : "Residence Area"}   value={emp.residenceArea} />
+                <DetailRow label={ar ? "تفصيل مكان السكن" : "Residence Detail"} value={emp.residenceDetail} />
+                <DetailRow label={ar ? "رقم القيد"         : "Registry Number"}  value={emp.registryNumber} />
+                <DetailRow label={ar ? "مكان القيد"        : "Registry Place"}   value={emp.registryPlace} />
+                <DetailRow label={ar ? "دولة الولادة"      : "Birth Country"}    value={emp.birthCountry} />
+                <DetailRow label={ar ? "المحافظة"          : "Governorate"}      value={emp.governorate} />
+                <DetailRow label={ar ? "المنطقة_المدينة"   : "City/District"}    value={emp.cityDistrict} />
+                <DetailRow label={ar ? "الناحية"           : "Sub-District"}     value={emp.subDistrict} />
               </dl>
             </TabsContent>
 
             <TabsContent value="qual" className="p-4 space-y-0">
               <dl>
-                <DetailRow label="آخر مؤهل علمي معين على أساسه" value={emp.lastQualification} />
-                <DetailRow label="هل لديك إعاقة" value={emp.hasDisability} />
-                <DetailRow label="نوع الإعاقة" value={emp.disabilityType} />
-                <DetailRow label="بطاقة الإعاقة" value={emp.disabilityCard} />
-                <DetailRow label="الحالة" value={emp.status} />
-                <DetailRow label="تفصيل الحالة" value={emp.statusDetail} />
-                <DetailRow label="حساب شام كاش" value={emp.shamCashAccount} />
-                <DetailRow label="ملاحظات مركزية" value={emp.centralNotes} />
-                <DetailRow label="تاريخ التسجيل" value={emp.submittedAt ? new Date(emp.submittedAt).toLocaleDateString("ar-SY") : undefined} />
+                <DetailRow label={ar ? "آخر مؤهل علمي معين على أساسه" : "Last Qualification"}  value={emp.lastQualification} />
+                <DetailRow label={ar ? "هل لديك إعاقة"               : "Has Disability"}        value={emp.hasDisability} />
+                <DetailRow label={ar ? "نوع الإعاقة"                 : "Disability Type"}        value={emp.disabilityType} />
+                <DetailRow label={ar ? "بطاقة الإعاقة"               : "Disability Card"}        value={emp.disabilityCard} />
+                <DetailRow label={ar ? "الحالة"                       : "Status"}                value={emp.status} />
+                <DetailRow label={ar ? "تفصيل الحالة"                 : "Status Detail"}         value={emp.statusDetail} />
+                <DetailRow label={ar ? "حساب شام كاش"                 : "Sham Cash Account"}     value={emp.shamCashAccount} />
+                <DetailRow label={ar ? "ملاحظات مركزية"               : "Central Notes"}         value={emp.centralNotes} />
+                <DetailRow label={ar ? "تاريخ التسجيل"                : "Registered At"}
+                  value={emp.submittedAt ? new Date(emp.submittedAt).toLocaleDateString(ar ? "ar-SY" : "en-GB") : undefined} />
               </dl>
             </TabsContent>
           </Tabs>
@@ -208,14 +209,14 @@ function EmployeeDetailDialog({ emp, open, onClose, onEdit, isAdmin }: {
 
         <DialogFooter className="pt-3 border-t border-slate-100 dark:border-slate-700 gap-2 flex-row">
           <Button variant="outline" size="sm" onClick={() => window.print()}>
-            <Printer className="h-4 w-4 ml-1" /> طباعة
+            <Printer className="h-4 w-4 ml-1" /> {ar ? "طباعة" : "Print"}
           </Button>
           {isAdmin && (
             <Button size="sm" onClick={onEdit}>
-              <Edit className="h-4 w-4 ml-1" /> تعديل
+              <Edit className="h-4 w-4 ml-1" /> {ar ? "تعديل" : "Edit"}
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={onClose} className="mr-auto">إغلاق</Button>
+          <Button variant="ghost" size="sm" onClick={onClose} className="mr-auto">{ar ? "إغلاق" : "Close"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -424,15 +425,15 @@ export function EmployeeList() {
         {/* ─── Header ─── */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100">الموظفون</h1>
+            <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100">{ar ? "الموظفون" : "Employees"}</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
-              {isLoading ? "جاري التحميل..." : `الإجمالي: ${(data?.total || 0).toLocaleString("ar-SY")} سجل`}
+              {isLoading ? (ar ? "جاري التحميل..." : "Loading...") : ar ? `الإجمالي: ${(data?.total || 0).toLocaleString("ar-SY")} سجل` : `Total: ${(data?.total || 0).toLocaleString()} records`}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {selected.length > 0 && isAdmin && (
               <Button variant="destructive" size="sm" onClick={handleBulkDelete} data-testid="button-bulk-delete">
-                <Trash2 className="h-4 w-4 ml-2" /> حذف {selected.length} محدد
+                <Trash2 className="h-4 w-4 ml-2" /> {ar ? `حذف ${selected.length} محدد` : `Delete ${selected.length} selected`}
               </Button>
             )}
 
@@ -583,8 +584,8 @@ export function EmployeeList() {
                     data-testid="button-copy-form-link"
                   >
                     {copiedFormLink
-                      ? <><Check className="h-4 w-4 ml-2 text-green-500" />تم نسخ الرابط</>
-                      : <><Copy className="h-4 w-4 ml-2" />نسخ رابط النموذج</>
+                      ? <><Check className="h-4 w-4 ml-2 text-green-500" />{ar ? "تم نسخ الرابط" : "Copied!"}</>
+                      : <><Copy className="h-4 w-4 ml-2" />{ar ? "نسخ رابط النموذج" : "Copy Form Link"}</>
                     }
                   </Button>
                 </TooltipTrigger>
@@ -599,7 +600,7 @@ export function EmployeeList() {
             {isAdmin && (
               <Button size="sm" onClick={() => nav("/admin/employees/new")} data-testid="button-add-employee">
                 <UserPlus className="h-4 w-4 ml-2" />
-                إضافة موظف جديد
+                {ar ? "إضافة موظف جديد" : "Add Employee"}
               </Button>
             )}
           </div>
@@ -614,7 +615,7 @@ export function EmployeeList() {
               <Input
                 value={search}
                 onChange={e => debounce(e.target.value)}
-                placeholder="بحث بالاسم أو الرقم الوطني أو الرقم الذاتي أو الجوال..."
+                placeholder={ar ? "بحث بالاسم أو الرقم الوطني أو الرقم الذاتي أو الجوال..." : "Search by name, national ID, ref. ID or mobile..."}
                 className="pr-10 h-9"
                 data-testid="input-search"
               />
@@ -628,27 +629,27 @@ export function EmployeeList() {
 
             {/* محافظة العمل */}
             <Select value={qGov} onValueChange={v => { setQGov(v); setPage(1); }}>
-              <SelectTrigger className="w-40 h-9"><SelectValue placeholder="محافظة العمل" /></SelectTrigger>
+              <SelectTrigger className="w-40 h-9"><SelectValue placeholder={ar ? "محافظة العمل" : "Governorate"} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">كل المحافظات</SelectItem>
+                <SelectItem value="all">{ar ? "كل المحافظات" : "All Governorates"}</SelectItem>
                 {GOVERNORATES.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
               </SelectContent>
             </Select>
 
             {/* الحالة */}
             <Select value={qStatus} onValueChange={v => { setQStatus(v); setPage(1); }}>
-              <SelectTrigger className="w-32 h-9"><SelectValue placeholder="الحالة" /></SelectTrigger>
+              <SelectTrigger className="w-32 h-9"><SelectValue placeholder={ar ? "الحالة" : "Status"} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">كل الحالات</SelectItem>
+                <SelectItem value="all">{ar ? "كل الحالات" : "All Statuses"}</SelectItem>
                 {["نشط","إجازة","منتدب","متوفى","مفصول"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
 
             {/* الجنس */}
             <Select value={qGender} onValueChange={v => { setQGender(v); setPage(1); }}>
-              <SelectTrigger className="w-28 h-9"><SelectValue placeholder="الجنس" /></SelectTrigger>
+              <SelectTrigger className="w-28 h-9"><SelectValue placeholder={ar ? "الجنس" : "Gender"} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">الجميع</SelectItem>
+                <SelectItem value="all">{ar ? "الجميع" : "All"}</SelectItem>
                 <SelectItem value="ذكر">ذكر</SelectItem>
                 <SelectItem value="أنثى">أنثى</SelectItem>
               </SelectContent>
@@ -656,9 +657,9 @@ export function EmployeeList() {
 
             {/* مثبت / متعاقد */}
             <Select value={qEmpStatus} onValueChange={v => { setQEmpStatus(v); setPage(1); }}>
-              <SelectTrigger className="w-36 h-9"><SelectValue placeholder="مثبت / متعاقد" /></SelectTrigger>
+              <SelectTrigger className="w-36 h-9"><SelectValue placeholder={ar ? "مثبت / متعاقد" : "Employment"} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">الكل</SelectItem>
+                <SelectItem value="all">{ar ? "الكل" : "All"}</SelectItem>
                 <SelectItem value="مثبت">مثبت</SelectItem>
                 <SelectItem value="متعاقد">متعاقد</SelectItem>
               </SelectContent>
@@ -673,7 +674,7 @@ export function EmployeeList() {
               data-testid="button-advanced-filter"
             >
               <SlidersHorizontal className="h-4 w-4" />
-              فلاتر متقدمة
+              {ar ? "فلاتر متقدمة" : "Advanced Filters"}
               {activeFilterCount > 0 && (
                 <span className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-bold">
                   {activeFilterCount}
@@ -683,7 +684,7 @@ export function EmployeeList() {
 
             <Button variant="outline" size="sm" onClick={() => setColPickerOpen(!colPickerOpen)} className="h-9 gap-1.5">
               <Columns3 className="h-4 w-4" />
-              الأعمدة
+              {ar ? "الأعمدة" : "Columns"}
             </Button>
           </div>
 
@@ -691,25 +692,25 @@ export function EmployeeList() {
           {advOpen && (
             <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex flex-wrap gap-3 items-end">
               <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground font-medium">الفئة الوظيفية</span>
+                <span className="text-xs text-muted-foreground font-medium">{ar ? "الفئة الوظيفية" : "Job Category"}</span>
                 <Select value={advJobCat} onValueChange={v => { setAdvJobCat(v); setPage(1); }}>
-                  <SelectTrigger className="w-44 h-9"><SelectValue placeholder="اختر الفئة..." /></SelectTrigger>
+                  <SelectTrigger className="w-44 h-9"><SelectValue placeholder={ar ? "اختر الفئة..." : "Select category..."} /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">كل الفئات</SelectItem>
+                    <SelectItem value="all">{ar ? "كل الفئات" : "All Categories"}</SelectItem>
                     {JOB_CATEGORIES.map(j => <SelectItem key={j} value={j}>{j}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground font-medium">المستوى التنظيمي الأول</span>
+                <span className="text-xs text-muted-foreground font-medium">{ar ? "المستوى التنظيمي الأول" : "Org Level 1"}</span>
                 <Input
                   value={advOrg1} onChange={e => { setAdvOrg1(e.target.value); setPage(1); }}
-                  placeholder="اكتب للبحث..." className="h-9 w-52"
+                  placeholder={ar ? "اكتب للبحث..." : "Type to search..."} className="h-9 w-52"
                 />
               </div>
               {activeFilterCount > 0 && (
                 <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
-                  <X className="h-3.5 w-3.5 ml-1" /> مسح جميع الفلاتر
+                  <X className="h-3.5 w-3.5 ml-1" /> {ar ? "مسح جميع الفلاتر" : "Clear All Filters"}
                 </Button>
               )}
             </div>
@@ -718,7 +719,7 @@ export function EmployeeList() {
           {/* ─── Column Picker ─── */}
           {colPickerOpen && (
             <div className="pt-3 border-t border-slate-100 dark:border-slate-700">
-              <p className="text-xs font-semibold text-muted-foreground mb-2">تخصيص الأعمدة المعروضة:</p>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">{ar ? "تخصيص الأعمدة المعروضة:" : "Customize visible columns:"}</p>
               <div className="flex flex-wrap gap-2">
                 {ALL_COLS.map(col => (
                   <button
@@ -732,7 +733,7 @@ export function EmployeeList() {
                         : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:border-primary/50"
                     )}
                   >
-                    {col.label}
+                    {ar ? col.label : (col.labelEn || col.label)}
                     {col.always && " 🔒"}
                   </button>
                 ))}
@@ -754,9 +755,9 @@ export function EmployeeList() {
             ))}
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {data && <span>عرض {startRow}–{endRow} من {data.total.toLocaleString("ar-SY")} سجل</span>}
+            {data && <span>{ar ? `عرض ${startRow}–${endRow} من ${data.total.toLocaleString("ar-SY")} سجل` : `Showing ${startRow}–${endRow} of ${data.total.toLocaleString()} records`}</span>}
             <span className="text-slate-300 dark:text-slate-600">|</span>
-            <span className="text-xs">عرض:</span>
+            <span className="text-xs">{ar ? "عرض:" : "Show:"}</span>
             {[10, 25, 50, 100].map(n => (
               <button
                 key={n}
@@ -794,10 +795,10 @@ export function EmployeeList() {
                       )}
                       {ALL_COLS.filter(c => visibleCols.includes(c.key)).map(col => (
                         <th key={col.key} className="px-3 py-3 text-right text-xs font-bold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
-                          {col.label}
+                          {ar ? col.label : (col.labelEn || col.label)}
                         </th>
                       ))}
-                      <th className="px-3 py-3 text-center text-xs font-bold text-muted-foreground uppercase tracking-wide">إجراءات</th>
+                      <th className="px-3 py-3 text-center text-xs font-bold text-muted-foreground uppercase tracking-wide">{ar ? "إجراءات" : "Actions"}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -806,9 +807,9 @@ export function EmployeeList() {
                         <td colSpan={20} className="text-center py-16">
                           <div className="flex flex-col items-center gap-2 text-muted-foreground">
                             <Users className="h-10 w-10 opacity-20" />
-                            <p className="text-sm font-medium">لا توجد نتائج مطابقة</p>
+                            <p className="text-sm font-medium">{ar ? "لا توجد نتائج مطابقة" : "No matching results"}</p>
                             {activeFilterCount > 0 && (
-                              <Button variant="link" size="sm" onClick={clearAllFilters} className="text-primary">مسح الفلاتر</Button>
+                              <Button variant="link" size="sm" onClick={clearAllFilters} className="text-primary">{ar ? "مسح الفلاتر" : "Clear Filters"}</Button>
                             )}
                           </div>
                         </td>
@@ -976,19 +977,20 @@ export function EmployeeList() {
         onClose={() => setViewEmp(null)}
         onEdit={() => { if (viewEmp) nav(`/admin/employees/${viewEmp.id}/edit`); setViewEmp(null); }}
         isAdmin={isAdmin}
+        ar={ar}
       />
 
       {/* ─── Delete Confirm Dialog ─── */}
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>تأكيد الحذف</DialogTitle>
+            <DialogTitle>{ar ? "تأكيد الحذف" : "Confirm Delete"}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">هل أنت متأكد من حذف هذا السجل؟ لا يمكن التراجع عن هذا الإجراء.</p>
+          <p className="text-sm text-muted-foreground">{ar ? "هل أنت متأكد من حذف هذا السجل؟ لا يمكن التراجع عن هذا الإجراء." : "Are you sure you want to delete this record? This action cannot be undone."}</p>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteId(null)}>إلغاء</Button>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>{ar ? "إلغاء" : "Cancel"}</Button>
             <Button variant="destructive" onClick={() => deleteId && handleDelete(deleteId)} disabled={deleting}>
-              {deleting && <Loader2 className="h-4 w-4 animate-spin ml-2" />} حذف
+              {deleting && <Loader2 className="h-4 w-4 animate-spin ml-2" />} {ar ? "حذف" : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -57,7 +57,7 @@ export function Layout({ children, projectId }: LayoutProps) {
         {sidebarOpen && (
           <div className="min-w-0">
             <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate leading-tight">{appName}</p>
-            <p className="text-[10px] text-muted-foreground">منصة إدارة نماذج التسجيل</p>
+            <p className="text-[10px] text-muted-foreground">{isAr ? "منصة إدارة نماذج التسجيل" : "Forms & Data Platform"}</p>
           </div>
         )}
       </div>
@@ -65,7 +65,7 @@ export function Layout({ children, projectId }: LayoutProps) {
       {/* Project Picker */}
       {sidebarOpen && activeProject && (
         <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-700/80 flex-shrink-0">
-          <p className="text-[10px] text-muted-foreground font-semibold mb-1 px-1">المشروع الحالي</p>
+          <p className="text-[10px] text-muted-foreground font-semibold mb-1 px-1">{isAr ? "المشروع الحالي" : "Current Project"}</p>
           <button
             onClick={() => setProjectPickerOpen(!projectPickerOpen)}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg bg-primary/10 dark:bg-primary/20 hover:bg-primary/15 transition-colors text-right"
@@ -104,7 +104,7 @@ export function Layout({ children, projectId }: LayoutProps) {
                 className="w-full flex items-center gap-2 px-3 py-2 text-xs text-primary hover:bg-primary/5 border-t border-slate-100 dark:border-slate-600"
               >
                 <Plus className="h-3 w-3" />
-                <span>مشروع جديد</span>
+                <span>{isAr ? "مشروع جديد" : "New Project"}</span>
               </button>
             </div>
           )}
@@ -169,18 +169,18 @@ export function Layout({ children, projectId }: LayoutProps) {
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate leading-tight">{user?.fullName}</p>
-                <p className="text-[10px] text-muted-foreground">{user?.role === "admin" ? "مدير" : user?.role === "editor" ? "محرر" : "مشاهد"}</p>
+                <p className="text-[10px] text-muted-foreground">{user?.role === "admin" ? (isAr ? "مدير" : "Admin") : user?.role === "editor" ? (isAr ? "محرر" : "Editor") : (isAr ? "مشاهد" : "Viewer")}</p>
               </div>
             </div>
             <Button variant="ghost" size="sm" onClick={handleLogout}
               className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 h-8 font-semibold"
               data-testid="button-logout">
               <LogOut className="h-3.5 w-3.5 ml-2" />
-              تسجيل خروج
+              {isAr ? "تسجيل خروج" : "Logout"}
             </Button>
           </div>
         ) : (
-          <Button variant="ghost" size="icon" onClick={handleLogout} title="تسجيل خروج" className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 h-8 w-8">
+          <Button variant="ghost" size="icon" onClick={handleLogout} title={isAr ? "تسجيل خروج" : "Logout"} className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 h-8 w-8">
             <LogOut className="h-4 w-4" />
           </Button>
         )}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -15,56 +15,23 @@ import { apiRequest } from "@/lib/queryClient";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const schema = z.object({
-  // Step 2
-  orgLevel1: z.string().optional(),
-  orgClassification: z.string().optional(),
-  orgLevel2: z.string().optional(),
-  orgLevel3: z.string().optional(),
-  orgLevel4: z.string().optional(),
-  orgLevel5: z.string().optional(),
-  workGovernorate: z.string().optional(),
-  employeeRefId: z.string().optional(),
-  jobTitle: z.string().optional(),
-  workStartDate: z.string().optional(),
-  permanentDate: z.string().optional(),
-  contractDate: z.string().optional(),
-  jobCategory: z.string().optional(),
-  employmentStatus: z.string().optional(),
-  appointmentPattern: z.string().optional(),
-  mergeDetails: z.string().optional(),
-  // Step 3
-  firstName: z.string().min(1, "الاسم مطلوب"),
-  fatherName: z.string().optional(),
-  familyName: z.string().min(1, "النسبة مطلوبة"),
-  motherFullName: z.string().optional(),
-  nationalId: z.string().regex(/^\d{11}$/, "الرقم الوطني يجب أن يكون 11 رقماً بالضبط"),
-  gender: z.string().optional(),
-  birthDate: z.string().optional(),
-  maritalStatus: z.string().optional(),
-  childrenCount: z.string().optional(),
-  wivesCount: z.string().optional(),
-  mobile: z.string().optional(),
-  residenceArea: z.string().optional(),
-  residenceDetail: z.string().optional(),
-  registryNumber: z.string().optional(),
-  registryPlace: z.string().optional(),
-  birthCountry: z.string().optional(),
-  governorate: z.string().optional(),
-  cityDistrict: z.string().optional(),
-  subDistrict: z.string().optional(),
-  // Step 4
-  lastQualification: z.string().optional(),
-  hasDisability: z.string().optional(),
-  disabilityType: z.string().optional(),
-  disabilityCard: z.string().optional(),
-  status: z.string().optional(),
-  statusDetail: z.string().optional(),
-  centralNotes: z.string().optional(),
-  shamCashAccount: z.string().optional(),
-});
-
-type FormData = z.infer<typeof schema>;
+type FormData = {
+  orgLevel1?: string; orgClassification?: string; orgLevel2?: string;
+  orgLevel3?: string; orgLevel4?: string; orgLevel5?: string;
+  workGovernorate?: string; employeeRefId?: string; jobTitle?: string;
+  workStartDate?: string; permanentDate?: string; contractDate?: string;
+  jobCategory?: string; employmentStatus?: string; appointmentPattern?: string;
+  mergeDetails?: string; firstName: string; fatherName?: string;
+  familyName: string; motherFullName?: string; nationalId: string;
+  gender?: string; birthDate?: string; maritalStatus?: string;
+  childrenCount?: string; wivesCount?: string; mobile?: string;
+  residenceArea?: string; residenceDetail?: string; registryNumber?: string;
+  registryPlace?: string; birthCountry?: string; governorate?: string;
+  cityDistrict?: string; subDistrict?: string; lastQualification?: string;
+  hasDisability?: string; disabilityType?: string; disabilityCard?: string;
+  status?: string; statusDetail?: string; centralNotes?: string;
+  shamCashAccount?: string;
+};
 
 interface SuccessData {
   editToken: string;
@@ -75,10 +42,38 @@ interface SuccessData {
 export function Register() {
   const { lang } = useLang();
   const { appName } = useAppSettings();
+  const ar = lang === "ar";
   const [step, setStep] = useState(0);
   const [success, setSuccess] = useState<SuccessData | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const schema = useMemo(() => z.object({
+    orgLevel1: z.string().optional(), orgClassification: z.string().optional(),
+    orgLevel2: z.string().optional(), orgLevel3: z.string().optional(),
+    orgLevel4: z.string().optional(), orgLevel5: z.string().optional(),
+    workGovernorate: z.string().optional(), employeeRefId: z.string().optional(),
+    jobTitle: z.string().optional(), workStartDate: z.string().optional(),
+    permanentDate: z.string().optional(), contractDate: z.string().optional(),
+    jobCategory: z.string().optional(), employmentStatus: z.string().optional(),
+    appointmentPattern: z.string().optional(), mergeDetails: z.string().optional(),
+    firstName: z.string().min(1, ar ? "الاسم مطلوب" : "First name is required"),
+    fatherName: z.string().optional(),
+    familyName: z.string().min(1, ar ? "النسبة مطلوبة" : "Family name is required"),
+    motherFullName: z.string().optional(),
+    nationalId: z.string().regex(/^\d{11}$/, ar ? "الرقم الوطني يجب أن يكون 11 رقماً بالضبط" : "National ID must be exactly 11 digits"),
+    gender: z.string().optional(), birthDate: z.string().optional(),
+    maritalStatus: z.string().optional(), childrenCount: z.string().optional(),
+    wivesCount: z.string().optional(), mobile: z.string().optional(),
+    residenceArea: z.string().optional(), residenceDetail: z.string().optional(),
+    registryNumber: z.string().optional(), registryPlace: z.string().optional(),
+    birthCountry: z.string().optional(), governorate: z.string().optional(),
+    cityDistrict: z.string().optional(), subDistrict: z.string().optional(),
+    lastQualification: z.string().optional(), hasDisability: z.string().optional(),
+    disabilityType: z.string().optional(), disabilityCard: z.string().optional(),
+    status: z.string().optional(), statusDetail: z.string().optional(),
+    centralNotes: z.string().optional(), shamCashAccount: z.string().optional(),
+  }), [ar]);
 
   const methods = useForm<FormData>({ resolver: zodResolver(schema), mode: "onBlur" });
 
@@ -168,9 +163,9 @@ export function Register() {
             </div>
             <div className="hidden sm:block">
               <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-tight">
-                {project?.formTitle || (lang === "ar" ? "نموذج التسجيل" : "Registration Form")}
+                {lang === "ar" ? "نموذج التسجيل" : "Registration Form"}
               </p>
-              <p className="text-[10px] text-muted-foreground">{project?.formSubtitle || "منصة مسارات"}</p>
+              <p className="text-[10px] text-muted-foreground">{appName}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">

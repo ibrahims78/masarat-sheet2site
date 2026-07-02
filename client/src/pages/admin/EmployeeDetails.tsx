@@ -68,7 +68,7 @@ export function EmployeeDetails() {
 
   const emp = data?.employee;
   if (!emp) return (
-    <Layout><div className="text-center p-12 text-muted-foreground">الموظف غير موجود</div></Layout>
+    <Layout><div className="text-center p-12 text-muted-foreground">{ar ? "الموظف غير موجود" : "Employee not found"}</div></Layout>
   );
 
   return (
@@ -85,19 +85,19 @@ export function EmployeeDetails() {
                 {emp.firstName} {emp.fatherName} {emp.familyName}
               </h1>
               <p className="text-muted-foreground text-sm">
-                م: {emp.sequentialNumber} | الرقم الوطني: {emp.nationalId}
-                {emp.employeeRefId && ` | الرقم الذاتي: ${emp.employeeRefId}`}
+                {ar ? "م" : "#"}: {emp.sequentialNumber} | {ar ? "الرقم الوطني" : "National ID"}: {emp.nationalId}
+                {emp.employeeRefId && ` | ${ar ? "الرقم الذاتي" : "Ref. ID"}: ${emp.employeeRefId}`}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2 no-print">
             {emp.status && <Badge variant={(STATUS_BADGE[emp.status] || "outline") as any}>{emp.status}</Badge>}
             <Button variant="outline" size="sm" onClick={() => window.print()}>
-              <Printer className="h-4 w-4 ml-2" /> طباعة
+              <Printer className="h-4 w-4 ml-2" /> {ar ? "طباعة" : "Print"}
             </Button>
             {(user?.role === "admin" || user?.role === "editor") && (
               <Button size="sm" onClick={() => nav(`/admin/employees/${id}/edit`)}>
-                <Edit className="h-4 w-4 ml-2" /> تعديل
+                <Edit className="h-4 w-4 ml-2" /> {ar ? "تعديل" : "Edit"}
               </Button>
             )}
           </div>
@@ -113,87 +113,83 @@ export function EmployeeDetails() {
         </div>
 
         {/* Tabs — matching master file groupings */}
-        <Tabs defaultValue="org" dir="rtl" className="no-print">
+        <Tabs defaultValue="org" dir={ar ? "rtl" : "ltr"} className="no-print">
           <TabsList className="w-full grid grid-cols-4">
-            <TabsTrigger value="org">التنظيمية والوظيفية</TabsTrigger>
-            <TabsTrigger value="personal">الشخصية</TabsTrigger>
-            <TabsTrigger value="residence">الإقامة والقيد</TabsTrigger>
-            <TabsTrigger value="qual">المؤهلات والحالة</TabsTrigger>
+            <TabsTrigger value="org">{ar ? "التنظيمية والوظيفية" : "Org & Job"}</TabsTrigger>
+            <TabsTrigger value="personal">{ar ? "الشخصية" : "Personal"}</TabsTrigger>
+            <TabsTrigger value="residence">{ar ? "الإقامة والقيد" : "Residence"}</TabsTrigger>
+            <TabsTrigger value="qual">{ar ? "المؤهلات والحالة" : "Qualifications"}</TabsTrigger>
           </TabsList>
 
-          {/* Tab 1: التنظيمية والوظيفية — columns 1–14 of master file */}
           <TabsContent value="org">
             <div className="section-card">
               <dl>
-                <Row label="المستوى التنظيمي الاول"       value={emp.orgLevel1} />
-                <Row label="التصنيف/ الجهة المرتبطة"      value={emp.orgClassification} />
-                <Row label="المستوى التنظيمي الثاني"      value={emp.orgLevel2} />
-                <Row label="المستوى التنظيمي الثالث"      value={emp.orgLevel3} />
-                <Row label="المستوى التنظيمي الرابع"      value={emp.orgLevel4} />
-                <Row label="المستوى التنظيمي الخامس"      value={emp.orgLevel5} />
-                <Row label="محافظة العمل"                  value={emp.workGovernorate} />
-                <Row label="الرقم الذاتي"                  value={emp.employeeRefId} />
-                <Row label="مسمى العمل"                    value={emp.jobTitle} />
-                <Row label="تاريخ التولد"                  value={emp.birthDate} />
-                <Row label="تاريخ بدء العمل بالدولة"       value={emp.workStartDate} />
-                <Row label="تاريخ التثبيت في الدولة"       value={emp.permanentDate} />
-                <Row label="تاريخ التعاقد في الدولة"       value={emp.contractDate} />
-                <Row label="الفئة الوظيفية"                value={emp.jobCategory} />
-                <Row label="مثبت أو متعاقد"                value={emp.employmentStatus} />
-                <Row label="نمط التعيين أو التعاقد"        value={emp.appointmentPattern} />
-                <Row label="تفاصيل دمج"                    value={emp.mergeDetails} />
+                <Row label={ar ? "المستوى التنظيمي الاول"       : "Org Level 1"}         value={emp.orgLevel1} />
+                <Row label={ar ? "التصنيف/ الجهة المرتبطة"      : "Classification"}       value={emp.orgClassification} />
+                <Row label={ar ? "المستوى التنظيمي الثاني"      : "Org Level 2"}         value={emp.orgLevel2} />
+                <Row label={ar ? "المستوى التنظيمي الثالث"      : "Org Level 3"}         value={emp.orgLevel3} />
+                <Row label={ar ? "المستوى التنظيمي الرابع"      : "Org Level 4"}         value={emp.orgLevel4} />
+                <Row label={ar ? "المستوى التنظيمي الخامس"      : "Org Level 5"}         value={emp.orgLevel5} />
+                <Row label={ar ? "محافظة العمل"                  : "Work Governorate"}    value={emp.workGovernorate} />
+                <Row label={ar ? "الرقم الذاتي"                  : "Ref. ID"}             value={emp.employeeRefId} />
+                <Row label={ar ? "مسمى العمل"                    : "Job Title"}           value={emp.jobTitle} />
+                <Row label={ar ? "تاريخ التولد"                  : "Birth Date"}          value={emp.birthDate} />
+                <Row label={ar ? "تاريخ بدء العمل بالدولة"       : "Work Start Date"}     value={emp.workStartDate} />
+                <Row label={ar ? "تاريخ التثبيت في الدولة"       : "Permanent Date"}      value={emp.permanentDate} />
+                <Row label={ar ? "تاريخ التعاقد في الدولة"       : "Contract Date"}       value={emp.contractDate} />
+                <Row label={ar ? "الفئة الوظيفية"                : "Job Category"}        value={emp.jobCategory} />
+                <Row label={ar ? "مثبت أو متعاقد"                : "Employment Status"}   value={emp.employmentStatus} />
+                <Row label={ar ? "نمط التعيين أو التعاقد"        : "Appointment Pattern"} value={emp.appointmentPattern} />
+                <Row label={ar ? "تفاصيل دمج"                    : "Merge Details"}       value={emp.mergeDetails} />
               </dl>
             </div>
           </TabsContent>
 
-          {/* Tab 2: الشخصية — columns 15–24 */}
           <TabsContent value="personal">
             <div className="section-card">
               <dl>
-                <Row label="الاسم"           value={emp.firstName} />
-                <Row label="اسم الأب"        value={emp.fatherName} />
-                <Row label="النسبة"          value={emp.familyName} />
-                <Row label="اسم الأم الكامل" value={emp.motherFullName} />
-                <Row label="الرقم الوطني"    value={emp.nationalId} />
-                <Row label="الجنس"           value={emp.gender} />
-                <Row label="رقم الجوال"      value={emp.mobile} />
-                <Row label="الوضع العائلي"   value={emp.maritalStatus} />
-                <Row label="عدد الأبناء"     value={emp.childrenCount} />
-                <Row label="عدد الزوجات"     value={emp.wivesCount} />
+                <Row label={ar ? "الاسم"           : "First Name"}      value={emp.firstName} />
+                <Row label={ar ? "اسم الأب"        : "Father's Name"}   value={emp.fatherName} />
+                <Row label={ar ? "النسبة"          : "Family Name"}     value={emp.familyName} />
+                <Row label={ar ? "اسم الأم الكامل" : "Mother's Name"}   value={emp.motherFullName} />
+                <Row label={ar ? "الرقم الوطني"    : "National ID"}     value={emp.nationalId} />
+                <Row label={ar ? "الجنس"           : "Gender"}          value={emp.gender} />
+                <Row label={ar ? "رقم الجوال"      : "Mobile"}          value={emp.mobile} />
+                <Row label={ar ? "الوضع العائلي"   : "Marital Status"}  value={emp.maritalStatus} />
+                <Row label={ar ? "عدد الأبناء"     : "Children Count"}  value={emp.childrenCount} />
+                <Row label={ar ? "عدد الزوجات"     : "Wives Count"}     value={emp.wivesCount} />
               </dl>
             </div>
           </TabsContent>
 
-          {/* Tab 3: الإقامة والقيد — columns 22–37 */}
           <TabsContent value="residence">
             <div className="section-card">
               <dl>
-                <Row label="منطقة السكن"     value={emp.residenceArea} />
-                <Row label="تفصيل مكان السكن" value={emp.residenceDetail} />
-                <Row label="رقم القيد"        value={emp.registryNumber} />
-                <Row label="مكان القيد"       value={emp.registryPlace} />
-                <Row label="دولة الولادة"     value={emp.birthCountry} />
-                <Row label="المحافظة"         value={emp.governorate} />
-                <Row label="المنطقة_المدينة"  value={emp.cityDistrict} />
-                <Row label="الناحية"          value={emp.subDistrict} />
+                <Row label={ar ? "منطقة السكن"      : "Residence Area"}    value={emp.residenceArea} />
+                <Row label={ar ? "تفصيل مكان السكن" : "Residence Detail"}  value={emp.residenceDetail} />
+                <Row label={ar ? "رقم القيد"         : "Registry Number"}   value={emp.registryNumber} />
+                <Row label={ar ? "مكان القيد"        : "Registry Place"}    value={emp.registryPlace} />
+                <Row label={ar ? "دولة الولادة"      : "Birth Country"}     value={emp.birthCountry} />
+                <Row label={ar ? "المحافظة"          : "Governorate"}       value={emp.governorate} />
+                <Row label={ar ? "المنطقة_المدينة"   : "City/District"}     value={emp.cityDistrict} />
+                <Row label={ar ? "الناحية"           : "Sub-District"}      value={emp.subDistrict} />
               </dl>
             </div>
           </TabsContent>
 
-          {/* Tab 4: المؤهلات والحالة — columns 29–44 */}
           <TabsContent value="qual">
             <div className="section-card">
               <dl>
-                <Row label="آخر مؤهل علمي معين على أساسه" value={emp.lastQualification} />
-                <Row label="هل لديك إعاقة"               value={emp.hasDisability} />
-                <Row label="نوع الإعاقة"                 value={emp.disabilityType} />
-                <Row label="بطاقة الإعاقة"               value={emp.disabilityCard} />
-                <Row label="الحالة"                       value={emp.status} />
-                <Row label="تفصيل الحالة"                 value={emp.statusDetail} />
-                <Row label="حساب شام كاش"                 value={emp.shamCashAccount} />
-                <Row label="ملاحظات مركزية"               value={emp.centralNotes} />
-                <Row label="تاريخ التسجيل"
-                  value={emp.submittedAt ? new Date(emp.submittedAt).toLocaleDateString("ar-SY") : undefined} />
+                <Row label={ar ? "آخر مؤهل علمي معين على أساسه" : "Last Qualification"}  value={emp.lastQualification} />
+                <Row label={ar ? "هل لديك إعاقة"               : "Has Disability"}        value={emp.hasDisability} />
+                <Row label={ar ? "نوع الإعاقة"                 : "Disability Type"}        value={emp.disabilityType} />
+                <Row label={ar ? "بطاقة الإعاقة"               : "Disability Card"}        value={emp.disabilityCard} />
+                <Row label={ar ? "الحالة"                       : "Status"}                value={emp.status} />
+                <Row label={ar ? "تفصيل الحالة"                 : "Status Detail"}         value={emp.statusDetail} />
+                <Row label={ar ? "حساب شام كاش"                 : "Sham Cash Account"}     value={emp.shamCashAccount} />
+                <Row label={ar ? "ملاحظات مركزية"               : "Central Notes"}         value={emp.centralNotes} />
+                <Row label={ar ? "تاريخ التسجيل"                : "Registered At"}
+                  value={emp.submittedAt ? new Date(emp.submittedAt).toLocaleDateString(ar ? "ar-SY" : "en-GB") : undefined} />
               </dl>
             </div>
           </TabsContent>
@@ -273,17 +269,17 @@ export function EmployeeDetails() {
           <div className="section-card no-print">
             <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100 dark:border-slate-700">
               <Clock className="h-4 w-4 text-muted-foreground" />
-              <h3 className="font-semibold text-sm text-slate-700 dark:text-slate-300">سجل التعديلات</h3>
+              <h3 className="font-semibold text-sm text-slate-700 dark:text-slate-300">{ar ? "سجل التعديلات" : "Change Log"}</h3>
             </div>
             <div className="space-y-1">
               {data.auditLog.map(log => (
                 <div key={log.id} className="flex items-center gap-3 text-xs text-muted-foreground py-1.5 border-b border-slate-50 dark:border-slate-700 last:border-0">
                   <Badge variant={log.action === "create" ? "success" : log.action === "delete" ? "destructive" : "secondary"} className="text-[10px]">
-                    {log.action === "create" ? "إنشاء" : log.action === "update" ? "تعديل" : "حذف"}
+                    {log.action === "create" ? (ar ? "إنشاء" : "Created") : log.action === "update" ? (ar ? "تعديل" : "Updated") : (ar ? "حذف" : "Deleted")}
                   </Badge>
-                  <span>{log.changedBy === "employee" ? "الموظف" : log.changedBy || "—"}</span>
+                  <span>{log.changedBy === "employee" ? (ar ? "الموظف" : "Employee") : log.changedBy || "—"}</span>
                   <span className="mr-auto">
-                    {log.changedAt ? new Date(log.changedAt).toLocaleString("ar-SY") : "—"}
+                    {log.changedAt ? new Date(log.changedAt).toLocaleString(ar ? "ar-SY" : "en-GB") : "—"}
                   </span>
                 </div>
               ))}
