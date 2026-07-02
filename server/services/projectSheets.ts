@@ -429,15 +429,13 @@ export async function cleanupServiceAccountDrive(projectId: string): Promise<{
 
     for (const file of files) {
       if (!file.id) continue;
-      // Skip files that are known/current sheet IDs
+      // Protect: never delete a file that is the active sheet for any project
       if (knownSheetIds.has(file.id)) { skipped++; continue; }
-      // Skip files that have parents (they're inside a folder = user's data)
-      if (file.parents && file.parents.length > 0) { skipped++; continue; }
-
+      // Delete everything else: orphaned (no parents) AND old test files in the folder
       try {
         await drive.files.delete({ fileId: file.id } as any);
         deleted++;
-        console.log("[ProjectSheets] cleanup deleted orphaned file:", file.id, file.name);
+        console.log("[ProjectSheets] cleanup deleted:", file.id, file.name);
       } catch (err: any) {
         console.warn("[ProjectSheets] cleanup could not delete:", file.id, err.message);
         skipped++;

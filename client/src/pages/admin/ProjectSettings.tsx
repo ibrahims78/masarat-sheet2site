@@ -120,7 +120,12 @@ export function ProjectSettings() {
   };
 
   const cleanupDrive = async () => {
-    if (!window.confirm("سيحذف هذا الزر فقط الملفات المؤقتة الفارغة التي أنشأها النظام تلقائياً خارج أي مجلد مشارَك.\nلن تُحذف ملفات البيانات الموجودة داخل المجلد.\nهل تريد المتابعة؟")) return;
+    if (!window.confirm(
+      "سيحذف هذا الزر ملفات Google Sheets القديمة التي أنشأها النظام تلقائياً (بما فيها التجريبية داخل المجلد).\n" +
+      "✅ محمي: الملف النشط المرتبط حالياً بالمشروع لن يُحذف.\n" +
+      "❌ سيُحذف: كل ملف آخر أنشأه النظام (فارغ أو تجريبي).\n\n" +
+      "هل تريد المتابعة؟"
+    )) return;
     setSheetsLoading("cleanup"); setTestResult(null);
     const res: any = await apiRequest("POST", `/api/projects/${id}/cleanup-drive`, {}).catch(e => ({ message: `❌ ${e.message}` }));
     setTestResult(res.message);
