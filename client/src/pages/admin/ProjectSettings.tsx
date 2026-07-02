@@ -191,7 +191,7 @@ export function ProjectSettings() {
   const ResultBox = ({ msg }: { msg: string }) => (
     <div className={`p-3 rounded-lg text-sm flex items-start gap-2 ${msg.startsWith("✅") ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400" : msg.startsWith("⚠️") ? "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400" : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"}`}>
       {msg.startsWith("✅") ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" /> : msg.startsWith("⚠️") ? <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" /> : <XCircle className="h-4 w-4 shrink-0 mt-0.5" />}
-      <span>{msg}</span>
+      <span className="whitespace-pre-wrap break-words">{msg}</span>
     </div>
   );
 

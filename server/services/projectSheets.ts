@@ -262,21 +262,43 @@ export async function createProjectSheet(projectId: string): Promise<{
 
           // ── Attempt 3: Move the newly created sheet into the folder ──
           try {
-            const fileMeta = await drive.files.get({ fileId: spreadsheetId, fields: "parents", supportsAllDrives: true } as any);
-            const oldParents = (fileMeta.data as any).parents?.join(",") || "root";
+            // Get current parents — needed to remove from root after move
+            let removeParents: string | undefined;
+            try {
+              const fileMeta = await drive.files.get({
+                fileId: spreadsheetId,
+                fields: "parents",
+                supportsAllDrives: true,
+              } as any);
+              const parentsArr: string[] = (fileMeta.data as any).parents || [];
+              if (parentsArr.length > 0) removeParents = parentsArr.join(",");
+            } catch {
+              // If we can't get parents, skip removeParents — just add to folder
+            }
+
             await drive.files.update({
               fileId: spreadsheetId,
               addParents: folderId,
-              removeParents: oldParents,
+              ...(removeParents ? { removeParents } : {}),
               supportsAllDrives: true,
               fields: "id,parents",
             } as any);
             inFolder = true;
-            console.log("[ProjectSheets] Move to folder OK");
+            console.log("[ProjectSheets] Move to folder OK — inFolder:", folderId);
           } catch (moveErr: any) {
             const moveHint = classifyDriveError(moveErr, { folderId, saEmail: proj.googleServiceAccountEmail ?? "" });
-            console.warn("[ProjectSheets] Move to folder failed:", moveHint);
-            folderNote = ` (ملاحظة: تعذّر نقل الملف للمجلد — ${moveHint})`;
+            console.error("[ProjectSheets] Move to folder FAILED:", moveHint);
+            // Save the sheet ID that was already created so user can manually place it
+            await db.update(projects)
+              .set({ googleSheetId: spreadsheetId })
+              .where(eq(projects.id, projectId));
+            const sheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
+            return {
+              ok: false,
+              sheetId: spreadsheetId,
+              sheetUrl,
+              message: `⚠️ تم إنشاء الـ Sheet بنجاح لكن تعذّر نقله للمجلد المحدد.\n\nالسبب: ${moveHint}\n\nSheet ID تم حفظه: ${spreadsheetId}\nرابط الملف: ${sheetUrl}\n\nيمكنك نقل الملف يدوياً للمجلد أو مراجعة صلاحيات المجلد.`,
+            };
           }
         } catch (sheetsErr: any) {
           // Both paths failed — return the original Drive error as it's more informative
