@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { db } from "../db.js";
 import { projects, projectFields, projectRecords, projectAuditLog, users, userInvitations, systemSettings } from "../../shared/schema.js";
 import { eq, desc, count, gte, and, ilike, or, gt, sql } from "drizzle-orm";
@@ -15,6 +15,24 @@ import { Readable } from "stream";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+// ─── PROJECT OWNERSHIP GUARD ──────────────────────────────────
+// Editors may only write to projects they created; admins bypass this check.
+// Call after requireEditorOrAdmin — assumes session.userId and session.role are set.
+async function requireProjectOwnership(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const role = (req.session as any)?.role;
+  if (role === "admin") { next(); return; }
+  const userId = (req.session as any)?.userId;
+  const pid = String(req.params.id);
+  try {
+    const [proj] = await db.select({ createdBy: projects.createdBy }).from(projects).where(eq(projects.id, pid));
+    if (!proj) { res.status(404).json({ error: "المشروع غير موجود" }); return; }
+    if (proj.createdBy !== userId) { res.status(403).json({ error: "لا تملك صلاحية تعديل هذا المشروع" }); return; }
+    next();
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
 
 // ─── PROJECTS CRUD ───────────────────────────────────────────
 
@@ -136,7 +154,7 @@ router.patch("/global-settings", requireAdmin, async (req: Request, res: Respons
   }
 });
 
-router.patch("/:id", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
     const body = req.body;
     const update: any = { updatedAt: new Date() };
@@ -166,7 +184,7 @@ router.patch("/:id", requireEditorOrAdmin, async (req: Request, res: Response) =
   }
 });
 
-router.delete("/:id", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.delete("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
     await db.delete(projects).where(eq(projects.id, String(req.params.id)));
     res.json({ ok: true });
@@ -234,7 +252,7 @@ router.get("/:id/fields", requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-router.post("/:id/fields", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.post("/:id/fields", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
     const fields: any[] = req.body.fields;
     await db.delete(projectFields).where(eq(projectFields.projectId, String(req.params.id)));
@@ -312,7 +330,7 @@ router.get("/:id/records", requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-router.post("/:id/records", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.post("/:id/records", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.id);
     const [proj] = await db.select({ editTokenHours: projects.editTokenHours }).from(projects).where(eq(projects.id, pid));
@@ -365,7 +383,7 @@ router.get("/:id/records/:recordId", requireAuth, async (req: Request, res: Resp
   }
 });
 
-router.patch("/:id/records/:recordId", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.patch("/:id/records/:recordId", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.id);
     const [existing] = await db.select().from(projectRecords)
@@ -414,7 +432,7 @@ router.patch("/:id/records/:recordId", requireEditorOrAdmin, async (req: Request
   }
 });
 
-router.delete("/:id/records/:recordId", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.delete("/:id/records/:recordId", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.id);
     const rid = String(req.params.recordId);
@@ -441,7 +459,7 @@ router.delete("/:id/records/:recordId", requireEditorOrAdmin, async (req: Reques
   }
 });
 
-router.post("/:id/records/bulk-delete", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.post("/:id/records/bulk-delete", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
     const { ids } = req.body as { ids: string[] };
     const pid = String(req.params.id);
@@ -668,17 +686,17 @@ router.get("/:id/stats/distributions", requireAuth, async (req: Request, res: Re
 
 // ─── SHEET TOOLS ─────────────────────────────────────────────
 
-router.post("/:id/fix-sheet-headers", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.post("/:id/fix-sheet-headers", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   const result = await fixProjectSheetHeaders(String(req.params.id));
   res.json(result);
 });
 
-router.post("/:id/check-sheet-columns", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.post("/:id/check-sheet-columns", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   const result = await checkProjectSheetColumns(String(req.params.id));
   res.json(result);
 });
 
-router.post("/:id/import-from-sheets", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.post("/:id/import-from-sheets", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   const { syncDeleted } = req.body;
   const result = await importFromProjectSheet(String(req.params.id), !!syncDeleted);
   res.json(result);
@@ -686,12 +704,12 @@ router.post("/:id/import-from-sheets", requireEditorOrAdmin, async (req: Request
 
 // ─── SETTINGS ACTIONS ────────────────────────────────────────
 
-router.post("/:id/test-sheets", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.post("/:id/test-sheets", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   const result = await testProjectSheetsConnection(String(req.params.id));
   res.json(result);
 });
 
-router.post("/:id/create-sheet", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.post("/:id/create-sheet", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   const projectId = String(req.params.id);
   cancelSheetCreationJob(projectId); // cancel any running background job first
   const result = await createProjectSheet(projectId);
@@ -707,13 +725,13 @@ router.post("/:id/create-sheet", requireEditorOrAdmin, async (req: Request, res:
   res.json(result);
 });
 
-router.post("/:id/cleanup-drive", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.post("/:id/cleanup-drive", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   const { cleanupServiceAccountDrive } = await import("../services/projectSheets.js");
   const result = await cleanupServiceAccountDrive(String(req.params.id));
   res.json(result);
 });
 
-router.post("/:id/test-telegram", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.post("/:id/test-telegram", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
     const { token, chatId } = req.body;
     let botToken = token;
@@ -729,7 +747,7 @@ router.post("/:id/test-telegram", requireEditorOrAdmin, async (req: Request, res
   }
 });
 
-router.post("/:id/telegram-updates", requireEditorOrAdmin, async (req: Request, res: Response) => {
+router.post("/:id/telegram-updates", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
     const { token } = req.body;
     let botToken = token;
