@@ -22,11 +22,12 @@ router.get("/", requireAuth, async (req, res) => {
   try {
     const role = (req.session as any).role;
     const userId = (req.session as any).userId;
-    const list = role === "admin"
-      ? await db.select().from(projects).orderBy(desc(projects.createdAt))
-      : await db.select().from(projects)
+    // admin & viewer → all projects; editor → only their own
+    const list = role === "editor"
+      ? await db.select().from(projects)
           .where(eq(projects.createdBy, userId))
-          .orderBy(desc(projects.createdAt));
+          .orderBy(desc(projects.createdAt))
+      : await db.select().from(projects).orderBy(desc(projects.createdAt));
     res.json(list);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
