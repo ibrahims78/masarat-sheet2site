@@ -327,16 +327,17 @@ router.post("/:id/records", requireEditorOrAdmin, async (req: Request, res: Resp
     // Atomically assign sequential number and insert (advisory lock prevents duplicates)
     const record = await insertRecordAtomic(pid, req.body, tokenExpiresAt, autoIncrementKeys);
     const seqNum = record.sequential_number;
+    const finalData = record.enriched_data; // includes auto-filled autoincrement values
 
     await db.insert(projectAuditLog).values({
       projectId: pid,
       recordId: record.id,
       changedBy: (req.session as any).userId || "admin",
       action: "create",
-      changesJson: req.body,
+      changesJson: finalData,
     });
 
-    appendRecordToSheet(pid, req.body as any, seqNum).then(async (rowIndex) => {
+    appendRecordToSheet(pid, finalData as any, seqNum).then(async (rowIndex) => {
       if (rowIndex) {
         await db.update(projectRecords).set({ sheetsRowIndex: rowIndex }).where(eq(projectRecords.id, record.id));
       }
@@ -366,27 +367,41 @@ router.get("/:id/records/:recordId", requireAuth, async (req: Request, res: Resp
 
 router.patch("/:id/records/:recordId", requireEditorOrAdmin, async (req: Request, res: Response) => {
   try {
+    const pid = String(req.params.id);
     const [existing] = await db.select().from(projectRecords)
-      .where(and(eq(projectRecords.id, String(req.params.recordId)), eq(projectRecords.projectId, String(req.params.id))));
+      .where(and(eq(projectRecords.id, String(req.params.recordId)), eq(projectRecords.projectId, pid)));
     if (!existing) return res.status(404).json({ error: "السجل غير موجود" });
 
+    // Strip autoincrement fields from the incoming payload — they are immutable after creation
+    const autoFields = await db.select({ key: projectFields.key }).from(projectFields)
+      .where(and(eq(projectFields.projectId, pid), sql`${projectFields.fieldType} = 'autoincrement'`));
+    const safeBody: Record<string, any> = { ...req.body };
+    for (const { key } of autoFields) {
+      if (key in (existing.data as any)) {
+        // Restore the original autoincrement value from the existing record
+        safeBody[key] = (existing.data as any)[key];
+      } else {
+        delete safeBody[key];
+      }
+    }
+
     const [updated] = await db.update(projectRecords)
-      .set({ data: req.body, updatedAt: new Date() })
+      .set({ data: safeBody, updatedAt: new Date() })
       .where(eq(projectRecords.id, String(req.params.recordId)))
       .returning();
 
     await db.insert(projectAuditLog).values({
-      projectId: String(req.params.id),
+      projectId: pid,
       recordId: String(req.params.recordId),
       changedBy: (req.session as any).userId,
       action: "update",
-      changesJson: req.body,
+      changesJson: safeBody,
     });
 
     if (updated.sheetsRowIndex) {
-      updateRecordRow(String(req.params.id), updated.sheetsRowIndex, updated.data as any, updated.sequentialNumber || 0).catch(console.error);
+      updateRecordRow(pid, updated.sheetsRowIndex, updated.data as any, updated.sequentialNumber || 0).catch(console.error);
     } else {
-      appendRecordToSheet(String(req.params.id), updated.data as any, updated.sequentialNumber || 0).then(async (rowIndex) => {
+      appendRecordToSheet(pid, updated.data as any, updated.sequentialNumber || 0).then(async (rowIndex) => {
         if (rowIndex) {
           await db.update(projectRecords).set({ sheetsRowIndex: rowIndex }).where(eq(projectRecords.id, updated.id));
         }

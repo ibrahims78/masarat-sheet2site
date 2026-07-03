@@ -21,6 +21,7 @@ interface ParsedColumn {
   fieldType: string; isRequired: boolean; isVisible: boolean;
   stepNumber: number; orderIndex: number; samples: string[];
   selected: boolean;
+  options?: string[];
 }
 
 const FIELD_TYPES_AR = [
@@ -94,12 +95,20 @@ export function CreateProject() {
 
   const removeColumn = (idx: number) => setColumns(prev => prev.filter((_, i) => i !== idx));
 
+
   const createMut = useMutation({
     mutationFn: () => {
+      // Validate select/radio fields have at least one non-empty option
+      const badFields = columns.filter(c => c.selected && (c.fieldType === "select" || c.fieldType === "radio") && !(c.options ?? []).some(o => o.trim()));
+      if (badFields.length > 0) {
+        const names = badFields.map(f => f.label).join("، ");
+        throw new Error(ar ? `يجب إضافة خيار واحد على الأقل لـ: ${names}` : `Add at least one option for: ${names}`);
+      }
       const selectedFields = columns.filter(c => c.selected).map((c, idx) => ({
         key: c.key, label: c.label, fieldType: c.fieldType,
         isRequired: c.isRequired, isVisible: c.isVisible,
         stepNumber: c.stepNumber, orderIndex: idx,
+        options: (c.fieldType === "select" || c.fieldType === "radio") ? (c.options ?? []) : undefined,
       }));
       const steps = stepsText.split("\n").map(s => s.trim()).filter(Boolean);
       return apiRequest("POST", "/api/projects", {
@@ -291,6 +300,48 @@ export function CreateProject() {
                       ))}
                     </div>
                   )}
+
+                  {/* Options editor for select / radio */}
+                  {col.selected && (col.fieldType === "select" || col.fieldType === "radio") && (
+                    <div className="mt-3 border-t border-slate-100 dark:border-slate-700 pt-3">
+                      <p className="text-[10px] text-muted-foreground mb-2">
+                        {ar ? "خيارات القائمة" : "List Options"}
+                        <span className="mr-1 text-red-400">*</span>
+                      </p>
+                      <div className="space-y-1.5">
+                        {(col.options ?? []).map((opt, oi) => (
+                          <div key={oi} className="flex items-center gap-2">
+                            <Input
+                              value={opt}
+                              onChange={e => {
+                                const next = [...(col.options ?? [])];
+                                next[oi] = e.target.value;
+                                updateColumn(idx, { options: next });
+                              }}
+                              className="h-7 text-xs flex-1"
+                              placeholder={ar ? `الخيار ${oi + 1}` : `Option ${oi + 1}`}
+                            />
+                            <button
+                              onClick={() => {
+                                const next = (col.options ?? []).filter((_, i) => i !== oi);
+                                updateColumn(idx, { options: next });
+                              }}
+                              className="h-7 w-7 flex items-center justify-center rounded text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => updateColumn(idx, { options: [...(col.options ?? []), ""] })}
+                          className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                        >
+                          <Plus className="h-3 w-3" />
+                          {ar ? "إضافة خيار" : "Add option"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -418,7 +469,7 @@ export function CreateProject() {
 
             {createMut.isError && (
               <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 text-sm" data-testid="text-create-error">
-                {ar ? "حدث خطأ أثناء الإنشاء. حاول مرة أخرى." : "An error occurred while creating the project. Please try again."}
+                {(createMut.error as Error)?.message || (ar ? "حدث خطأ أثناء الإنشاء. حاول مرة أخرى." : "An error occurred. Please try again.")}
               </div>
             )}
 

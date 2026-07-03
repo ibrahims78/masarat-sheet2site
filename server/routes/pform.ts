@@ -101,17 +101,18 @@ router.post("/:projectId/submit", submitLimiter, async (req: Request, res: Respo
     // Atomically assign sequential number and insert (advisory lock prevents duplicates)
     const record = await insertRecordAtomic(pid, req.body, tokenExpiresAt, autoIncrementKeys);
     const seqNum = record.sequential_number;
+    const finalData = record.enriched_data; // includes auto-filled autoincrement values
 
     await db.insert(projectAuditLog).values({
       projectId: pid,
       recordId: record.id,
       changedBy: "employee",
       action: "create",
-      changesJson: req.body,
+      changesJson: finalData,
     });
 
     // Google Sheets (non-blocking)
-    appendRecordToSheet(pid, req.body as any, seqNum).then(async (rowIndex) => {
+    appendRecordToSheet(pid, finalData as any, seqNum).then(async (rowIndex) => {
       if (rowIndex) {
         await db.update(projectRecords).set({ sheetsRowIndex: rowIndex }).where(eq(projectRecords.id, record.id));
       }
@@ -122,7 +123,7 @@ router.post("/:projectId/submit", submitLimiter, async (req: Request, res: Respo
       const sendTelegram = async () => {
         const token = decrypt(proj.telegramBotTokenEnc!);
         if (!token) return;
-        const data = req.body as Record<string, any>;
+        const data = finalData as Record<string, any>;
         const preview = Object.entries(data).slice(0, 4).map(([, v]) => `• ${v}`).join("\n");
         const msg = `📋 *تسجيل جديد — ${proj.name}*\n\n${preview}\n\n🕒 ${new Date().toLocaleString("ar-SY", { timeZone: "Asia/Damascus" })}`;
         await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -170,8 +171,20 @@ router.patch("/:projectId/edit/:token", async (req: Request, res: Response) => {
       return res.status(410).json({ error: "انتهت صلاحية رابط التعديل" });
     }
 
+    // Strip autoincrement fields — immutable after creation; restore from existing record
+    const autoFields = await db.select({ key: projectFields.key }).from(projectFields)
+      .where(and(eq(projectFields.projectId, pid), sql`${projectFields.fieldType} = 'autoincrement'`));
+    const safeBody: Record<string, any> = { ...req.body };
+    for (const { key } of autoFields) {
+      if (key in (existing.data as any)) {
+        safeBody[key] = (existing.data as any)[key];
+      } else {
+        delete safeBody[key];
+      }
+    }
+
     const [updated] = await db.update(projectRecords)
-      .set({ data: req.body, updatedAt: new Date() })
+      .set({ data: safeBody, updatedAt: new Date() })
       .where(eq(projectRecords.id, existing.id))
       .returning();
 
@@ -180,7 +193,7 @@ router.patch("/:projectId/edit/:token", async (req: Request, res: Response) => {
       recordId: existing.id,
       changedBy: "employee",
       action: "update",
-      changesJson: req.body,
+      changesJson: safeBody,
     });
 
     if (updated.sheetsRowIndex) {

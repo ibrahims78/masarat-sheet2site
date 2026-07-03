@@ -11,6 +11,7 @@ export interface InsertedRecord {
   edit_token: string;
   sheets_row_index: number | null;
   submitted_at: string;
+  enriched_data: Record<string, any>;
 }
 
 export async function insertRecordAtomic(
@@ -43,7 +44,7 @@ export async function insertRecordAtomic(
       enrichedData[key] = String(Number(autoRows[0]?.next_val ?? 1));
     }
 
-    const { rows } = await client.query<InsertedRecord>(
+    const { rows } = await client.query<Omit<InsertedRecord, "enriched_data">>(
       `INSERT INTO project_records
          (id, project_id, data, sequential_number, edit_token, token_expires_at, submitted_at)
        VALUES
@@ -53,7 +54,7 @@ export async function insertRecordAtomic(
     );
 
     await client.query("COMMIT");
-    return rows[0];
+    return { ...rows[0], enriched_data: enrichedData };
   } catch (e) {
     await client.query("ROLLBACK");
     throw e;
