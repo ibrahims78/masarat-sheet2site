@@ -15,10 +15,13 @@ import type { Project } from "@shared/schema";
 import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useLang } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
 
 export function Projects() {
   const { lang } = useLang();
   const ar = lang === "ar";
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [, nav] = useLocation();
   const qc = useQueryClient();
   const { setCurrentProject } = useProject();
@@ -69,10 +72,12 @@ export function Projects() {
               {isLoading ? (ar ? "جاري التحميل..." : "Loading...") : (ar ? `${projects.length} مشروع` : `${projects.length} project${projects.length !== 1 ? "s" : ""}`)}
             </p>
           </div>
-          <Button onClick={() => nav("/admin/projects/new")} data-testid="button-new-project">
-            <Plus className="h-4 w-4 ml-2" />
-            {ar ? "مشروع جديد" : "New Project"}
-          </Button>
+          {isAdmin && (
+            <Button onClick={() => nav("/admin/projects/new")} data-testid="button-new-project">
+              <Plus className="h-4 w-4 ml-2" />
+              {ar ? "مشروع جديد" : "New Project"}
+            </Button>
+          )}
         </div>
 
         {/* Search */}
@@ -105,10 +110,12 @@ export function Projects() {
               {ar ? "لا يوجد مشاريع بعد" : "No projects yet"}
             </h3>
             <p className="text-sm text-muted-foreground mb-6">{ar ? "أنشئ مشروعك الأول لبدء جمع البيانات" : "Create your first project to start collecting data"}</p>
-            <Button onClick={() => nav("/admin/projects/new")}>
-              <Plus className="h-4 w-4 ml-2" />
-              {ar ? "إنشاء مشروع" : "Create Project"}
-            </Button>
+            {isAdmin && (
+              <Button onClick={() => nav("/admin/projects/new")}>
+                <Plus className="h-4 w-4 ml-2" />
+                {ar ? "إنشاء مشروع" : "Create Project"}
+              </Button>
+            )}
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
