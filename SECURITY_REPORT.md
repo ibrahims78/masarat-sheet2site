@@ -744,3 +744,47 @@ L-04: session type declarations
 ---
 
 *هذا التقرير أُعدَّ بناءً على مراجعة شاملة للكود المصدري. يُوصى بإعادة الفحص بعد تطبيق كل مرحلة من مراحل الإصلاح.*
+
+---
+
+## قسم 8 — سجل الإصلاحات المُنفَّذة
+
+**تاريخ التنفيذ:** 2026-07-04  
+**الحالة:** مُكتمل — جميع الثغرات تمت معالجتها
+
+### المرحلة الأولى — الثغرات العالية (HIGH) ✅
+
+| الثغرة | الملف المُعدَّل | الإصلاح |
+|---|---|---|
+| H-01 Session Fixation | `server/routes/auth.ts` | إضافة `req.session.regenerate()` في `/login`, `/setup`, `/register-invite` |
+| H-02 Rate Limiting | `server/routes/auth.ts` | `setupLimiter` (5/ساعة), `inviteLimiter` (10/15د) مُطبَّقان |
+| H-03 mustChangePassword | `server/middleware/auth.ts`, `server/index.ts` | `requirePasswordNotExpired` مُطبَّق على `/api/projects` |
+| H-04 Remember-Me Token | `server/routes/auth.ts` | SHA-256 hash يُخزَّن بدلاً من القيمة الخام |
+
+### المرحلة الثانية — الثغرات المتوسطة (MEDIUM) ✅
+
+| الثغرة | الملف المُعدَّل | الإصلاح |
+|---|---|---|
+| M-01 Error Leakage | `server/utils/errorHandler.ts` + جميع routes | معالج مركزي — لا يكشف `err.message` للعميل |
+| M-02 CSP/Helmet | `server/index.ts` | CSP + frameguard + HSTS مُفعَّل في الإنتاج فقط |
+| M-03 Uploads Auth | `server/index.ts` | `/uploads/:filename` يتطلب جلسة أو edit token صالح |
+| M-04 MIME Validation | `server/middleware/upload.ts` | `fileTypeFromFile` fail-closed — الملفات الثنائية تُرفض بدون magic bytes |
+| M-05 JSON Body Limit | `server/index.ts` | 10mb → 512kb |
+| M-06 Referrer-Policy | `server/index.ts` | رأسية `Referrer-Policy: no-referrer` على جميع النقاط |
+
+### المرحلة الثالثة — الثغرات المنخفضة (LOW) ✅
+
+| الثغرة | الملف المُعدَّل | الإصلاح |
+|---|---|---|
+| L-01 GCM Silent Failure | `server/services/crypto.ts` | تسجيل [SECURITY] عند فشل فك التشفير |
+| L-02 Weak Invite Code | `server/routes/projects.ts` | `randomBytes(3).hex` بدلاً من `NAME-2026` |
+| L-03 localStorage PII | `client/src/pages/ProjectRegister.tsx` | TTL 24 ساعة + تنظيف عند الإرسال |
+| L-04 Session Types | `server/types/session.d.ts` | ملف أنواع TypeScript للجلسة |
+
+### المرحلة الرابعة — المعلوماتية (INFO) ✅
+
+| الثغرة | الملف المُعدَّل | الإصلاح |
+|---|---|---|
+| I-01 /setup-required | `server/routes/auth.ts` | `setupRequiredLimiter` (20/دقيقة) |
+| I-02 /app-info | — | مُراجَع — الـ projection محدود كما هو |
+| I-03 bcryptjs | — | مُراجَع — مقبول للمرحلة الحالية |

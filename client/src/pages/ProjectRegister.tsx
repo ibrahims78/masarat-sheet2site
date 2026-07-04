@@ -138,6 +138,20 @@ export function ProjectRegister() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fields.length, projectId]);
 
+  // L-03: Enforce a 24-hour TTL on localStorage drafts to limit PII exposure on shared devices
+  const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+  useEffect(() => {
+    try {
+      const ts = localStorage.getItem(`${draftKey}_ts`);
+      if (ts && Date.now() - Number(ts) > DRAFT_TTL_MS) {
+        localStorage.removeItem(draftKey);
+        localStorage.removeItem(`${draftKey}_ts`);
+        localStorage.removeItem(draftIdKey);
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Autosave form values + current step to localStorage (fast, local) and the server (durable, cross-device)
   const watchedValues = watch();
   useEffect(() => {
@@ -145,6 +159,7 @@ export function ProjectRegister() {
     const t = setTimeout(() => {
       try {
         localStorage.setItem(draftKey, JSON.stringify({ values: watchedValues, step }));
+        localStorage.setItem(`${draftKey}_ts`, String(Date.now())); // L-03: TTL timestamp
       } catch {
         // storage unavailable — ignore
       }
@@ -161,7 +176,11 @@ export function ProjectRegister() {
   }, [JSON.stringify(watchedValues), step, codeVerified, submitted]);
 
   const clearDraft = () => {
-    try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+    try {
+      localStorage.removeItem(draftKey);
+      localStorage.removeItem(`${draftKey}_ts`); // L-03: clear TTL timestamp too
+      localStorage.removeItem(draftIdKey);
+    } catch { /* ignore */ }
     if (projectId) {
       fetch(`/api/pform/${projectId}/draft/${draftId}`, { method: "DELETE" }).catch(() => { /* ignore */ });
     }

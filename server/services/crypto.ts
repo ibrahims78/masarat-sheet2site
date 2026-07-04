@@ -44,7 +44,10 @@ export function decrypt(encryptedText: string): string {
     const decipher = crypto.createDecipheriv(ALGORITHM, KEY.slice(0, 32), iv);
     decipher.setAuthTag(authTag);
     return decipher.update(encrypted) + decipher.final("utf8");
-  } catch {
+  } catch (err) {
+    // L-01: Log decryption failures — a failed GCM auth tag is a strong indicator
+    // of data tampering in the database. Never silently swallow this.
+    console.error("[SECURITY] Decryption failed — possible data tampering or wrong key:", err);
     return "";
   }
 }

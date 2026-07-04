@@ -6,7 +6,8 @@ import { appendRecordToSheet, updateRecordRow } from "../services/projectSheets.
 import { insertRecordAtomic } from "../services/recordInsert.js";
 import { decrypt } from "../services/crypto.js";
 import rateLimit from "express-rate-limit";
-import { fileUpload, publicFileUrl } from "../middleware/upload.js";
+import { fileUpload, publicFileUrl, validateMimeType } from "../middleware/upload.js";
+import { handleError } from "../utils/errorHandler.js";
 
 const router = Router();
 
@@ -24,10 +25,13 @@ router.post("/:projectId/upload", uploadLimiter, async (req: Request, res: Respo
   if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
   if (!proj.formEnabled) return res.status(403).json({ error: proj.formDisabledMessage || "النموذج متوقف مؤقتاً" });
 
-  fileUpload.single("file")(req, res, (err: any) => {
+  fileUpload.single("file")(req, res, async (err: any) => {
     if (err) return res.status(400).json({ error: err.message || "فشل رفع الملف" });
     if (!req.file) return res.status(400).json({ error: "لم يتم رفع ملف" });
-    res.json({ url: publicFileUrl(req.file.filename), originalName: req.file.originalname });
+    // M-04: Validate magic-bytes MIME type after upload to prevent extension spoofing
+    await validateMimeType(req, res, () => {
+      res.json({ url: publicFileUrl(req.file!.filename), originalName: req.file!.originalname });
+    });
   });
 });
 
@@ -55,7 +59,7 @@ router.get("/:projectId/info", async (req: Request, res: Response) => {
     const { invitationCode, ...safeProj } = proj;
     res.json({ project: { ...safeProj, requiresCode: !!(invitationCode?.trim()) }, fields });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -81,7 +85,7 @@ router.post("/:projectId/verify-code", verifyLimiter, async (req: Request, res: 
     (req.session as any)[`code_${pid}`] = true;
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -161,7 +165,7 @@ router.post("/:projectId/submit", submitLimiter, async (req: Request, res: Respo
     (req.session as any)[`code_${pid}`] = false;
     res.json({ ok: true, editToken: record.edit_token, recordId: record.id, tokenHours });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -178,7 +182,7 @@ router.get("/:projectId/edit/:token", async (req: Request, res: Response) => {
     }
     res.json(record);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -236,7 +240,7 @@ router.patch("/:projectId/edit/:token", async (req: Request, res: Response) => {
 
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -256,7 +260,7 @@ router.get("/:projectId/draft/:draftId", async (req: Request, res: Response) => 
     }
     res.json({ draft: { data: draft.data, step: draft.step } });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -283,7 +287,7 @@ router.put("/:projectId/draft/:draftId", async (req: Request, res: Response) => 
     }
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -296,7 +300,7 @@ router.delete("/:projectId/draft/:draftId", async (req: Request, res: Response) 
       .where(and(eq(projectFormDrafts.projectId, pid), eq(projectFormDrafts.draftId, draftId)));
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 

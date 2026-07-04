@@ -12,7 +12,9 @@ import { v4 as uuidv4 } from "uuid";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import { Readable } from "stream";
-import { fileUpload, publicFileUrl } from "../middleware/upload.js";
+import { fileUpload, publicFileUrl, validateMimeType } from "../middleware/upload.js";
+import { handleError } from "../utils/errorHandler.js";
+import { randomBytes } from "crypto";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -31,7 +33,7 @@ async function requireProjectOwnership(req: Request, res: Response, next: NextFu
     if (proj.createdBy !== userId) { res.status(403).json({ error: "لا تملك صلاحية تعديل هذا المشروع" }); return; }
     next();
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 }
 
@@ -61,7 +63,7 @@ router.get("/", requireAuth, async (req, res) => {
       : await db.select(PROJECT_LIST_COLUMNS).from(projects).orderBy(desc(projects.createdAt));
     res.json(list);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -88,7 +90,7 @@ router.get("/global-settings", requireAdmin, async (_req, res) => {
     const { smtpPassEnc, ...safe } = s;
     res.json({ ...safe, hasSmtpPass: !!smtpPassEnc });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -129,7 +131,7 @@ router.get("/:id", requireAuth, async (req: Request, res: Response) => {
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
     res.json(proj);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -145,7 +147,12 @@ router.post("/", requireEditorOrAdmin, async (req: Request, res: Response) => {
       description,
       formTitle: formTitle || name,
       formSubtitle,
-      invitationCode: invitationCode || `${name.replace(/\s+/g, "-").toUpperCase()}-2026`,
+      // L-02: Use a cryptographically random suffix instead of a predictable year-based code
+      invitationCode: invitationCode || (() => {
+        const prefix = name.replace(/\s+/g, "-").toUpperCase().slice(0, 8);
+        const suffix = randomBytes(3).toString("hex").toUpperCase();
+        return `${prefix}-${suffix}`;
+      })(),
       steps: steps || ["البيانات الأساسية", "البيانات التفصيلية", "المراجعة"],
       createdBy: (req.session as any).userId,
     }).returning();
@@ -168,7 +175,7 @@ router.post("/", requireEditorOrAdmin, async (req: Request, res: Response) => {
 
     res.json({ ok: true, project: proj });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -185,7 +192,7 @@ router.patch("/global-settings", requireAdmin, async (req: Request, res: Respons
     await db.update(systemSettings).set(update).where(eq(systemSettings.id, "singleton"));
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -218,7 +225,7 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
     await db.update(projects).set(update).where(eq(projects.id, String(req.params.id)));
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -227,7 +234,7 @@ router.delete("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req:
     await db.delete(projects).where(eq(projects.id, String(req.params.id)));
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -273,17 +280,20 @@ router.post("/parse-excel", requireEditorOrAdmin, upload.single("file"), async (
 
     res.json({ columns, totalRows: worksheet.rowCount - 1 });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
 // ─── FILE UPLOADS (admin — for add/edit record forms) ─────────
 
-router.post("/:id/upload", requireEditorOrAdmin, requireProjectOwnership, (req: Request, res: Response) => {
-  fileUpload.single("file")(req, res, (err: any) => {
+// M-04: validateMimeType checks magic-bytes after multer saves the file to disk
+router.post("/:id/upload", requireEditorOrAdmin, requireProjectOwnership, (req: Request, res: Response, next: NextFunction) => {
+  fileUpload.single("file")(req, res, async (err: any) => {
     if (err) return res.status(400).json({ error: err.message || "فشل رفع الملف" });
     if (!req.file) return res.status(400).json({ error: "لم يتم رفع ملف" });
-    res.json({ url: publicFileUrl(req.file.filename), originalName: req.file.originalname });
+    await validateMimeType(req, res, () => {
+      res.json({ url: publicFileUrl(req.file!.filename), originalName: req.file!.originalname });
+    });
   });
 });
 
@@ -296,7 +306,7 @@ router.get("/:id/fields", requireAuth, async (req: Request, res: Response) => {
       .orderBy(projectFields.stepNumber, projectFields.orderIndex);
     res.json(fields);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -336,7 +346,7 @@ router.post("/:id/fields", requireEditorOrAdmin, requireProjectOwnership, async 
     }
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -390,7 +400,7 @@ router.get("/:id/records", requireAuth, async (req: Request, res: Response) => {
     const data = allRecords.slice(offset, offset + limit);
     res.json({ data, total, page, limit });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -427,7 +437,7 @@ router.post("/:id/records", requireEditorOrAdmin, requireProjectOwnership, async
 
     res.json({ ok: true, record });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -443,7 +453,7 @@ router.get("/:id/records/:recordId", requireAuth, async (req: Request, res: Resp
 
     res.json({ record, auditLog: logs });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -492,7 +502,7 @@ router.patch("/:id/records/:recordId", requireEditorOrAdmin, requireProjectOwner
 
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -519,7 +529,7 @@ router.delete("/:id/records/:recordId", requireEditorOrAdmin, requireProjectOwne
 
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -535,7 +545,7 @@ router.post("/:id/records/bulk-delete", requireEditorOrAdmin, requireProjectOwne
     }
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -585,7 +595,7 @@ router.get("/:id/stats", requireAuth, async (req: Request, res: Response) => {
       dailyTrend,
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -705,7 +715,7 @@ router.get("/:id/export", requireAuth, async (req: Request, res: Response) => {
     await workbook.xlsx.write(res);
     res.end();
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -746,7 +756,7 @@ router.get("/:id/stats/distributions", requireAuth, async (req: Request, res: Re
 
     res.json({ distributions, fields: selectFields });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -792,7 +802,7 @@ router.post("/:id/test-telegram", requireEditorOrAdmin, requireProjectOwnership,
     const result = await testTelegramBot(botToken, chatId);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -808,7 +818,7 @@ router.post("/:id/telegram-updates", requireEditorOrAdmin, requireProjectOwnersh
     const result = await getTelegramUpdates(botToken);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ ok: false, message: err.message });
+    handleError(res, err, "GET /telegram-updates");
   }
 });
 
@@ -856,7 +866,7 @@ router.post("/send-invitation", requireAdmin, async (req: Request, res: Response
     const sent = await sendInvitationEmail(email, token, role || "viewer", appUrl, expiryHours, appName);
     res.json({ ok: true, inviteUrl: `${appUrl}/admin/register/${token}`, emailSent: sent });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -871,7 +881,7 @@ router.post("/create-user", requireAdmin, async (req: Request, res: Response) =>
     res.json({ ok: true, userId: user.id });
   } catch (err: any) {
     if (err.code === "23505") { res.status(409).json({ error: "البريد الإلكتروني مستخدم بالفعل" }); return; }
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -883,7 +893,7 @@ router.post("/reset-password/:userId", requireAdmin, async (req: Request, res: R
     await db.update(users).set({ passwordHash: hash, mustChangePassword: true }).where(eq(users.id, String(req.params.userId)));
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -899,7 +909,7 @@ router.patch("/users/:userId", requireAdmin, async (req: Request, res: Response)
     res.json({ ok: true });
   } catch (err: any) {
     if (err.code === "23505") return res.status(409).json({ error: "البريد الإلكتروني مستخدم بالفعل" });
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -925,7 +935,7 @@ router.get("/:id/audit-log", requireAuth, async (req: Request, res: Response) =>
     .limit(limit);
     res.json(logs);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
@@ -939,7 +949,7 @@ router.delete("/users/:userId", requireAdmin, async (req: Request, res: Response
     await db.delete(users).where(eq(users.id, String(req.params.userId)));
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleError(res, err);
   }
 });
 
