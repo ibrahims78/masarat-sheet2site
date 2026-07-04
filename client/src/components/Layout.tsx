@@ -13,6 +13,7 @@ import { useProject } from "@/context/ProjectContext";
 import { useLang } from "@/context/LanguageContext";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { cn } from "@/lib/utils";
+import { DesignerCredit } from "@/components/DesignerCredit";
 import type { Project } from "@shared/schema";
 
 interface LayoutProps {
@@ -209,6 +210,7 @@ export function Layout({ children, projectId }: LayoutProps) {
             <LogOut className="h-4 w-4" />
           </Button>
         )}
+        {sidebarOpen && <DesignerCredit />}
       </div>
     </div>
   );

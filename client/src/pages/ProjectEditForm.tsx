@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { useLang } from "@/context/LanguageContext";
+import { DesignerCredit } from "@/components/DesignerCredit";
 import type { ProjectField, ProjectRecord } from "@shared/schema";
 import { isFieldVisible as checkFieldVisible } from "@/lib/fieldVisibility";
 import { FileField } from "@/components/FileField";
@@ -160,6 +161,7 @@ export function ProjectEditForm() {
             {isAr ? "حفظ التعديلات" : "Save Changes"}
           </Button>
         </form>
+        <DesignerCredit />
       </div>
     </div>
   );

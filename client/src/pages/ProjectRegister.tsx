@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { DesignerCredit } from "@/components/DesignerCredit";
 import {
   Loader2, CheckCircle, ChevronLeft, ChevronRight, Shield,
   User, Briefcase, MapPin, ClipboardCheck, ClipboardList,
@@ -827,6 +828,9 @@ export function ProjectRegister() {
             )}
 
           </form>
+          <div className="pb-4">
+            <DesignerCredit />
+          </div>
         </div>
       </main>
 

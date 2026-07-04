@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/context/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useLang } from "@/context/LanguageContext";
+import { DesignerCredit } from "@/components/DesignerCredit";
 
 export function AdminRegister() {
   const { token } = useParams<{ token: string }>();
@@ -156,6 +157,7 @@ export function AdminRegister() {
         <p className="text-center text-xs text-muted-foreground mt-5">
           {isAr ? "منصة مسارات" : "Masarat Platform"}
         </p>
+        <DesignerCredit />
       </div>
     </div>
   );
