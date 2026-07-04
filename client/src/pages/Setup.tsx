@@ -11,6 +11,7 @@ import { LanguageToggle } from "@/components/LanguageToggle";
 import { apiRequest } from "@/lib/queryClient";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { useLang } from "@/context/LanguageContext";
+import { DesignerCredit } from "@/components/DesignerCredit";
 
 type FormData = {
   fullName: string;
@@ -209,6 +210,7 @@ export function Setup() {
         <p className="text-center text-xs text-muted-foreground mt-6">
           {appName}
         </p>
+        <DesignerCredit />
       </div>
     </div>
   );
