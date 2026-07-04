@@ -24,6 +24,7 @@ import { ProjectSettings } from "@/pages/admin/ProjectSettings";
 import { GlobalSettings } from "@/pages/admin/GlobalSettings";
 import { ProjectRegister } from "@/pages/ProjectRegister";
 import { ProjectEditForm } from "@/pages/ProjectEditForm";
+import { Toaster } from "@/components/ui/toaster";
 
 const ROLE_LEVEL: Record<string, number> = { viewer: 1, editor: 2, admin: 3 };
 
@@ -127,6 +128,7 @@ export default function App() {
             <AuthProvider>
               <ProjectProvider>
                 <AppRoutes />
+                <Toaster />
               </ProjectProvider>
             </AuthProvider>
           </AppSettingsProvider>

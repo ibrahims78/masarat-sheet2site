@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -77,9 +77,29 @@ function getStatusColor(val: string): string {
   return STATUS_COLORS[val] || "bg-slate-300 dark:bg-slate-600";
 }
 
+function periodToRange(period: string): { dateFrom?: string; dateTo?: string } {
+  const now = new Date();
+  const to = new Date(now);
+  to.setHours(23, 59, 59, 999);
+  const from = new Date(now);
+  from.setHours(0, 0, 0, 0);
+  if (period === "today") {
+    // from/to already set to today's bounds
+  } else if (period === "week") {
+    const day = from.getDay();
+    from.setDate(from.getDate() - day);
+  } else if (period === "month") {
+    from.setDate(1);
+  } else {
+    return {};
+  }
+  return { dateFrom: from.toISOString(), dateTo: to.toISOString() };
+}
+
 export function ProjectRecords() {
   const { id } = useParams<{ id: string }>();
   const [, nav] = useLocation();
+  const urlSearch = useSearch();
   const qc = useQueryClient();
   const { lang } = useLang();
   const isAr = lang === "ar";
@@ -98,6 +118,32 @@ export function ProjectRecords() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [fieldFilters, setFieldFilters] = useState<Record<string, string>>({});
   const [visibleColKeys, setVisibleColKeys] = useState<string[] | null>(null);
+  const [dateRange, setDateRange] = useState<{ dateFrom?: string; dateTo?: string }>({});
+  const [activePeriod, setActivePeriod] = useState<string>("");
+
+  useEffect(() => {
+    if (!urlSearch) return;
+    const sp = new URLSearchParams(urlSearch);
+    const filterParam = sp.get("filter");
+    const periodParam = sp.get("period");
+
+    if (filterParam) {
+      const idx = filterParam.indexOf(":");
+      if (idx > -1) {
+        const key = decodeURIComponent(filterParam.slice(0, idx));
+        const value = decodeURIComponent(filterParam.slice(idx + 1));
+        setFieldFilters(p => ({ ...p, [key]: value }));
+        setFilterOpen(true);
+      }
+    }
+
+    if (periodParam) {
+      setActivePeriod(periodParam);
+      setDateRange(periodToRange(periodParam));
+    }
+
+    setPage(1);
+  }, [urlSearch]);
 
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
@@ -148,8 +194,10 @@ export function ProjectRecords() {
     const p = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (debouncedSearch) p.set("search", debouncedSearch);
     Object.entries(fieldFilters).forEach(([k, v]) => { if (v) p.set(`filter_${k}`, v); });
+    if (dateRange.dateFrom) p.set("dateFrom", dateRange.dateFrom);
+    if (dateRange.dateTo) p.set("dateTo", dateRange.dateTo);
     return p;
-  }, [page, limit, debouncedSearch, fieldFilters]);
+  }, [page, limit, debouncedSearch, fieldFilters, dateRange]);
 
   const { data, isLoading, refetch } = useQuery<RecordsResponse>({
     queryKey: ["/api/projects", id, "records", params.toString()],
@@ -356,9 +404,19 @@ export function ProjectRecords() {
         </div>
 
         {/* ─── Active filter chips ─── */}
-        {activeFilterCount > 0 && (
+        {(activeFilterCount > 0 || activePeriod) && (
           <div className="flex flex-wrap gap-2 items-center">
             <span className="text-xs text-muted-foreground">{isAr ? "الفلاتر:" : "Filters:"}</span>
+            {activePeriod && (
+              <Badge variant="secondary" className="gap-1 pl-1">
+                {isAr
+                  ? (activePeriod === "today" ? "اليوم" : activePeriod === "week" ? "هذا الأسبوع" : activePeriod === "month" ? "هذا الشهر" : activePeriod)
+                  : (activePeriod === "today" ? "Today" : activePeriod === "week" ? "This Week" : activePeriod === "month" ? "This Month" : activePeriod)}
+                <button onClick={() => { setActivePeriod(""); setDateRange({}); }} className="hover:text-red-500">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
             {Object.entries(fieldFilters).filter(([, v]) => v).map(([k, v]) => {
               const field = fields.find(f => f.key === k);
               return (
@@ -370,7 +428,7 @@ export function ProjectRecords() {
                 </Badge>
               );
             })}
-            <button onClick={() => setFieldFilters({})} className="text-xs text-red-500 hover:underline">{isAr ? "مسح الكل" : "Clear All"}</button>
+            <button onClick={() => { setFieldFilters({}); setActivePeriod(""); setDateRange({}); }} className="text-xs text-red-500 hover:underline">{isAr ? "مسح الكل" : "Clear All"}</button>
           </div>
         )}
 
@@ -478,6 +536,26 @@ export function ProjectRecords() {
                           const val = rdata[f.key];
                           const txt = val != null ? String(val) : "";
                           const copyKey = `${record.id}-${f.key}`;
+                          if (f.fieldType === "file") {
+                            return (
+                              <td key={f.id} className="px-3 py-2.5 text-xs max-w-[180px]">
+                                {txt ? (
+                                  <a
+                                    href={txt}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    className="text-primary hover:underline"
+                                    data-testid={`link-file-${copyKey}`}
+                                  >
+                                    {isAr ? "عرض الملف" : "View File"}
+                                  </a>
+                                ) : (
+                                  <span className="text-slate-300 dark:text-slate-600">—</span>
+                                )}
+                              </td>
+                            );
+                          }
                           return (
                             <td key={f.id} className="px-3 py-2.5 text-xs max-w-[180px]">
                               <div className="flex items-center gap-1">

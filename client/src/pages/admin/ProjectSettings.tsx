@@ -14,12 +14,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
 import {
   Save, Loader2, Plus, Trash2, GripVertical, ArrowRight, ExternalLink,
-  CheckCircle2, XCircle, AlertCircle, ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp,
   Upload, TableProperties, Wrench, RefreshCw, BotMessageSquare, ArrowUpToLine,
   History, User, Clock,
 } from "lucide-react";
 import type { Project, ProjectField } from "@shared/schema";
 import { useLang } from "@/context/LanguageContext";
+import { useToast } from "@/hooks/use-toast";
 
 export function ProjectSettings() {
   const { id } = useParams<{ id: string }>();
@@ -27,8 +28,8 @@ export function ProjectSettings() {
   const qc = useQueryClient();
   const { lang } = useLang();
   const isAr = lang === "ar";
+  const { toast } = useToast();
   const [tab, setTab] = useState<"form" | "fields" | "sheets" | "telegram" | "audit">("form");
-  const [testResult, setTestResult] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [fields, setFields] = useState<ProjectField[]>([]);
   const [showGuide, setShowGuide] = useState(false);
@@ -40,16 +41,13 @@ export function ProjectSettings() {
     ok: boolean; message: string;
     matched?: string[]; missing?: string[]; extra?: string[];
   } | null>(null);
-  const [fixResult, setFixResult] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<any | null>(null);
   const [syncDeleted, setSyncDeleted] = useState(false);
   const [sheetsLoading, setSheetsLoading] = useState<"check" | "fix" | "import" | "export" | null>(null);
-  const [exportResult, setExportResult] = useState<string | null>(null);
 
   // Telegram-specific state
   const [chatIdLoading, setChatIdLoading] = useState(false);
   const [chatIdChats, setChatIdChats] = useState<{ id: string; title: string; type: string }[] | null>(null);
-  const [chatIdMsg, setChatIdMsg] = useState<string | null>(null);
 
   // Expanded field for validation
   const [expandedFieldIdx, setExpandedFieldIdx] = useState<number | null>(null);
@@ -98,26 +96,25 @@ export function ProjectSettings() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/projects", id] });
-      setTestResult(isAr ? "✅ تم الحفظ بنجاح" : "✅ Saved successfully");
-      setTimeout(() => setTestResult(null), 3000);
+      toast({ description: isAr ? "✅ تم الحفظ بنجاح" : "✅ Saved successfully" });
     },
-    onError: (err: any) => setTestResult(`❌ ${err.message}`),
+    onError: (err: any) => toast({ variant: "destructive", description: `❌ ${err.message}` }),
   });
 
   const saveFieldsMut = useMutation({
     mutationFn: () => apiRequest("POST", `/api/projects/${id}/fields`, { fields }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/projects", id, "fields"] });
-      setTestResult(isAr ? "✅ تم حفظ الحقول بنجاح" : "✅ Fields saved successfully");
-      setTimeout(() => setTestResult(null), 3000);
+      toast({ description: isAr ? "✅ تم حفظ الحقول بنجاح" : "✅ Fields saved successfully" });
     },
-    onError: (err: any) => setTestResult(`❌ ${err.message}`),
+    onError: (err: any) => toast({ variant: "destructive", description: `❌ ${err.message}` }),
   });
 
   const testSheets = async () => {
-    setTesting(true); setTestResult(null);
-    const res: any = await apiRequest("POST", `/api/projects/${id}/test-sheets`, {}).catch(e => ({ message: `❌ ${e.message}` }));
-    setTestResult(res.message); setTesting(false);
+    setTesting(true);
+    const res: any = await apiRequest("POST", `/api/projects/${id}/test-sheets`, {}).catch(e => ({ ok: false, message: `❌ ${e.message}` }));
+    toast({ variant: res.ok === false ? "destructive" : undefined, description: res.message });
+    setTesting(false);
   };
 
   const checkColumns = async () => {
@@ -127,9 +124,10 @@ export function ProjectSettings() {
   };
 
   const fixHeaders = async () => {
-    setSheetsLoading("fix"); setFixResult(null);
-    const res: any = await apiRequest("POST", `/api/projects/${id}/fix-sheet-headers`, {}).catch(e => ({ message: `❌ ${e.message}` }));
-    setFixResult(res.message); setSheetsLoading(null);
+    setSheetsLoading("fix");
+    const res: any = await apiRequest("POST", `/api/projects/${id}/fix-sheet-headers`, {}).catch(e => ({ ok: false, message: `❌ ${e.message}` }));
+    toast({ variant: res.ok === false ? "destructive" : undefined, description: res.message });
+    setSheetsLoading(null);
   };
 
   const doImport = async () => {
@@ -141,27 +139,28 @@ export function ProjectSettings() {
   };
 
   const doExport = async () => {
-    setSheetsLoading("export"); setExportResult(null);
+    setSheetsLoading("export");
     const res: any = await apiRequest("POST", `/api/projects/${id}/export-to-sheets`, {}).catch(e => ({ ok: false, message: `❌ ${e.message}` }));
-    setExportResult(res.message);
+    toast({ variant: res.ok === false ? "destructive" : undefined, description: res.message });
     setSheetsLoading(null);
   };
 
   const fetchChatId = async (values: any) => {
-    setChatIdLoading(true); setChatIdChats(null); setChatIdMsg(null);
+    setChatIdLoading(true); setChatIdChats(null);
     const res: any = await apiRequest("POST", `/api/projects/${id}/telegram-updates`, { token: values.telegramBotToken }).catch(e => ({ ok: false, message: `❌ ${e.message}` }));
     if (res.ok && res.chats) {
       setChatIdChats(res.chats);
     } else {
-      setChatIdMsg(res.message || (isAr ? "❌ تعذّر جلب Chat ID" : "❌ Could not fetch Chat ID"));
+      toast({ variant: "destructive", description: res.message || (isAr ? "❌ تعذّر جلب Chat ID" : "❌ Could not fetch Chat ID") });
     }
     setChatIdLoading(false);
   };
 
   const testTelegram = async (values: any) => {
-    setTesting(true); setTestResult(null);
-    const res: any = await apiRequest("POST", `/api/projects/${id}/test-telegram`, { token: values.telegramBotToken, chatId: values.telegramChatId }).catch(e => ({ message: `❌ ${e.message}` }));
-    setTestResult(res.message); setTesting(false);
+    setTesting(true);
+    const res: any = await apiRequest("POST", `/api/projects/${id}/test-telegram`, { token: values.telegramBotToken, chatId: values.telegramChatId }).catch(e => ({ ok: false, message: `❌ ${e.message}` }));
+    toast({ variant: res.ok === false ? "destructive" : undefined, description: res.message });
+    setTesting(false);
   };
 
   const addField = () => {
@@ -204,13 +203,6 @@ export function ProjectSettings() {
     { key: "audit",    label: isAr ? "سجل النشاط" : "Activity Log" },
   ] as const;
 
-  const ResultBox = ({ msg }: { msg: string }) => (
-    <div className={`p-3 rounded-lg text-sm flex items-start gap-2 ${msg.startsWith("✅") ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400" : msg.startsWith("⚠️") ? "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400" : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"}`}>
-      {msg.startsWith("✅") ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" /> : msg.startsWith("⚠️") ? <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" /> : <XCircle className="h-4 w-4 shrink-0 mt-0.5" />}
-      <span className="whitespace-pre-wrap break-words">{msg}</span>
-    </div>
-  );
-
   const ACTION_LABEL: Record<string, { ar: string; en: string; color: string }> = {
     create: { ar: "إنشاء", en: "Create", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
     update: { ar: "تعديل", en: "Update", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
@@ -235,7 +227,7 @@ export function ProjectSettings() {
         {/* Tabs */}
         <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl overflow-x-auto">
           {tabs.map(t => (
-            <button key={t.key} onClick={() => { setTab(t.key); setTestResult(null); setCheckResult(null); setFixResult(null); setImportResult(null); setChatIdChats(null); setChatIdMsg(null); }}
+            <button key={t.key} onClick={() => { setTab(t.key); setCheckResult(null); setImportResult(null); setChatIdChats(null); }}
               className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t.key ? "bg-white dark:bg-slate-700 shadow-sm text-primary" : "text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300"}`}
               data-testid={`tab-${t.key}`}>
               {t.label}
@@ -292,7 +284,6 @@ export function ProjectSettings() {
                   <Input {...register("formDisabledMessage")} placeholder={isAr ? "النموذج متوقف مؤقتاً" : "Form is temporarily disabled"} data-testid="input-formDisabledMessage" />
                 </div>
               )}
-              {testResult && <ResultBox msg={testResult} />}
               <Button type="submit" disabled={saveMut.isPending} data-testid="button-save-form">
                 {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Save className="h-4 w-4 ml-1" />}
                 {isAr ? "حفظ الإعدادات" : "Save Settings"}
@@ -320,7 +311,9 @@ export function ProjectSettings() {
                     data-testid={`field-${idx}`}
                   >
                     <div className="flex items-center gap-2">
-                      <GripVertical className="h-4 w-4 text-slate-400 flex-shrink-0" title={isAr ? "اسحب لإعادة الترتيب" : "Drag to reorder"} />
+                      <span title={isAr ? "اسحب لإعادة الترتيب" : "Drag to reorder"}>
+                        <GripVertical className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                      </span>
                       <div className="grid grid-cols-2 gap-2 flex-1">
                         <Input value={f.label} onChange={e => updateField(idx, { label: e.target.value })} placeholder={isAr ? "الاسم المعروض" : "Display Label"} className="text-sm h-8" data-testid={`field-label-${idx}`} />
                         <Input value={f.key} onChange={e => updateField(idx, { key: e.target.value })} placeholder={isAr ? "المفتاح (key)" : "Key (internal)"} className="text-sm h-8 font-mono" data-testid={`field-key-${idx}`} />
@@ -445,7 +438,6 @@ export function ProjectSettings() {
                   </div>
                 ))
               )}
-              {testResult && <ResultBox msg={testResult} />}
               <div className="flex gap-2 pt-2">
                 <Button type="button" variant="outline" size="sm" onClick={addField} data-testid="button-add-field">
                   <Plus className="h-4 w-4 ml-1" />{isAr ? "إضافة حقل" : "Add Field"}
@@ -532,7 +524,6 @@ export function ProjectSettings() {
                   <Label className="text-xs">{isAr ? "مفتاح JSON لـ Service Account" : "Service Account JSON Key"}</Label>
                   <Textarea {...register("googleServiceAccountKey")} placeholder={isAr ? "الصق محتوى ملف JSON هنا" : "Paste JSON file content here"} rows={4} className="font-mono text-xs" data-testid="input-googleServiceAccountKey" />
                 </div>
-                {testResult && <ResultBox msg={testResult} />}
                 <div className="flex gap-2 flex-wrap">
                   <Button type="submit" disabled={saveMut.isPending} data-testid="button-save-sheets">
                     {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Save className="h-4 w-4 ml-1" />}
@@ -580,13 +571,11 @@ export function ProjectSettings() {
                   )}
                 </div>
               )}
-              {fixResult && <ResultBox msg={fixResult} />}
               {importResult && (
                 <div className={`p-3 rounded-lg text-sm ${importResult.ok ? "bg-green-50 dark:bg-green-900/20 text-green-700" : "bg-red-50 dark:bg-red-900/20 text-red-700"}`}>
                   {importResult.message}
                 </div>
               )}
-              {exportResult && <ResultBox msg={exportResult} />}
               <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
                 <input type="checkbox" id="syncDel" checked={syncDeleted} onChange={e => setSyncDeleted(e.target.checked)} className="rounded" />
                 <label htmlFor="syncDel" className="text-xs text-muted-foreground">{isAr ? "مزامنة الحذف عند الاستيراد" : "Sync deletion on import"}</label>
@@ -607,8 +596,6 @@ export function ProjectSettings() {
                 <Label className="text-xs">{isAr ? "Chat ID" : "Chat ID"}</Label>
                 <Input {...register("telegramChatId")} placeholder="-100..." data-testid="input-telegramChatId" />
               </div>
-              {testResult && <ResultBox msg={testResult} />}
-              {chatIdMsg && <ResultBox msg={chatIdMsg} />}
               {chatIdChats && chatIdChats.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-muted-foreground">{isAr ? "المجموعات المتاحة:" : "Available chats:"}</p>

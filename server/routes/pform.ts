@@ -6,11 +6,30 @@ import { appendRecordToSheet, updateRecordRow } from "../services/projectSheets.
 import { insertRecordAtomic } from "../services/recordInsert.js";
 import { decrypt } from "../services/crypto.js";
 import rateLimit from "express-rate-limit";
+import { fileUpload, publicFileUrl } from "../middleware/upload.js";
 
 const router = Router();
 
 const submitLimiter = rateLimit({ windowMs: 60 * 1000, max: 10 });
 const verifyLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { error: "محاولات كثيرة — حاول بعد 15 دقيقة" } });
+const uploadLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, message: { error: "محاولات كثيرة — حاول لاحقاً" } });
+
+// POST upload a file for a public registration form field
+router.post("/:projectId/upload", uploadLimiter, async (req: Request, res: Response) => {
+  const pid = String(req.params.projectId);
+  const [proj] = await db.select({
+    formEnabled: projects.formEnabled,
+    formDisabledMessage: projects.formDisabledMessage,
+  }).from(projects).where(eq(projects.id, pid));
+  if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
+  if (!proj.formEnabled) return res.status(403).json({ error: proj.formDisabledMessage || "النموذج متوقف مؤقتاً" });
+
+  fileUpload.single("file")(req, res, (err: any) => {
+    if (err) return res.status(400).json({ error: err.message || "فشل رفع الملف" });
+    if (!req.file) return res.status(400).json({ error: "لم يتم رفع ملف" });
+    res.json({ url: publicFileUrl(req.file.filename), originalName: req.file.originalname });
+  });
+});
 
 // GET project form info (public)
 router.get("/:projectId/info", async (req: Request, res: Response) => {

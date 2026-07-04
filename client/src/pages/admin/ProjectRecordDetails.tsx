@@ -4,7 +4,7 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, Edit, Loader2, Clock, Printer, CheckCircle2, Circle } from "lucide-react";
+import { ArrowRight, Edit, Loader2, Clock, Printer, CheckCircle2, Circle, FileText } from "lucide-react";
 import type { ProjectRecord, ProjectField, ProjectAuditLog, Project } from "@shared/schema";
 import { useLang } from "@/context/LanguageContext";
 
@@ -129,9 +129,22 @@ export function ProjectRecordDetails() {
                         return (
                           <div key={f.id} className="space-y-0.5">
                             <p className="text-[11px] text-muted-foreground font-medium">{f.label}</p>
-                            <p className={`text-sm font-medium ${isEmpty ? "text-slate-300 dark:text-slate-600" : "text-slate-800 dark:text-slate-100"}`}>
-                              {isEmpty ? "—" : String(val)}
-                            </p>
+                            {f.fieldType === "file" && !isEmpty ? (
+                              <a
+                                href={String(val)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm font-medium text-primary hover:underline flex items-center gap-1.5"
+                                data-testid={`link-file-${f.key}`}
+                              >
+                                <FileText className="h-3.5 w-3.5 shrink-0" />
+                                {isAr ? "عرض الملف" : "View File"}
+                              </a>
+                            ) : (
+                              <p className={`text-sm font-medium ${isEmpty ? "text-slate-300 dark:text-slate-600" : "text-slate-800 dark:text-slate-100"}`}>
+                                {isEmpty ? "—" : String(val)}
+                              </p>
+                            )}
                           </div>
                         );
                       })}

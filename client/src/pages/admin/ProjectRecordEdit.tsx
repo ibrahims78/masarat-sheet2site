@@ -14,12 +14,15 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useLang } from "@/context/LanguageContext";
+import { FileField } from "@/components/FileField";
 
-function FieldInput({ f, register, errors, watch }: {
+function FieldInput({ f, register, errors, watch, setValue, projectId }: {
   f: ProjectField;
   register: any;
   errors: any;
   watch: any;
+  setValue: any;
+  projectId: string;
 }) {
   const { lang } = useLang();
   const isAr = lang === "ar";
@@ -102,6 +105,20 @@ function FieldInput({ f, register, errors, watch }: {
     );
   }
 
+  if (f.fieldType === "file") {
+    return (
+      <>
+        <input type="hidden" {...register(f.key, { required: f.isRequired ? (isAr ? `${f.label} مطلوب` : `${f.label} is required`) : false })} />
+        <FileField
+          value={val}
+          onChange={url => setValue(f.key, url, { shouldValidate: true })}
+          uploadUrl={`/api/projects/${projectId}/upload`}
+          fieldKey={f.key}
+        />
+      </>
+    );
+  }
+
   return (
     <Input
       {...register(f.key, { required: f.isRequired ? (isAr ? `${f.label} مطلوب` : `${f.label} is required`) : false })}
@@ -143,7 +160,7 @@ export function ProjectRecordEdit() {
     queryFn: () => fetch(`/api/projects/${id}/fields`, { credentials: "include" }).then(r => r.json()),
   });
 
-  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<Record<string, any>>();
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<Record<string, any>>();
 
   useEffect(() => {
     if (data?.record) {
@@ -240,7 +257,7 @@ export function ProjectRecordEdit() {
                       {f.label}
                       {f.isRequired && <span className="text-red-500 mr-1">*</span>}
                     </Label>
-                    <FieldInput f={f} register={register} errors={errors} watch={watch} />
+                    <FieldInput f={f} register={register} errors={errors} watch={watch} setValue={setValue} projectId={id!} />
                     {(errors as any)[f.key] && (
                       <p className="text-xs text-red-500">{(errors as any)[f.key]?.message}</p>
                     )}

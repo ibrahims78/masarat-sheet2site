@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { User } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 type ExtUser = User & { lastLoginAt?: string | Date | null };
 
@@ -27,12 +28,10 @@ export function GlobalSettings() {
   const { lang } = useLang();
   const ar = lang === "ar";
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [tab, setTab] = useState<"general" | "smtp" | "users">("general");
   const [showPass, setShowPass] = useState(false);
-  const [createResult, setCreateResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [inviteResult, setInviteResult] = useState<string | null>(null);
-  const [saveResult, setSaveResult] = useState<{ ok: boolean; msg: string } | null>(null);
-  const [smtpTestResult, setSmtpTestResult] = useState<string | null>(null);
   const [smtpTesting, setSmtpTesting] = useState(false);
 
   // Reset password dialog
@@ -40,7 +39,6 @@ export function GlobalSettings() {
   const [resetUserName, setResetUserName] = useState("");
   const [newPass, setNewPass] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
-  const [resetResult, setResetResult] = useState<string | null>(null);
   const [showNewPass, setShowNewPass] = useState(false);
 
   // Delete user confirm dialog
@@ -92,10 +90,9 @@ export function GlobalSettings() {
     mutationFn: (data: any) => apiRequest("PATCH", "/api/projects/global-settings", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/projects/global-settings"] });
-      setSaveResult({ ok: true, msg: ar ? "✅ تم الحفظ بنجاح" : "✅ Saved successfully" });
-      setTimeout(() => setSaveResult(null), 3000);
+      toast({ description: ar ? "✅ تم الحفظ بنجاح" : "✅ Saved successfully" });
     },
-    onError: (err: any) => setSaveResult({ ok: false, msg: `❌ ${err.message}` }),
+    onError: (err: any) => toast({ variant: "destructive", description: `❌ ${err.message}` }),
   });
 
   const inviteMut = useMutation({
@@ -113,11 +110,10 @@ export function GlobalSettings() {
     mutationFn: (data: any) => apiRequest("POST", "/api/projects/create-user", data),
     onSuccess: (_, vars: any) => {
       qc.invalidateQueries({ queryKey: ["/api/projects/users-list"] });
-      setCreateResult({ ok: true, msg: ar ? `✅ تم إنشاء حساب ${vars.fullName} بنجاح` : `✅ Account ${vars.fullName} created successfully` });
+      toast({ description: ar ? `✅ تم إنشاء حساب ${vars.fullName} بنجاح` : `✅ Account ${vars.fullName} created successfully` });
       resetUser({ fullName: "", email: "", password: "", role: "viewer" });
-      setTimeout(() => setCreateResult(null), 4000);
     },
-    onError: (err: any) => setCreateResult({ ok: false, msg: `❌ ${err.message}` }),
+    onError: (err: any) => toast({ variant: "destructive", description: `❌ ${err.message}` }),
   });
 
   const deleteUserMut = useMutation({
@@ -133,7 +129,6 @@ export function GlobalSettings() {
 
   const testSmtp = async () => {
     setSmtpTesting(true);
-    setSmtpTestResult(null);
     const vals = getSmtpValues();
     const res: any = await apiRequest("POST", "/api/projects/test-email", {
       host: vals.smtpHost,
@@ -141,21 +136,24 @@ export function GlobalSettings() {
       user: vals.smtpUser,
       pass: vals.smtpPass,
     }).catch(e => ({ ok: false, message: `❌ ${e.message}` }));
-    setSmtpTestResult(res.message);
+    toast({ variant: res.ok ? undefined : "destructive", description: res.message });
     setSmtpTesting(false);
   };
 
   const doResetPassword = async () => {
     if (!resetUserId || newPass.length < 8) return;
     setResetLoading(true);
-    setResetResult(null);
     const res: any = await apiRequest("POST", `/api/projects/reset-password/${resetUserId}`, { password: newPass })
       .catch(e => ({ ok: false, message: `❌ ${e.message}` }));
-    setResetResult(res.ok ? (ar ? "✅ تم تغيير كلمة المرور بنجاح" : "✅ Password changed successfully") : res.message || (ar ? "❌ فشل" : "❌ Failed"));
+    const ok = res.ok !== false;
+    toast({
+      variant: ok ? undefined : "destructive",
+      description: ok ? (ar ? "✅ تم تغيير كلمة المرور بنجاح" : "✅ Password changed successfully") : res.message || (ar ? "❌ فشل" : "❌ Failed"),
+    });
     setResetLoading(false);
-    if (res.ok) {
+    if (ok) {
       setNewPass("");
-      setTimeout(() => { setResetUserId(null); setResetResult(null); }, 2000);
+      setResetUserId(null);
     }
   };
 
@@ -197,7 +195,7 @@ export function GlobalSettings() {
           {tabs.map(t => (
             <button
               key={t.key}
-              onClick={() => { setTab(t.key); setSaveResult(null); setSmtpTestResult(null); }}
+              onClick={() => setTab(t.key)}
               className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all ${
                 tab === t.key
                   ? "bg-white dark:bg-slate-700 shadow-sm text-primary"
@@ -238,7 +236,6 @@ export function GlobalSettings() {
                   data-testid="input-invitationHours"
                 />
               </div>
-              {saveResult && <ResultBox msg={saveResult.msg} />}
               <Button type="submit" disabled={saveMut.isPending} data-testid="button-save-general">
                 {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Save className="h-4 w-4 ml-1" />}
                 {ar ? "حفظ الإعدادات" : "Save Settings"}
@@ -364,9 +361,6 @@ export function GlobalSettings() {
                 <Input {...regSmtp("smtpFromName")} placeholder={ar ? "مسارات" : "Masar"} data-testid="input-smtpFromName" />
               </div>
 
-              {smtpTestResult && <ResultBox msg={smtpTestResult} />}
-              {saveResult && <ResultBox msg={saveResult.msg} />}
-
               <div className="flex gap-2 flex-wrap">
                 <Button type="submit" disabled={saveMut.isPending} data-testid="button-save-smtp">
                   {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Save className="h-4 w-4 ml-1" />}
@@ -442,7 +436,6 @@ export function GlobalSettings() {
                                 onClick={() => {
                                   setResetUserId(u.id);
                                   setResetUserName(u.fullName);
-                                  setResetResult(null);
                                   setNewPass("");
                                 }}
                                 data-testid={`button-reset-pass-${u.id}`}
@@ -529,7 +522,6 @@ export function GlobalSettings() {
                     </select>
                   </div>
                 </div>
-                {createResult && <ResultBox msg={createResult.msg} />}
                 <Button
                   type="submit"
                   size="sm"
@@ -583,7 +575,7 @@ export function GlobalSettings() {
       </div>
 
       {/* Reset Password Dialog */}
-      <Dialog open={!!resetUserId} onOpenChange={v => { if (!v) { setResetUserId(null); setResetResult(null); setNewPass(""); } }}>
+      <Dialog open={!!resetUserId} onOpenChange={v => { if (!v) { setResetUserId(null); setNewPass(""); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -618,19 +610,9 @@ export function GlobalSettings() {
                 <p className="text-xs text-red-500">{ar ? "كلمة المرور يجب أن تكون 8 أحرف على الأقل" : "Password must be at least 8 characters"}</p>
               )}
             </div>
-            {resetResult && (
-              <div className={`p-2.5 rounded-lg text-sm border flex items-center gap-2 ${
-                resetResult.startsWith("✅")
-                  ? "bg-green-50 dark:bg-green-900/20 border-green-200 text-green-700"
-                  : "bg-red-50 dark:bg-red-900/20 border-red-200 text-red-700"
-              }`}>
-                {resetResult.startsWith("✅") ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-                {resetResult}
-              </div>
-            )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setResetUserId(null); setResetResult(null); setNewPass(""); }}>
+            <Button variant="outline" onClick={() => { setResetUserId(null); setNewPass(""); }}>
               {ar ? "إلغاء" : "Cancel"}
             </Button>
             <Button

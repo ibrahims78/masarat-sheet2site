@@ -153,6 +153,14 @@ export const insertUserSchema = z.object({
   role: z.enum(["admin", "editor", "viewer"]).default("viewer"),
 });
 
+export const createUserSchema = insertUserSchema.extend({
+  password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
+});
+
+export const bulkDeleteSchema = z.object({
+  ids: z.array(z.string().uuid("معرف غير صالح")).min(1, "يجب تحديد سجل واحد على الأقل"),
+});
+
 export const projectFieldSchema = z.object({
   key: z.string().min(1),
   label: z.string().min(1),

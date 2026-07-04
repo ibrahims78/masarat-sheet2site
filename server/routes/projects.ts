@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { db } from "../db.js";
-import { projects, projectFields, projectRecords, projectAuditLog, users, userInvitations, systemSettings, projectFieldSchema, createProjectSchema, updateProjectSchema, updateUserRoleSchema, globalSettingsSchema } from "../../shared/schema.js";
+import { projects, projectFields, projectRecords, projectAuditLog, users, userInvitations, systemSettings, projectFieldSchema, createProjectSchema, updateProjectSchema, updateUserRoleSchema, globalSettingsSchema, createUserSchema, bulkDeleteSchema } from "../../shared/schema.js";
 import { eq, desc, count, gte, and, ilike, or, gt, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin, requireEditorOrAdmin } from "../middleware/auth.js";
 import { encrypt, decrypt } from "../services/crypto.js";
@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from "uuid";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import { Readable } from "stream";
+import { fileUpload, publicFileUrl } from "../middleware/upload.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -36,16 +37,28 @@ async function requireProjectOwnership(req: Request, res: Response, next: NextFu
 
 // ─── PROJECTS CRUD ───────────────────────────────────────────
 
+const PROJECT_LIST_COLUMNS = {
+  id: projects.id,
+  name: projects.name,
+  description: projects.description,
+  createdBy: projects.createdBy,
+  createdAt: projects.createdAt,
+  formEnabled: projects.formEnabled,
+  formTitle: projects.formTitle,
+  steps: projects.steps,
+  updatedAt: projects.updatedAt,
+};
+
 router.get("/", requireAuth, async (req, res) => {
   try {
     const role = (req.session as any).role;
     const userId = (req.session as any).userId;
     // admin & viewer → all projects; editor → only their own
     const list = role === "editor"
-      ? await db.select().from(projects)
+      ? await db.select(PROJECT_LIST_COLUMNS).from(projects)
           .where(eq(projects.createdBy, userId))
           .orderBy(desc(projects.createdAt))
-      : await db.select().from(projects).orderBy(desc(projects.createdAt));
+      : await db.select(PROJECT_LIST_COLUMNS).from(projects).orderBy(desc(projects.createdAt));
     res.json(list);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -86,16 +99,34 @@ router.get("/users-list", requireAdmin, async (_req, res) => {
 
 // ─── DYNAMIC ROUTES ───────────────────────────────────────────
 
+const PROJECT_SAFE_COLUMNS = {
+  id: projects.id,
+  name: projects.name,
+  description: projects.description,
+  createdBy: projects.createdBy,
+  createdAt: projects.createdAt,
+  invitationCode: projects.invitationCode,
+  editTokenHours: projects.editTokenHours,
+  formEnabled: projects.formEnabled,
+  formDisabledMessage: projects.formDisabledMessage,
+  formTitle: projects.formTitle,
+  formSubtitle: projects.formSubtitle,
+  steps: projects.steps,
+  googleSheetId: projects.googleSheetId,
+  googleSheetName: projects.googleSheetName,
+  googleServiceAccountEmail: projects.googleServiceAccountEmail,
+  googleDriveFolderId: projects.googleDriveFolderId,
+  telegramChatId: projects.telegramChatId,
+  updatedAt: projects.updatedAt,
+  hasGoogleKey: sql<boolean>`(${projects.googleServiceAccountKeyEnc} is not null)`,
+  hasTelegramToken: sql<boolean>`(${projects.telegramBotTokenEnc} is not null)`,
+};
+
 router.get("/:id", requireAuth, async (req: Request, res: Response) => {
   try {
-    const [proj] = await db.select().from(projects).where(eq(projects.id, String(req.params.id)));
+    const [proj] = await db.select(PROJECT_SAFE_COLUMNS).from(projects).where(eq(projects.id, String(req.params.id)));
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
-    const { googleServiceAccountKeyEnc, telegramBotTokenEnc, ...safe } = proj;
-    res.json({
-      ...safe,
-      hasGoogleKey: !!googleServiceAccountKeyEnc,
-      hasTelegramToken: !!telegramBotTokenEnc,
-    });
+    res.json(proj);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -240,6 +271,16 @@ router.post("/parse-excel", requireEditorOrAdmin, upload.single("file"), async (
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ─── FILE UPLOADS (admin — for add/edit record forms) ─────────
+
+router.post("/:id/upload", requireEditorOrAdmin, requireProjectOwnership, (req: Request, res: Response) => {
+  fileUpload.single("file")(req, res, (err: any) => {
+    if (err) return res.status(400).json({ error: err.message || "فشل رفع الملف" });
+    if (!req.file) return res.status(400).json({ error: "لم يتم رفع ملف" });
+    res.json({ url: publicFileUrl(req.file.filename), originalName: req.file.originalname });
+  });
 });
 
 // ─── PROJECT FIELDS ──────────────────────────────────────────
@@ -476,7 +517,9 @@ router.delete("/:id/records/:recordId", requireEditorOrAdmin, requireProjectOwne
 
 router.post("/:id/records/bulk-delete", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
-    const { ids } = req.body as { ids: string[] };
+    const parsed = bulkDeleteSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.errors[0].message }); return; }
+    const { ids } = parsed.data;
     const pid = String(req.params.id);
     for (const rid of ids) {
       // Scope deletion to this project to prevent cross-project IDOR
@@ -799,12 +842,15 @@ router.post("/send-invitation", requireAdmin, async (req: Request, res: Response
 
 router.post("/create-user", requireAdmin, async (req: Request, res: Response) => {
   try {
+    const parsed = createUserSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.errors[0].message }); return; }
+    const { fullName, email, password, role } = parsed.data;
     const bcrypt = await import("bcryptjs");
-    const { fullName, email, password, role } = req.body;
     const hash = await bcrypt.default.hash(password, 12);
     const [user] = await db.insert(users).values({ fullName, email, passwordHash: hash, role: role || "viewer", mustChangePassword: true }).returning({ id: users.id });
     res.json({ ok: true, userId: user.id });
   } catch (err: any) {
+    if (err.code === "23505") { res.status(409).json({ error: "البريد الإلكتروني مستخدم بالفعل" }); return; }
     res.status(500).json({ error: err.message });
   }
 });

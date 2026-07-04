@@ -11,6 +11,7 @@ import { pool } from "./db.js";
 import authRoutes from "./routes/auth.js";
 import projectsRoutes from "./routes/projects.js";
 import pformRoutes from "./routes/pform.js";
+import { uploadsDir } from "./middleware/upload.js";
 
 dotenv.config();
 
@@ -75,6 +76,8 @@ app.use(session({
     sameSite: "lax",
   },
 }));
+
+app.use("/uploads", express.static(uploadsDir));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/projects", projectsRoutes);

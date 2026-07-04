@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLang } from "@/context/LanguageContext";
+import { FileField } from "@/components/FileField";
 import type { ProjectField } from "@shared/schema";
 
 const STEP_ICONS = [Shield, User, Briefcase, Building2, MapPin, ClipboardCheck, FileText];
@@ -49,12 +50,16 @@ export function ProjectRegister() {
     queryFn: () => fetch(`/api/pform/${projectId}/info`).then(r => r.json()),
   });
 
-  const { register, handleSubmit, trigger, getValues, formState: { errors } } = useForm<Record<string, any>>();
+  const { register, handleSubmit, trigger, getValues, setValue, watch, formState: { errors } } = useForm<Record<string, any>>();
 
   const project = formInfo?.project;
   const fields = formInfo?.fields || [];
   const steps = project?.steps || [isAr ? "التسجيل" : "Registration"];
   const totalSteps = steps.length;
+
+  const draftKey = `pform_draft_${projectId}`;
+  const draftRestoredRef = useRef(false);
+  const [draftRestored, setDraftRestored] = useState(false);
 
   useEffect(() => {
     if (project && !project.requiresCode && !codeVerified && !codeSkipped) {
@@ -62,6 +67,50 @@ export function ProjectRegister() {
       setCodeVerified(true);
     }
   }, [project]);
+
+  // Restore autosaved draft once fields are loaded
+  useEffect(() => {
+    if (draftRestoredRef.current) return;
+    if (!fields.length) return;
+    draftRestoredRef.current = true;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft && typeof draft === "object") {
+          Object.entries(draft.values || {}).forEach(([key, val]) => {
+            setValue(key, val as any);
+          });
+          if (typeof draft.step === "number" && draft.step >= 0 && draft.step < totalSteps) {
+            setStep(draft.step);
+          }
+          setDraftRestored(true);
+        }
+      }
+    } catch {
+      // ignore corrupt draft
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fields.length]);
+
+  // Autosave form values + current step to localStorage (debounced)
+  const watchedValues = watch();
+  useEffect(() => {
+    if (!codeVerified || submitted) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify({ values: watchedValues, step }));
+      } catch {
+        // storage unavailable — ignore
+      }
+    }, 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(watchedValues), step, codeVerified, submitted]);
+
+  const clearDraft = () => {
+    try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+  };
 
   useEffect(() => {
     if (headerRef.current) {
@@ -98,7 +147,7 @@ export function ProjectRegister() {
       body: JSON.stringify(formData),
     }).then(r => r.json()),
     onSuccess: (data) => {
-      if (data.ok) { setSubmitted(true); setEditToken(data.editToken); setTokenHours(data.tokenHours); }
+      if (data.ok) { setSubmitted(true); setEditToken(data.editToken); setTokenHours(data.tokenHours); clearDraft(); }
     },
   });
 
@@ -373,6 +422,16 @@ export function ProjectRegister() {
             </label>
           ))}
         </div>
+      ) : f.fieldType === "file" ? (
+        <>
+          <input type="hidden" {...register(f.key, { required: f.isRequired ? (isAr ? `${f.label} مطلوب` : `${f.label} is required`) : false })} />
+          <FileField
+            value={watch(f.key)}
+            onChange={url => setValue(f.key, url, { shouldValidate: true })}
+            uploadUrl={`/api/pform/${projectId}/upload`}
+            fieldKey={f.key}
+          />
+        </>
       ) : (
         <Input
           {...register(f.key, { required: f.isRequired ? (isAr ? `${f.label} مطلوب` : `${f.label} is required`) : false })}
@@ -491,6 +550,11 @@ export function ProjectRegister() {
             <span className="bg-primary/10 text-primary text-xs font-bold px-3 py-1.5 rounded-full whitespace-nowrap">
               {isAr ? `الخطوة ${step + 1} من ${totalSteps}` : `Step ${step + 1} of ${totalSteps}`}
             </span>
+            {draftRestored && (
+              <span className="text-[10px] text-green-600 dark:text-green-400 font-medium whitespace-nowrap hidden sm:inline" data-testid="text-draft-restored">
+                {isAr ? "تم استرجاع بياناتك المحفوظة" : "Your saved draft was restored"}
+              </span>
+            )}
             {/* Title */}
             <p className="flex-1 text-sm font-bold text-slate-800 dark:text-slate-100 text-center truncate">
               {project.formTitle}
