@@ -96,6 +96,10 @@ export const projectFields = pgTable("project_fields", {
   stepNumber: integer("step_number").default(1),
   orderIndex: integer("order_index").default(0),
   placeholder: text("placeholder"),
+  validationMin: integer("validation_min"),
+  validationMax: integer("validation_max"),
+  validationRegex: text("validation_regex"),
+  validationMessage: text("validation_message"),
 });
 
 // ============================================================
@@ -152,11 +156,62 @@ export const insertUserSchema = z.object({
 export const projectFieldSchema = z.object({
   key: z.string().min(1),
   label: z.string().min(1),
-  fieldType: z.enum(["text", "number", "date", "select", "radio", "textarea", "phone", "email", "checkbox"]).default("text"),
+  fieldType: z.enum(["text", "number", "date", "select", "radio", "textarea", "phone", "email", "checkbox", "autoincrement", "file"]).default("text"),
   isRequired: z.boolean().default(false),
   isVisible: z.boolean().default(true),
   options: z.array(z.string()).optional(),
   stepNumber: z.number().int().min(1).default(1),
   orderIndex: z.number().int().default(0),
   placeholder: z.string().optional(),
+  validationMin: z.number().optional(),
+  validationMax: z.number().optional(),
+  validationRegex: z.string().optional(),
+  validationMessage: z.string().optional(),
+});
+
+export const createProjectSchema = z.object({
+  name: z.string().min(1, "اسم المشروع مطلوب"),
+  description: z.string().optional(),
+  formTitle: z.string().optional(),
+  formSubtitle: z.string().optional(),
+  invitationCode: z.string().optional(),
+  steps: z.array(z.string()).optional(),
+});
+
+export const updateProjectSchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().optional(),
+  formTitle: z.string().optional(),
+  formSubtitle: z.string().optional(),
+  invitationCode: z.string().optional(),
+  editTokenHours: z.number().int().min(1).max(8760).optional(),
+  formEnabled: z.boolean().optional(),
+  formDisabledMessage: z.string().optional(),
+  steps: z.array(z.string()).optional(),
+  googleSheetId: z.string().optional(),
+  googleSheetName: z.string().optional(),
+  googleServiceAccountEmail: z.string().email().optional().or(z.literal("")),
+  googleServiceAccountKey: z.string().optional(),
+  googleDriveFolderId: z.string().optional(),
+  telegramChatId: z.string().optional(),
+  telegramBotToken: z.string().optional(),
+});
+
+export const updateUserRoleSchema = z.object({
+  role: z.enum(["admin", "editor", "viewer"]),
+  fullName: z.string().min(2).optional(),
+  email: z.string().email().optional(),
+});
+
+export const globalSettingsSchema = z.object({
+  appName: z.string().min(1).optional(),
+  appLogoUrl: z.string().optional(),
+  defaultLanguage: z.enum(["ar", "en"]).optional(),
+  timezone: z.string().optional(),
+  invitationExpiryHours: z.number().int().min(1).max(8760).optional(),
+  smtpHost: z.string().optional(),
+  smtpPort: z.number().int().min(1).max(65535).optional(),
+  smtpUser: z.string().optional(),
+  smtpPass: z.string().optional(),
+  smtpFromName: z.string().optional(),
 });

@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import {
   LayoutDashboard, Users, Download, Settings, LogOut,
   Menu, ChevronLeft, ChevronRight, FolderKanban, Plus,
-  ChevronDown, Activity, Globe,
+  ChevronDown, Activity, Globe, Search,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { LanguageToggle } from "./LanguageToggle";
@@ -29,8 +29,15 @@ export function Layout({ children, projectId }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
 
   const activeProject = projectId ? projects.find(p => p.id === projectId) || currentProject : currentProject;
+
+  const filteredProjects = useMemo(() => {
+    if (!projectSearch.trim()) return projects;
+    const q = projectSearch.toLowerCase();
+    return projects.filter(p => p.name.toLowerCase().includes(q));
+  }, [projects, projectSearch]);
 
   const handleLogout = async () => { await logout(); nav("/admin/login"); };
   const isAr = lang === "ar";
@@ -79,13 +86,29 @@ export function Layout({ children, projectId }: LayoutProps) {
 
           {projectPickerOpen && (
             <div className="mt-1 bg-white dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 shadow-lg overflow-hidden">
-              {projects.map(p => (
+              {projects.length > 4 && (
+                <div className="p-2 border-b border-slate-100 dark:border-slate-600">
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600">
+                    <Search className="h-3 w-3 text-slate-400 flex-shrink-0" />
+                    <input
+                      value={projectSearch}
+                      onChange={e => setProjectSearch(e.target.value)}
+                      placeholder={isAr ? "بحث..." : "Search..."}
+                      className="flex-1 text-xs bg-transparent outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400"
+                      data-testid="input-project-search"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+              )}
+              {filteredProjects.map(p => (
                 <button
                   key={p.id}
                   onClick={() => {
                     setCurrentProject(p);
                     nav(`/admin/projects/${p.id}/dashboard`);
                     setProjectPickerOpen(false);
+                    setProjectSearch("");
                     setMobileOpen(false);
                   }}
                   className={cn(

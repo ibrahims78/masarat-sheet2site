@@ -99,6 +99,8 @@ export function ProjectRecords() {
   const [fieldFilters, setFieldFilters] = useState<Record<string, string>>({});
   const [visibleColKeys, setVisibleColKeys] = useState<string[] | null>(null);
 
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
   // Import dialog state
   const [importOpen, setImportOpen] = useState(false);
   const [syncDeleted, setSyncDeleted] = useState(false);
@@ -268,7 +270,7 @@ export function ProjectRecords() {
           <div className="flex items-center gap-2 flex-wrap">
             {selected.size > 0 && (
               <Button variant="destructive" size="sm"
-                onClick={() => { if (confirm(isAr ? `حذف ${selected.size} سجل؟` : `Delete ${selected.size} records?`)) bulkDeleteMut.mutate([...selected]); }}
+                onClick={() => setBulkDeleteOpen(true)}
                 disabled={bulkDeleteMut.isPending} data-testid="button-bulk-delete">
                 {bulkDeleteMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Trash2 className="h-4 w-4 ml-1" />}
                 {isAr ? `حذف ${selected.size} محدد` : `Delete ${selected.size} selected`}
@@ -589,6 +591,27 @@ export function ProjectRecords() {
                 <Button variant="outline" onClick={() => setViewRecord(null)}>{isAr ? "إغلاق" : "Close"}</Button>
                 <Button onClick={() => nav(`/admin/projects/${id}/records/${viewRecord?.id}/edit`)}>{isAr ? "تعديل السجل" : "Edit Record"}</Button>
               </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ─── Bulk Delete Confirmation ─── */}
+        <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{isAr ? "حذف السجلات المحددة" : "Delete Selected Records"}</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              {isAr
+                ? `هل أنت متأكد من حذف ${selected.size} سجل؟ لا يمكن التراجع عن هذا الإجراء.`
+                : `Are you sure you want to delete ${selected.size} records? This action cannot be undone.`}
+            </p>
+            <DialogFooter className="gap-2 pt-4">
+              <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>{isAr ? "إلغاء" : "Cancel"}</Button>
+              <Button variant="destructive" onClick={() => { bulkDeleteMut.mutate([...selected]); setBulkDeleteOpen(false); }} disabled={bulkDeleteMut.isPending}>
+                {bulkDeleteMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 ml-1" />}
+                {isAr ? "حذف" : "Delete"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

@@ -43,6 +43,10 @@ export function GlobalSettings() {
   const [resetResult, setResetResult] = useState<string | null>(null);
   const [showNewPass, setShowNewPass] = useState(false);
 
+  // Delete user confirm dialog
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [deleteUserName, setDeleteUserName] = useState("");
+
   const { data: settings } = useQuery<any>({
     queryKey: ["/api/projects/global-settings"],
     queryFn: () => fetch("/api/projects/global-settings", { credentials: "include" }).then(r => r.json()),
@@ -448,9 +452,7 @@ export function GlobalSettings() {
                               <Button
                                 variant="ghost" size="icon"
                                 className="h-7 w-7 text-red-400 hover:text-red-600"
-                                onClick={() => {
-                                  if (confirm(ar ? `حذف مستخدم "${u.fullName}"؟` : `Delete user "${u.fullName}"?`)) deleteUserMut.mutate(u.id);
-                                }}
+                                onClick={() => { setDeleteUserId(u.id); setDeleteUserName(u.fullName); }}
                                 data-testid={`button-delete-user-${u.id}`}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -638,6 +640,27 @@ export function GlobalSettings() {
             >
               {resetLoading ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <KeyRound className="h-4 w-4 ml-1" />}
               {ar ? "تغيير كلمة المرور" : "Change Password"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Delete User Confirm Dialog ─── */}
+      <Dialog open={!!deleteUserId} onOpenChange={o => !o && setDeleteUserId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{ar ? "حذف مستخدم" : "Delete User"}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {ar
+              ? `هل أنت متأكد من حذف مستخدم "${deleteUserName}"؟ لا يمكن التراجع عن هذا الإجراء.`
+              : `Are you sure you want to delete "${deleteUserName}"? This action cannot be undone.`}
+          </p>
+          <DialogFooter className="gap-2 pt-4">
+            <Button variant="outline" onClick={() => setDeleteUserId(null)}>{ar ? "إلغاء" : "Cancel"}</Button>
+            <Button variant="destructive" onClick={() => { deleteUserMut.mutate(deleteUserId!); setDeleteUserId(null); }} disabled={deleteUserMut.isPending}>
+              {deleteUserMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 ml-1" />}
+              {ar ? "حذف" : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>

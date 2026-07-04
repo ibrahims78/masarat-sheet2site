@@ -4,7 +4,8 @@ import { Layout } from "@/components/Layout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Users, TrendingUp, Calendar, Clock, Plus, ExternalLink, Loader2, Settings, Download, BarChart2, PieChart as PieIcon } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Users, TrendingUp, Calendar, Clock, Plus, ExternalLink, Settings, Download, BarChart2, PieChart as PieIcon } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, PieChart, Pie, Legend,
@@ -51,10 +52,10 @@ export function ProjectDashboard() {
   });
 
   const statCards = [
-    { label: isAr ? "إجمالي السجلات" : "Total Records", value: stats?.total ?? 0, icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/20" },
-    { label: isAr ? "هذا الشهر" : "This Month", value: stats?.month ?? 0, icon: Calendar, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/20" },
-    { label: isAr ? "هذا الأسبوع" : "This Week", value: stats?.week ?? 0, icon: TrendingUp, color: "text-green-600 bg-green-50 dark:bg-green-900/20" },
-    { label: isAr ? "اليوم" : "Today", value: stats?.today ?? 0, icon: Clock, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/20" },
+    { label: isAr ? "إجمالي السجلات" : "Total Records", value: stats?.total ?? 0, icon: Users, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/20", filter: "" },
+    { label: isAr ? "هذا الشهر" : "This Month", value: stats?.month ?? 0, icon: Calendar, color: "text-purple-600 bg-purple-50 dark:bg-purple-900/20", filter: "month" },
+    { label: isAr ? "هذا الأسبوع" : "This Week", value: stats?.week ?? 0, icon: TrendingUp, color: "text-green-600 bg-green-50 dark:bg-green-900/20", filter: "week" },
+    { label: isAr ? "اليوم" : "Today", value: stats?.today ?? 0, icon: Clock, color: "text-orange-600 bg-orange-50 dark:bg-orange-900/20", filter: "today" },
   ];
 
   const distFields = distData?.fields || [];
@@ -100,138 +101,156 @@ export function ProjectDashboard() {
           </div>
         </div>
 
-        {isLoading ? (
-          <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-        ) : (
-          <>
-            {/* ─── Stat cards ─── */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {statCards.map(card => (
-                <Card key={card.label} className="p-4" data-testid={`stat-${card.label}`}>
+        {/* ─── Stat cards (with skeleton loading) ─── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {isLoading
+            ? [...Array(4)].map((_, i) => (
+                <Card key={i} className="p-4">
+                  <Skeleton className="w-10 h-10 rounded-xl mb-3" />
+                  <Skeleton className="h-7 w-16 mb-1" />
+                  <Skeleton className="h-3 w-24" />
+                </Card>
+              ))
+            : statCards.map(card => (
+                <Card
+                  key={card.label}
+                  className="p-4 cursor-pointer hover:shadow-md hover:border-primary/30 transition-all"
+                  data-testid={`stat-${card.label}`}
+                  onClick={() => nav(`/admin/projects/${id}/records${card.filter ? `?period=${card.filter}` : ""}`)}
+                  title={isAr ? "عرض السجلات المفلترة" : "View filtered records"}
+                >
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${card.color}`}>
                     <card.icon className="h-5 w-5" />
                   </div>
                   <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{card.value.toLocaleString(isAr ? "ar-EG" : "en-US")}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">{card.label}</div>
                 </Card>
-              ))}
-            </div>
+              ))
+          }
+        </div>
 
-            {/* ─── Trend chart ─── */}
-            {stats?.dailyTrend && stats.dailyTrend.length > 0 && (
+        {/* ─── Trend chart ─── */}
+        {stats?.dailyTrend && stats.dailyTrend.length > 0 && (
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">📈 {isAr ? "التسجيلات خلال آخر 14 يوم" : "Registrations — Last 14 Days"}</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={stats.dailyTrend}>
+                <defs>
+                  <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={dateLabel} />
+                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                <Tooltip formatter={(v: any) => [v, isAr ? "سجل" : "records"]} labelFormatter={l => `${isAr ? "تاريخ" : "Date"}: ${l}`} />
+                <Area type="monotone" dataKey="count" stroke="#3b82f6" fill="url(#grad1)" strokeWidth={2} dot={{ r: 3 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
+
+        {/* ─── Distribution Charts (C2 — clickable bars/slices) ─── */}
+        {(barData.length > 0 || pieData.length > 0) && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+            {barData.length > 0 && barField && (
               <Card className="p-5">
-                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">📈 {isAr ? "التسجيلات خلال آخر 14 يوم" : "Registrations — Last 14 Days"}</h3>
-                <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart data={stats.dailyTrend}>
-                    <defs>
-                      <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={dateLabel} />
-                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                    <Tooltip formatter={(v: any) => [v, isAr ? "سجل" : "records"]} labelFormatter={l => `${isAr ? "تاريخ" : "Date"}: ${l}`} />
-                    <Area type="monotone" dataKey="count" stroke="#3b82f6" fill="url(#grad1)" strokeWidth={2} dot={{ r: 3 }} />
-                  </AreaChart>
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1 flex items-center gap-2">
+                  <BarChart2 className="h-4 w-4 text-blue-500" />
+                  {isAr ? `توزيع حسب: ${barField.label}` : `Distribution by: ${barField.label}`}
+                </h3>
+                <p className="text-[10px] text-muted-foreground mb-3">{isAr ? "انقر على شريط لعرض السجلات المفلترة" : "Click a bar to filter records"}</p>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={barData} layout="vertical" margin={{ right: 16, left: 8 }}>
+                    <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="value" tick={{ fontSize: 10, textAnchor: "end" }} width={90} />
+                    <Tooltip formatter={(v: any) => [v, isAr ? "سجل" : "records"]} />
+                    <Bar
+                      dataKey="count"
+                      radius={[0, 4, 4, 0]}
+                      style={{ cursor: "pointer" }}
+                      onClick={(d: any) => nav(`/admin/projects/${id}/records?filter=${encodeURIComponent(barField.key)}:${encodeURIComponent(d.value)}`)}
+                    >
+                      {barData.map((_, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </Card>
             )}
 
-            {/* ─── Distribution Charts ─── */}
-            {(barData.length > 0 || pieData.length > 0) && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-                {barData.length > 0 && barField && (
-                  <Card className="p-5">
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
-                      <BarChart2 className="h-4 w-4 text-blue-500" />
-                      {isAr ? `توزيع حسب: ${barField.label}` : `Distribution by: ${barField.label}`}
-                    </h3>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={barData} layout="vertical" margin={{ right: 16, left: 8 }}>
-                        <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-                        <YAxis type="category" dataKey="value" tick={{ fontSize: 10, textAnchor: "end" }} width={90} />
-                        <Tooltip formatter={(v: any) => [v, isAr ? "سجل" : "records"]} />
-                        <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                          {barData.map((_, i) => (
-                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </Card>
-                )}
-
-                {pieData.length > 0 && pieField && (
-                  <Card className="p-5">
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
-                      <PieIcon className="h-4 w-4 text-purple-500" />
-                      {isAr ? `توزيع حسب: ${pieField.label}` : `Distribution by: ${pieField.label}`}
-                    </h3>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <PieChart>
-                        <Pie
-                          data={pieData}
-                          dataKey="count"
-                          nameKey="value"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={80}
-                          label={({ value, percent }) => `${value} (${(percent * 100).toFixed(0)}%)`}
-                          labelLine={false}
-                        >
-                          {pieData.map((_, i) => (
-                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Legend iconSize={10} formatter={(v) => <span className="text-xs">{v}</span>} />
-                        <Tooltip formatter={(v: any) => [v, isAr ? "سجل" : "records"]} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </Card>
-                )}
-              </div>
+            {pieData.length > 0 && pieField && (
+              <Card className="p-5">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1 flex items-center gap-2">
+                  <PieIcon className="h-4 w-4 text-purple-500" />
+                  {isAr ? `توزيع حسب: ${pieField.label}` : `Distribution by: ${pieField.label}`}
+                </h3>
+                <p className="text-[10px] text-muted-foreground mb-3">{isAr ? "انقر على شريحة لعرض السجلات المفلترة" : "Click a slice to filter records"}</p>
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      dataKey="count"
+                      nameKey="value"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      label={({ value, percent }) => `${value} (${(percent * 100).toFixed(0)}%)`}
+                      labelLine={false}
+                      style={{ cursor: "pointer" }}
+                      onClick={(d: any) => nav(`/admin/projects/${id}/records?filter=${encodeURIComponent(pieField.key)}:${encodeURIComponent(d.value)}`)}
+                    >
+                      {pieData.map((_, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Legend iconSize={10} formatter={(v) => <span className="text-xs">{v}</span>} />
+                    <Tooltip formatter={(v: any) => [v, isAr ? "سجل" : "records"]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Card>
             )}
-
-            {/* ─── Quick actions ─── */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => nav(`/admin/projects/${id}/records`)}>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
-                    <Users className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">{isAr ? "عرض السجلات" : "View Records"}</p>
-                    <p className="text-xs text-muted-foreground">{stats?.total} {isAr ? "سجل مسجّل" : "records"}</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => window.open(`/p/${id}/register`, "_blank")}>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
-                    <ExternalLink className="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">{isAr ? "رابط التسجيل" : "Registration Link"}</p>
-                    <p className="text-xs text-muted-foreground">{isAr ? "مشاركة النموذج العام" : "Share the public form"}</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => nav(`/admin/projects/${id}/settings`)}>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center">
-                    <Settings className="h-5 w-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">{isAr ? "إعدادات المشروع" : "Project Settings"}</p>
-                    <p className="text-xs text-muted-foreground">Google Sheets, Telegram</p>
-                  </div>
-                </div>
-              </Card>
-            </div>
-          </>
+          </div>
         )}
+
+        {/* ─── Quick actions ─── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => nav(`/admin/projects/${id}/records`)}>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+                <Users className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">{isAr ? "عرض السجلات" : "View Records"}</p>
+                <p className="text-xs text-muted-foreground">{stats?.total} {isAr ? "سجل مسجّل" : "records"}</p>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => window.open(`/p/${id}/register`, "_blank")}>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
+                <ExternalLink className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">{isAr ? "رابط التسجيل" : "Registration Link"}</p>
+                <p className="text-xs text-muted-foreground">{isAr ? "مشاركة النموذج العام" : "Share the public form"}</p>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => nav(`/admin/projects/${id}/settings`)}>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center">
+                <Settings className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">{isAr ? "إعدادات المشروع" : "Project Settings"}</p>
+                <p className="text-xs text-muted-foreground">Google Sheets, Telegram</p>
+              </div>
+            </div>
+          </Card>
+        </div>
       </div>
     </Layout>
   );

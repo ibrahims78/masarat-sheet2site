@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { db } from "../db.js";
-import { projects, projectFields, projectRecords, projectAuditLog, users, userInvitations, systemSettings } from "../../shared/schema.js";
+import { projects, projectFields, projectRecords, projectAuditLog, users, userInvitations, systemSettings, projectFieldSchema, createProjectSchema, updateProjectSchema, updateUserRoleSchema, globalSettingsSchema } from "../../shared/schema.js";
 import { eq, desc, count, gte, and, ilike, or, gt, sql } from "drizzle-orm";
 import { requireAuth, requireAdmin, requireEditorOrAdmin } from "../middleware/auth.js";
 import { encrypt, decrypt } from "../services/crypto.js";
@@ -103,8 +103,10 @@ router.get("/:id", requireAuth, async (req: Request, res: Response) => {
 
 router.post("/", requireEditorOrAdmin, async (req: Request, res: Response) => {
   try {
-    const { name, description, formTitle, formSubtitle, invitationCode, steps, fields } = req.body;
-    if (!name) return res.status(400).json({ error: "اسم المشروع مطلوب" });
+    const parsed = createProjectSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const { name, description, formTitle, formSubtitle, invitationCode, steps } = parsed.data;
+    const { fields } = req.body;
 
     const [proj] = await db.insert(projects).values({
       name,
@@ -140,11 +142,13 @@ router.post("/", requireEditorOrAdmin, async (req: Request, res: Response) => {
 
 router.patch("/global-settings", requireAdmin, async (req: Request, res: Response) => {
   try {
-    const body = req.body;
+    const parsed = globalSettingsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const body = parsed.data;
     const update: any = { updatedAt: new Date() };
     const plain = ["appName", "appLogoUrl", "defaultLanguage", "timezone", "invitationExpiryHours",
-      "smtpHost", "smtpPort", "smtpUser", "smtpFromName"];
-    for (const f of plain) { if (f in body) update[f] = body[f]; }
+      "smtpHost", "smtpPort", "smtpUser", "smtpFromName"] as const;
+    for (const f of plain) { if (f in body) update[f] = (body as any)[f]; }
     if (body.smtpPass) update.smtpPassEnc = encrypt(body.smtpPass);
     await db.update(systemSettings).set(update).where(eq(systemSettings.id, "singleton"));
     res.json({ ok: true });
@@ -155,7 +159,9 @@ router.patch("/global-settings", requireAdmin, async (req: Request, res: Respons
 
 router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
-    const body = req.body;
+    const parsed = updateProjectSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const body = parsed.data as any;
     const update: any = { updatedAt: new Date() };
 
     const plainFields = ["name", "description", "formTitle", "formSubtitle", "invitationCode",
@@ -167,7 +173,6 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
       if (field in body) update[field] = body[field];
     }
 
-    // Sanitize Sheet ID: accept full URL or bare ID, always store bare ID
     if ("googleSheetId" in update && update.googleSheetId) {
       update.googleSheetId = extractSpreadsheetId(update.googleSheetId);
     }
@@ -252,10 +257,18 @@ router.get("/:id/fields", requireAuth, async (req: Request, res: Response) => {
 
 router.post("/:id/fields", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
-    const fields: any[] = req.body.fields;
+    const rawFields: any[] = req.body.fields;
+    if (!Array.isArray(rawFields)) return res.status(400).json({ error: "fields must be an array" });
+
+    const fieldsResult = rawFields.map((f: any) => projectFieldSchema.safeParse(f));
+    const firstError = fieldsResult.find(r => !r.success);
+    if (firstError && !firstError.success) {
+      return res.status(400).json({ error: firstError.error.errors[0].message });
+    }
+
     await db.delete(projectFields).where(eq(projectFields.projectId, String(req.params.id)));
-    if (fields && fields.length > 0) {
-      await db.insert(projectFields).values(fields.map((f: any, idx: number) => ({
+    if (rawFields.length > 0) {
+      await db.insert(projectFields).values(rawFields.map((f: any, idx: number) => ({
         projectId: String(req.params.id),
         key: f.key,
         label: f.label,
@@ -266,6 +279,10 @@ router.post("/:id/fields", requireEditorOrAdmin, requireProjectOwnership, async 
         stepNumber: f.stepNumber || 1,
         orderIndex: f.orderIndex ?? idx,
         placeholder: f.placeholder || null,
+        validationMin: f.validationMin ?? null,
+        validationMax: f.validationMax ?? null,
+        validationRegex: f.validationRegex ?? null,
+        validationMessage: f.validationMessage ?? null,
       })));
     }
     res.json({ ok: true });
@@ -806,9 +823,40 @@ router.post("/reset-password/:userId", requireAdmin, async (req: Request, res: R
 
 router.patch("/users/:userId", requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { fullName, email, role } = req.body;
-    await db.update(users).set({ fullName, email, role }).where(eq(users.id, String(req.params.userId)));
+    const parsed = updateUserRoleSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const { fullName, email, role } = parsed.data;
+    const upd: any = { role };
+    if (fullName) upd.fullName = fullName;
+    if (email) upd.email = email;
+    await db.update(users).set(upd).where(eq(users.id, String(req.params.userId)));
     res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── AUDIT LOG ───────────────────────────────────────────────
+
+router.get("/:id/audit-log", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const pid = String(req.params.id);
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const logs = await db.select({
+      id: projectAuditLog.id,
+      recordId: projectAuditLog.recordId,
+      changedBy: projectAuditLog.changedBy,
+      action: projectAuditLog.action,
+      changedAt: projectAuditLog.changedAt,
+      changesJson: projectAuditLog.changesJson,
+      userName: users.fullName,
+    })
+    .from(projectAuditLog)
+    .leftJoin(users, eq(projectAuditLog.changedBy, users.id))
+    .where(eq(projectAuditLog.projectId, pid))
+    .orderBy(desc(projectAuditLog.changedAt))
+    .limit(limit);
+    res.json(logs);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
