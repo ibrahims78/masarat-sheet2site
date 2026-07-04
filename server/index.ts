@@ -250,6 +250,7 @@ async function initDB() {
     console.log("✅ Database tables initialized");
   } catch (err) {
     console.error("❌ DB init error:", err);
+    process.exit(1);
   }
 }
 
