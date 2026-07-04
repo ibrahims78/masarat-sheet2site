@@ -89,16 +89,6 @@ export function Setup() {
           <p className="text-muted-foreground text-sm mt-2">{ar ? "إنشاء حساب المسؤول الأول للبدء" : "Create the first admin account to get started"}</p>
         </div>
 
-        {/* Steps hint */}
-        <div className="flex gap-2 mb-6">
-          {(ar ? ["بيانات الحساب", "تأمين الدخول", "البدء"] : ["Account Info", "Secure Login", "Start"]).map((s, i) => (
-            <div key={i} className="flex-1 text-center">
-              <div className={`h-1 rounded-full mb-1.5 ${i === 0 ? "bg-primary" : "bg-slate-200 dark:bg-slate-700"}`} />
-              <span className="text-[10px] text-muted-foreground">{s}</span>
-            </div>
-          ))}
-        </div>
-
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           <div>
             <Label htmlFor="fullName" required className="text-sm font-semibold text-slate-700 dark:text-slate-300">
