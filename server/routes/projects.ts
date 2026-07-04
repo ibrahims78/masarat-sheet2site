@@ -823,6 +823,18 @@ router.post("/test-email", requireEditorOrAdmin, async (req: Request, res: Respo
 router.post("/send-invitation", requireAdmin, async (req: Request, res: Response) => {
   try {
     const { email, role } = req.body;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+      return res.status(400).json({ error: "بريد إلكتروني غير صالح" });
+    }
+    const validRoles = ["admin", "editor", "viewer"];
+    if (role && !validRoles.includes(role)) {
+      return res.status(400).json({ error: "الدور المحدد غير صالح" });
+    }
+    // Check if user already exists with this email
+    const [existingUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
+    if (existingUser) {
+      return res.status(409).json({ error: "يوجد مستخدم بهذا البريد الإلكتروني بالفعل" });
+    }
     const [s] = await db.select().from(systemSettings).where(eq(systemSettings.id, "singleton"));
     const expiryHours = s?.invitationExpiryHours ?? 72;
     const appName = s?.appName || "مسارات";
@@ -886,6 +898,7 @@ router.patch("/users/:userId", requireAdmin, async (req: Request, res: Response)
     await db.update(users).set(upd).where(eq(users.id, String(req.params.userId)));
     res.json({ ok: true });
   } catch (err: any) {
+    if (err.code === "23505") return res.status(409).json({ error: "البريد الإلكتروني مستخدم بالفعل" });
     res.status(500).json({ error: err.message });
   }
 });

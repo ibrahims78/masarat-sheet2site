@@ -113,6 +113,9 @@ router.post("/register-invite", async (req: Request, res: Response) => {
     (req.session as any).fullName = user.fullName;
     res.json({ ok: true });
   } catch (err: any) {
+    if (err.code === "23505") {
+      return res.status(409).json({ error: "يوجد حساب بهذا البريد الإلكتروني بالفعل" });
+    }
     res.status(500).json({ error: err.message });
   }
 });
