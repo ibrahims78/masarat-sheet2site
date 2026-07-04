@@ -6,12 +6,16 @@ import helmet from "helmet";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
-import { existsSync } from "fs";
+import { existsSync, createReadStream } from "fs";
+import { stat } from "fs/promises";
 import { pool } from "./db.js";
 import authRoutes from "./routes/auth.js";
 import projectsRoutes from "./routes/projects.js";
 import pformRoutes from "./routes/pform.js";
 import { uploadsDir } from "./middleware/upload.js";
+import { db } from "./db.js";
+import { projectRecords } from "../shared/schema.js";
+import { eq, and } from "drizzle-orm";
 
 dotenv.config();
 
@@ -77,7 +81,41 @@ app.use(session({
   },
 }));
 
-app.use("/uploads", express.static(uploadsDir));
+// Protected uploads: requires an active session OR a valid (non-expired) edit token
+// passed as ?token=<uuid>&project=<projectId>
+app.get("/uploads/:filename", async (req, res) => {
+  const sessionUserId = (req.session as any)?.userId;
+
+  if (!sessionUserId) {
+    // Try edit-token auth: ?token=<uuid>&project=<projectId>
+    const { token, project } = req.query as Record<string, string>;
+    if (!token || !project) {
+      return res.status(401).json({ error: "غير مصادق" });
+    }
+    try {
+      const [record] = await db
+        .select({ id: projectRecords.id, tokenExpiresAt: projectRecords.tokenExpiresAt })
+        .from(projectRecords)
+        .where(and(eq(projectRecords.projectId, project), eq(projectRecords.editToken, token as any)));
+      if (!record) return res.status(401).json({ error: "رمز غير صالح" });
+      if (record.tokenExpiresAt && record.tokenExpiresAt < new Date()) {
+        return res.status(410).json({ error: "انتهت صلاحية الرابط" });
+      }
+    } catch {
+      return res.status(500).json({ error: "خطأ في التحقق" });
+    }
+  }
+
+  const filename = path.basename(req.params.filename); // prevent path traversal
+  const filePath = path.join(uploadsDir, filename);
+  try {
+    await stat(filePath);
+  } catch {
+    return res.status(404).json({ error: "الملف غير موجود" });
+  }
+  res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+  createReadStream(filePath).pipe(res);
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/projects", projectsRoutes);
