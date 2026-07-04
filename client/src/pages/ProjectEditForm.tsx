@@ -60,12 +60,14 @@ export function ProjectEditForm() {
     return String(triggerVal ?? "") === cv;
   };
 
-  const grouped = fields.reduce<Record<number, ProjectField[]>>((acc, f) => {
-    const s = f.stepNumber || 1;
-    if (!acc[s]) acc[s] = [];
-    acc[s].push(f);
-    return acc;
-  }, {});
+  const grouped = fields
+    .filter(f => f.fieldType !== "autoincrement")
+    .reduce<Record<number, ProjectField[]>>((acc, f) => {
+      const s = f.stepNumber || 1;
+      if (!acc[s]) acc[s] = [];
+      acc[s].push(f);
+      return acc;
+    }, {});
 
   if (isLoading) return (
     <div className="min-h-screen flex items-center justify-center">

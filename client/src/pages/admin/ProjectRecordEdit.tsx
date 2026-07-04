@@ -201,12 +201,14 @@ export function ProjectRecordEdit() {
     return String(triggerVal ?? "") === cv;
   };
 
-  const grouped = fields.reduce<Record<number, ProjectField[]>>((acc, f) => {
-    const s = f.stepNumber || 1;
-    if (!acc[s]) acc[s] = [];
-    acc[s].push(f);
-    return acc;
-  }, {});
+  const grouped = fields
+    .filter(f => f.fieldType !== "autoincrement")
+    .reduce<Record<number, ProjectField[]>>((acc, f) => {
+      const s = f.stepNumber || 1;
+      if (!acc[s]) acc[s] = [];
+      acc[s].push(f);
+      return acc;
+    }, {});
 
   const stepNums = Object.keys(grouped).map(Number).sort();
 
