@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "IUz7GUguXh2_EHgWqYMSx"
+uri = "file://future-improvements.md"
+type = "text"
+title = "التحسينات المستقبلية المقترحة"
