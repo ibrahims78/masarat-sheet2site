@@ -8,7 +8,7 @@
 
 ### A1 — Zod Validation على الـ API
 **المشكلة:** عدة routes تقبل بيانات بدون التحقق منها بـ schema محدد.
-**القرار:** _(في انتظار الإجابة)_
+**القرار:** ✅ إضافة Zod validation على كل routes الإضافة والتعديل.
 
 ### A2 — حماية تسريب الحقول الحساسة
 **المشكلة:** حذف `googleServiceAccountKeyEnc` و`telegramBotTokenEnc` يدوياً — إذا أُضيف حقل جديد قد يُنسى.
