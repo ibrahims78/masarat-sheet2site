@@ -55,8 +55,9 @@ function SetupCheck({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (location === "/setup") return;
     fetch("/api/auth/setup-required", { credentials: "include" })
-      .then(r => r.json())
-      .then(d => { if (d.required) nav("/setup"); });
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(d => { if (d.required) nav("/setup"); })
+      .catch(err => console.error("[SetupCheck] failed to check setup status:", err));
   }, []);
   return <>{children}</>;
 }

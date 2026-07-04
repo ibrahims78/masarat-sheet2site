@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, fetchJson } from "@/lib/queryClient";
 import {
   Save, Loader2, Plus, Trash2, GripVertical, ArrowRight, ExternalLink,
   ChevronDown, ChevronUp,
@@ -62,17 +62,17 @@ export function ProjectSettings() {
 
   const { data: project } = useQuery<any>({
     queryKey: ["/api/projects", id],
-    queryFn: () => fetch(`/api/projects/${id}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}`),
   });
 
   const { data: rawFields = [] } = useQuery<ProjectField[]>({
     queryKey: ["/api/projects", id, "fields"],
-    queryFn: () => fetch(`/api/projects/${id}/fields`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}/fields`),
   });
 
   const { data: auditLog, isLoading: auditLoading } = useQuery<any[]>({
     queryKey: ["/api/projects", id, "audit-log"],
-    queryFn: () => fetch(`/api/projects/${id}/audit-log?limit=100`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}/audit-log?limit=100`),
     enabled: tab === "audit",
   });
 
@@ -80,7 +80,7 @@ export function ProjectSettings() {
     local: number; synced: number; failed: number; syncing: number; total: number; hasFileFields: boolean;
   }>({
     queryKey: ["/api/projects", id, "sync-stats"],
-    queryFn: () => fetch(`/api/projects/${id}/sync-stats`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}/sync-stats`),
     enabled: tab === "drive",
     refetchInterval: driveSyncing ? 3000 : false,
   });
@@ -243,9 +243,13 @@ export function ProjectSettings() {
   };
 
   const saveDriveRoot = async () => {
-    await apiRequest("PATCH", `/api/projects/${id}`, { googleDriveFolderId: driveRootInput });
-    qc.invalidateQueries({ queryKey: ["/api/projects", id] });
-    toast({ description: isAr ? "✅ تم حفظ معرِّف مجلد Drive" : "✅ Drive folder ID saved" });
+    try {
+      await apiRequest("PATCH", `/api/projects/${id}`, { googleDriveFolderId: driveRootInput });
+      qc.invalidateQueries({ queryKey: ["/api/projects", id] });
+      toast({ description: isAr ? "✅ تم حفظ معرِّف مجلد Drive" : "✅ Drive folder ID saved" });
+    } catch (err: any) {
+      toast({ variant: "destructive", description: `❌ ${err.message}` });
+    }
   };
 
   const tabs = [

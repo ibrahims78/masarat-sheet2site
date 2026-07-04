@@ -18,8 +18,10 @@ import { randomBytes } from "crypto";
 import fs from "fs";
 import path from "path";
 import * as driveStorage from "../services/driveStorage.js";
+import rateLimit from "express-rate-limit";
 
 const router = Router();
+const parseExcelLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, message: { error: "محاولات كثيرة — حاول لاحقاً" } });
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 // ─── PROJECT OWNERSHIP GUARD ──────────────────────────────────
@@ -34,6 +36,23 @@ async function requireProjectOwnership(req: Request, res: Response, next: NextFu
     const [proj] = await db.select({ createdBy: projects.createdBy }).from(projects).where(eq(projects.id, pid));
     if (!proj) { res.status(404).json({ error: "المشروع غير موجود" }); return; }
     if (proj.createdBy !== userId) { res.status(403).json({ error: "لا تملك صلاحية تعديل هذا المشروع" }); return; }
+    next();
+  } catch (err: any) {
+    handleError(res, err);
+  }
+}
+
+// Read-only variant: admins & viewers may read any project; editors only their own.
+// Mirrors the visibility rule already used by GET "/" (project list).
+async function requireProjectReadAccess(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const role = (req.session as any)?.role;
+  if (role === "admin" || role === "viewer") { next(); return; }
+  const userId = (req.session as any)?.userId;
+  const pid = String(req.params.id);
+  try {
+    const [proj] = await db.select({ createdBy: projects.createdBy }).from(projects).where(eq(projects.id, pid));
+    if (!proj) { res.status(404).json({ error: "المشروع غير موجود" }); return; }
+    if (proj.createdBy !== userId) { res.status(403).json({ error: "لا تملك صلاحية عرض هذا المشروع" }); return; }
     next();
   } catch (err: any) {
     handleError(res, err);
@@ -131,7 +150,7 @@ const PROJECT_SAFE_COLUMNS = {
   hasTelegramToken: sql<boolean>`(${projects.telegramBotTokenEnc} is not null)`,
 };
 
-router.get("/:id", requireAuth, async (req: Request, res: Response) => {
+router.get("/:id", requireAuth, requireProjectReadAccess, async (req: Request, res: Response) => {
   try {
     const [proj] = await db.select(PROJECT_SAFE_COLUMNS).from(projects).where(eq(projects.id, String(req.params.id)));
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
@@ -279,7 +298,7 @@ router.delete("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req:
 
 // ─── EXCEL PARSE ─────────────────────────────────────────────
 
-router.post("/parse-excel", requireEditorOrAdmin, upload.single("file"), async (req: Request, res: Response) => {
+router.post("/parse-excel", requireEditorOrAdmin, parseExcelLimiter, upload.single("file"), async (req: Request, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: "لم يتم رفع ملف" });
 
@@ -352,7 +371,7 @@ router.post("/:id/upload", requireEditorOrAdmin, requireProjectOwnership, (req: 
 
 // ─── PROJECT FIELDS ──────────────────────────────────────────
 
-router.get("/:id/fields", requireAuth, async (req: Request, res: Response) => {
+router.get("/:id/fields", requireAuth, requireProjectReadAccess, async (req: Request, res: Response) => {
   try {
     const fields = await db.select().from(projectFields)
       .where(eq(projectFields.projectId, String(req.params.id)))
@@ -408,7 +427,7 @@ router.post("/:id/fields", requireEditorOrAdmin, requireProjectOwnership, async 
 
 // ─── PROJECT RECORDS ─────────────────────────────────────────
 
-router.get("/:id/records", requireAuth, async (req: Request, res: Response) => {
+router.get("/:id/records", requireAuth, requireProjectReadAccess, async (req: Request, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
@@ -497,7 +516,7 @@ router.post("/:id/records", requireEditorOrAdmin, requireProjectOwnership, async
   }
 });
 
-router.get("/:id/records/:recordId", requireAuth, async (req: Request, res: Response) => {
+router.get("/:id/records/:recordId", requireAuth, requireProjectReadAccess, async (req: Request, res: Response) => {
   try {
     const [record] = await db.select().from(projectRecords)
       .where(and(eq(projectRecords.id, String(req.params.recordId)), eq(projectRecords.projectId, String(req.params.id))));
@@ -670,7 +689,7 @@ router.post("/:id/records/bulk-delete", requireEditorOrAdmin, requireProjectOwne
 
 // ─── STATS ───────────────────────────────────────────────────
 
-router.get("/:id/stats", requireAuth, async (req: Request, res: Response) => {
+router.get("/:id/stats", requireAuth, requireProjectReadAccess, async (req: Request, res: Response) => {
   try {
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -720,7 +739,7 @@ router.get("/:id/stats", requireAuth, async (req: Request, res: Response) => {
 
 // ─── EXPORT ──────────────────────────────────────────────────
 
-router.get("/:id/export", requireAuth, async (req: Request, res: Response) => {
+router.get("/:id/export", requireAuth, requireProjectReadAccess, async (req: Request, res: Response) => {
   try {
     const format = (req.query.format as string) || "xlsx";
     const pid = String(req.params.id);
@@ -840,7 +859,7 @@ router.get("/:id/export", requireAuth, async (req: Request, res: Response) => {
 
 // ─── STATS DISTRIBUTIONS ─────────────────────────────────────
 
-router.get("/:id/stats/distributions", requireAuth, async (req: Request, res: Response) => {
+router.get("/:id/stats/distributions", requireAuth, requireProjectReadAccess, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.id);
     const selectFields = await db.select({ key: projectFields.key, label: projectFields.label })
@@ -1034,7 +1053,7 @@ router.patch("/users/:userId", requireAdmin, async (req: Request, res: Response)
 
 // ─── AUDIT LOG ───────────────────────────────────────────────
 
-router.get("/:id/audit-log", requireAuth, async (req: Request, res: Response) => {
+router.get("/:id/audit-log", requireAuth, requireProjectReadAccess, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.id);
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
@@ -1048,7 +1067,7 @@ router.get("/:id/audit-log", requireAuth, async (req: Request, res: Response) =>
       userName: users.fullName,
     })
     .from(projectAuditLog)
-    .leftJoin(users, eq(projectAuditLog.changedBy, users.id))
+    .leftJoin(users, sql`${projectAuditLog.changedBy} = ${users.id}::text`)
     .where(eq(projectAuditLog.projectId, pid))
     .orderBy(desc(projectAuditLog.changedAt))
     .limit(limit);

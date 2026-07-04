@@ -53,6 +53,8 @@ export async function requirePasswordNotExpired(
     next();
   } catch (err) {
     console.error("[ERROR] requirePasswordNotExpired:", err);
-    next(); // fail-open: don't block user on DB error
+    // Fail-closed: a DB error here means we cannot verify password status,
+    // so we must not let the request through.
+    res.status(500).json({ error: "خطأ في التحقق من حالة الحساب" });
   }
 }

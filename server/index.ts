@@ -15,8 +15,8 @@ import pformRoutes from "./routes/pform.js";
 import { uploadsDir } from "./middleware/upload.js";
 import { requireAuth, requirePasswordNotExpired } from "./middleware/auth.js";
 import { db } from "./db.js";
-import { projectRecords } from "../shared/schema.js";
-import { eq, and } from "drizzle-orm";
+import { projectRecords, projects } from "../shared/schema.js";
+import { eq, and, sql } from "drizzle-orm";
 
 dotenv.config();
 
@@ -115,6 +115,8 @@ app.use(session({
 // passed as ?token=<uuid>&project=<projectId>
 app.get("/uploads/:filename", async (req, res) => {
   const sessionUserId = (req.session as any)?.userId;
+  const sessionRole = (req.session as any)?.role;
+  const filename = path.basename(req.params.filename); // prevent path traversal
 
   if (!sessionUserId) {
     // Try edit-token auth: ?token=<uuid>&project=<projectId>
@@ -134,9 +136,28 @@ app.get("/uploads/:filename", async (req, res) => {
     } catch {
       return res.status(500).json({ error: "خطأ في التحقق" });
     }
+  } else if (sessionRole !== "admin" && sessionRole !== "viewer") {
+    // Editors: only allow access to files that belong to a record in a project they created.
+    // Prevents IDOR — an editor guessing/knowing another editor's file UUID could otherwise
+    // read it since the file itself carries no ownership metadata.
+    try {
+      const [owned] = await db
+        .select({ id: projectRecords.id })
+        .from(projectRecords)
+        .innerJoin(projects, eq(projects.id, projectRecords.projectId))
+        .where(and(
+          eq(projects.createdBy, sessionUserId),
+          sql`${projectRecords.data}::text ILIKE ${"%" + filename + "%"}`,
+        ))
+        .limit(1);
+      if (!owned) {
+        return res.status(403).json({ error: "لا تملك صلاحية الوصول لهذا الملف" });
+      }
+    } catch {
+      return res.status(500).json({ error: "خطأ في التحقق" });
+    }
   }
 
-  const filename = path.basename(req.params.filename); // prevent path traversal
   const filePath = path.join(uploadsDir, filename);
   try {
     await stat(filePath);
@@ -312,17 +333,6 @@ async function initDB() {
         ALTER TABLE project_fields DROP COLUMN IF EXISTS condition_value;
       `);
     }
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS project_form_drafts (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-        draft_id TEXT NOT NULL,
-        data JSONB NOT NULL DEFAULT '{}',
-        step INTEGER DEFAULT 0,
-        updated_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(project_id, draft_id)
-      );
-    `);
     console.log("✅ Database tables initialized");
   } catch (err) {
     console.error("❌ DB init error:", err);

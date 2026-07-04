@@ -1,13 +1,17 @@
 import { QueryClient } from "@tanstack/react-query";
 
-async function defaultQueryFn({ queryKey }: { queryKey: readonly unknown[] }) {
-  const url = queryKey[0] as string;
+export async function fetchJson<T = any>(url: string): Promise<T> {
   const res = await fetch(url, { credentials: "include" });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || `HTTP ${res.status}`);
   }
   return res.json();
+}
+
+async function defaultQueryFn({ queryKey }: { queryKey: readonly unknown[] }) {
+  const url = queryKey[0] as string;
+  return fetchJson(url);
 }
 
 export const queryClient = new QueryClient({
