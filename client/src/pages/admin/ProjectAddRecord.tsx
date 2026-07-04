@@ -14,6 +14,8 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useLang } from "@/context/LanguageContext";
 import { FileField } from "@/components/FileField";
+import { isFieldVisible as checkFieldVisible } from "@/lib/fieldVisibility";
+import { useAuth } from "@/context/AuthContext";
 
 function FieldInput({ f, register, errors, watch, setValue, projectId }: {
   f: ProjectField;
@@ -152,7 +154,8 @@ export function ProjectAddRecord() {
     queryFn: () => fetch(`/api/projects/${id}/fields`, { credentials: "include" }).then(r => r.json()),
   });
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<Record<string, any>>();
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<Record<string, any>>({ mode: "onBlur" });
+  const { user } = useAuth();
 
   const steps: string[] = Array.isArray((project as any)?.steps) ? (project as any).steps : [];
 
@@ -169,19 +172,16 @@ export function ProjectAddRecord() {
 
   const watchedValues = watch();
 
-  const isFieldVisible = (f: ProjectField) => {
-    const cf = (f as any).conditionField as string | null | undefined;
-    const cv = (f as any).conditionValue as string | null | undefined;
-    if (!cf) return true;
-    const triggerVal = watchedValues[cf];
-    if (cv === null || cv === undefined || cv === "") {
-      return triggerVal !== "" && triggerVal !== null && triggerVal !== undefined;
-    }
-    return String(triggerVal ?? "") === cv;
+  const isFieldVisible = (f: ProjectField) => checkFieldVisible(f as any, watchedValues);
+
+  const isFieldVisibleToRole = (f: ProjectField) => {
+    const visibleTo = (f as any).visibleTo || "all";
+    if (visibleTo === "all") return true;
+    return user?.role === visibleTo || user?.role === "admin";
   };
 
   const grouped = fields
-    .filter(f => f.fieldType !== "autoincrement")
+    .filter(f => f.fieldType !== "autoincrement" && isFieldVisibleToRole(f))
     .reduce<Record<number, ProjectField[]>>((acc, f) => {
       const s = f.stepNumber || 1;
       if (!acc[s]) acc[s] = [];

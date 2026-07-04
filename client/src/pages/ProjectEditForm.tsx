@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { useLang } from "@/context/LanguageContext";
 import type { ProjectField, ProjectRecord } from "@shared/schema";
+import { isFieldVisible as checkFieldVisible } from "@/lib/fieldVisibility";
 
 export function ProjectEditForm() {
   const { projectId, token } = useParams<{ projectId: string; token: string }>();
@@ -31,7 +32,7 @@ export function ProjectEditForm() {
   const fields = formInfo?.fields || [];
   const project = formInfo?.project;
 
-  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<Record<string, any>>();
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<Record<string, any>>({ mode: "onBlur" });
 
   useEffect(() => {
     if (record && !record.error) {
@@ -49,16 +50,7 @@ export function ProjectEditForm() {
 
   const watchedValues = watch();
 
-  const isFieldVisible = (f: ProjectField) => {
-    const cf = (f as any).conditionField as string | null | undefined;
-    const cv = (f as any).conditionValue as string | null | undefined;
-    if (!cf) return true;
-    const triggerVal = watchedValues[cf];
-    if (cv === null || cv === undefined || cv === "") {
-      return triggerVal !== "" && triggerVal !== null && triggerVal !== undefined;
-    }
-    return String(triggerVal ?? "") === cv;
-  };
+  const isFieldVisible = (f: ProjectField) => checkFieldVisible(f as any, watchedValues);
 
   const grouped = fields
     .filter(f => f.fieldType !== "autoincrement")
@@ -113,7 +105,13 @@ export function ProjectEditForm() {
                     <Label className="text-sm font-medium">
                       {f.label}{f.isRequired && <span className="text-red-500 mr-1">*</span>}
                     </Label>
-                    {f.fieldType === "textarea" ? (
+                    {(f as any).isReadOnly ? (
+                      <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50 text-sm text-slate-600 dark:text-slate-400 select-none">
+                        <input type="hidden" {...register(f.key)} />
+                        <span className="font-medium">{watchedValues[f.key] || "—"}</span>
+                        <span className="text-xs text-muted-foreground">({isAr ? "للقراءة فقط" : "read only"})</span>
+                      </div>
+                    ) : f.fieldType === "textarea" ? (
                       <Textarea {...register(f.key, { required: f.isRequired ? (isAr ? `${f.label} مطلوب` : `${f.label} is required`) : false })}
                         placeholder={f.placeholder || ""} rows={3} data-testid={`input-${f.key}`} />
                     ) : f.fieldType === "select" && f.options ? (

@@ -71,6 +71,7 @@ export const projects = pgTable("projects", {
   steps: jsonb("steps").default(["الخطوة الأولى", "الخطوة الثانية", "الخطوة الثالثة", "المراجعة"]),
   // Google Sheets
   googleSheetId: text("google_sheet_id"),
+  importSheetId: text("import_sheet_id"),
   googleSheetName: text("google_sheet_name").default("بيانات"),
   googleServiceAccountEmail: text("google_service_account_email"),
   googleServiceAccountKeyEnc: text("google_service_account_key_enc"),
@@ -100,8 +101,25 @@ export const projectFields = pgTable("project_fields", {
   validationMax: integer("validation_max"),
   validationRegex: text("validation_regex"),
   validationMessage: text("validation_message"),
-  conditionField: text("condition_field"),
-  conditionValue: text("condition_value"),
+  // Conditional visibility: array of { field, value, negate? } evaluated with conditionOperator
+  conditions: jsonb("conditions"),
+  conditionOperator: text("condition_operator").default("AND"),
+  // Who can see this field in admin add/edit record forms ("all" | "admin" | "editor")
+  visibleTo: text("visible_to").default("all"),
+  // Field becomes read-only after the record is created (still shown, cannot be edited)
+  isReadOnly: boolean("is_read_only").default(false),
+});
+
+// ============================================================
+// PROJECT FORM DRAFTS (server-persisted autosave for public form)
+// ============================================================
+export const projectFormDrafts = pgTable("project_form_drafts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  draftId: text("draft_id").notNull(),
+  data: jsonb("data").notNull().default({}),
+  step: integer("step").default(0),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // ============================================================
@@ -145,6 +163,8 @@ export type InsertProjectField = typeof projectFields.$inferInsert;
 export type ProjectRecord = typeof projectRecords.$inferSelect;
 export type InsertProjectRecord = typeof projectRecords.$inferInsert;
 export type ProjectAuditLog = typeof projectAuditLog.$inferSelect;
+export type ProjectFormDraft = typeof projectFormDrafts.$inferSelect;
+export type InsertProjectFormDraft = typeof projectFormDrafts.$inferInsert;
 
 // ============================================================
 // ZOD SCHEMAS
@@ -177,8 +197,14 @@ export const projectFieldSchema = z.object({
   validationMax: z.number().optional(),
   validationRegex: z.string().optional(),
   validationMessage: z.string().optional(),
-  conditionField: z.string().nullable().optional(),
-  conditionValue: z.string().nullable().optional(),
+  conditions: z.array(z.object({
+    field: z.string().min(1),
+    value: z.string().nullable().optional(),
+    negate: z.boolean().optional(),
+  })).nullable().optional(),
+  conditionOperator: z.enum(["AND", "OR"]).default("AND"),
+  visibleTo: z.enum(["all", "admin", "editor"]).default("all"),
+  isReadOnly: z.boolean().default(false),
 });
 
 export const createProjectSchema = z.object({
@@ -201,6 +227,7 @@ export const updateProjectSchema = z.object({
   formDisabledMessage: z.string().optional(),
   steps: z.array(z.string()).optional(),
   googleSheetId: z.string().optional(),
+  importSheetId: z.string().optional(),
   googleSheetName: z.string().optional(),
   googleServiceAccountEmail: z.string().email().optional().or(z.literal("")),
   googleServiceAccountKey: z.string().optional(),

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db.js";
-import { projects, projectFields, projectRecords, projectAuditLog, verifyCodeSchema, submitFormSchema } from "../../shared/schema.js";
+import { projects, projectFields, projectRecords, projectAuditLog, projectFormDrafts, verifyCodeSchema, submitFormSchema } from "../../shared/schema.js";
 import { eq, and, sql } from "drizzle-orm";
 import { appendRecordToSheet, updateRecordRow } from "../services/projectSheets.js";
 import { insertRecordAtomic } from "../services/recordInsert.js";
@@ -196,11 +196,14 @@ router.patch("/:projectId/edit/:token", async (req: Request, res: Response) => {
       return res.status(410).json({ error: "انتهت صلاحية رابط التعديل" });
     }
 
-    // Strip autoincrement fields — immutable after creation; restore from existing record
-    const autoFields = await db.select({ key: projectFields.key }).from(projectFields)
-      .where(and(eq(projectFields.projectId, pid), sql`${projectFields.fieldType} = 'autoincrement'`));
+    // Strip autoincrement + read-only fields — immutable after creation; restore from existing record
+    const lockedFields = await db.select({ key: projectFields.key }).from(projectFields)
+      .where(and(
+        eq(projectFields.projectId, pid),
+        sql`(${projectFields.fieldType} = 'autoincrement' OR ${projectFields.isReadOnly} = TRUE)`,
+      ));
     const safeBody: Record<string, any> = { ...req.body };
-    for (const { key } of autoFields) {
+    for (const { key } of lockedFields) {
       if (key in (existing.data as any)) {
         safeBody[key] = (existing.data as any)[key];
       } else {
@@ -231,6 +234,66 @@ router.patch("/:projectId/edit/:token", async (req: Request, res: Response) => {
       }).catch(console.error);
     }
 
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET a saved draft (server-backed autosave)
+router.get("/:projectId/draft/:draftId", async (req: Request, res: Response) => {
+  try {
+    const pid = String(req.params.projectId);
+    const draftId = String(req.params.draftId);
+    const [draft] = await db.select().from(projectFormDrafts)
+      .where(and(eq(projectFormDrafts.projectId, pid), eq(projectFormDrafts.draftId, draftId)));
+    if (!draft) return res.json({ draft: null });
+    // Expire drafts older than 7 days
+    const ageMs = Date.now() - new Date(draft.updatedAt as any).getTime();
+    if (ageMs > 7 * 24 * 60 * 60 * 1000) {
+      await db.delete(projectFormDrafts).where(eq(projectFormDrafts.id, draft.id));
+      return res.json({ draft: null });
+    }
+    res.json({ draft: { data: draft.data, step: draft.step } });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT upsert a draft (server-backed autosave)
+router.put("/:projectId/draft/:draftId", async (req: Request, res: Response) => {
+  try {
+    const pid = String(req.params.projectId);
+    const draftId = String(req.params.draftId);
+    const { data, step } = req.body || {};
+    const [proj] = await db.select({ id: projects.id }).from(projects).where(eq(projects.id, pid));
+    if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
+
+    const [existing] = await db.select({ id: projectFormDrafts.id }).from(projectFormDrafts)
+      .where(and(eq(projectFormDrafts.projectId, pid), eq(projectFormDrafts.draftId, draftId)));
+
+    if (existing) {
+      await db.update(projectFormDrafts)
+        .set({ data: data || {}, step: step ?? 0, updatedAt: new Date() })
+        .where(eq(projectFormDrafts.id, existing.id));
+    } else {
+      await db.insert(projectFormDrafts).values({
+        projectId: pid, draftId, data: data || {}, step: step ?? 0,
+      });
+    }
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE a draft (after successful submission)
+router.delete("/:projectId/draft/:draftId", async (req: Request, res: Response) => {
+  try {
+    const pid = String(req.params.projectId);
+    const draftId = String(req.params.draftId);
+    await db.delete(projectFormDrafts)
+      .where(and(eq(projectFormDrafts.projectId, pid), eq(projectFormDrafts.draftId, draftId)));
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

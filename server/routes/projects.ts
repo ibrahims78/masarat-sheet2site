@@ -113,6 +113,7 @@ const PROJECT_SAFE_COLUMNS = {
   formSubtitle: projects.formSubtitle,
   steps: projects.steps,
   googleSheetId: projects.googleSheetId,
+  importSheetId: projects.importSheetId,
   googleSheetName: projects.googleSheetName,
   googleServiceAccountEmail: projects.googleServiceAccountEmail,
   googleDriveFolderId: projects.googleDriveFolderId,
@@ -197,7 +198,7 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
 
     const plainFields = ["name", "description", "formTitle", "formSubtitle", "invitationCode",
       "editTokenHours", "formEnabled", "formDisabledMessage", "steps",
-      "googleSheetId", "googleSheetName", "googleServiceAccountEmail",
+      "googleSheetId", "importSheetId", "googleSheetName", "googleServiceAccountEmail",
       "googleDriveFolderId", "telegramChatId"];
 
     for (const field of plainFields) {
@@ -206,6 +207,9 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
 
     if ("googleSheetId" in update && update.googleSheetId) {
       update.googleSheetId = extractSpreadsheetId(update.googleSheetId);
+    }
+    if ("importSheetId" in update && update.importSheetId) {
+      update.importSheetId = extractSpreadsheetId(update.importSheetId);
     }
 
     if (body.googleServiceAccountKey) update.googleServiceAccountKeyEnc = encrypt(body.googleServiceAccountKey);
@@ -324,8 +328,10 @@ router.post("/:id/fields", requireEditorOrAdmin, requireProjectOwnership, async 
         validationMax: f.validationMax ?? null,
         validationRegex: f.validationRegex ?? null,
         validationMessage: f.validationMessage ?? null,
-        conditionField: f.conditionField ?? null,
-        conditionValue: f.conditionValue ?? null,
+        conditions: Array.isArray(f.conditions) ? f.conditions : [],
+        conditionOperator: f.conditionOperator === "OR" ? "OR" : "AND",
+        visibleTo: ["admin", "editor"].includes(f.visibleTo) ? f.visibleTo : "all",
+        isReadOnly: !!f.isReadOnly,
       })));
     }
     res.json({ ok: true });
@@ -757,8 +763,8 @@ router.post("/:id/check-sheet-columns", requireEditorOrAdmin, requireProjectOwne
 });
 
 router.post("/:id/import-from-sheets", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
-  const { syncDeleted } = req.body;
-  const result = await importFromProjectSheet(String(req.params.id), !!syncDeleted);
+  const { syncDeleted, dryRun } = req.body;
+  const result = await importFromProjectSheet(String(req.params.id), !!syncDeleted, !!dryRun);
   res.json(result);
 });
 

@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { useLang } from "@/context/LanguageContext";
 import { FileField } from "@/components/FileField";
 import type { ProjectField } from "@shared/schema";
+import { isFieldVisible as checkFieldVisible } from "@/lib/fieldVisibility";
 
 const STEP_ICONS = [Shield, User, Briefcase, Building2, MapPin, ClipboardCheck, FileText];
 
@@ -50,7 +51,7 @@ export function ProjectRegister() {
     queryFn: () => fetch(`/api/pform/${projectId}/info`).then(r => r.json()),
   });
 
-  const { register, handleSubmit, trigger, getValues, setValue, watch, formState: { errors } } = useForm<Record<string, any>>();
+  const { register, handleSubmit, trigger, getValues, setValue, watch, formState: { errors } } = useForm<Record<string, any>>({ mode: "onBlur" });
 
   const project = formInfo?.project;
   const fields = formInfo?.fields || [];
@@ -58,8 +59,21 @@ export function ProjectRegister() {
   const totalSteps = steps.length;
 
   const draftKey = `pform_draft_${projectId}`;
+  const draftIdKey = `pform_draft_id_${projectId}`;
   const draftRestoredRef = useRef(false);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [draftId] = useState(() => {
+    try {
+      let id = localStorage.getItem(draftIdKey);
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem(draftIdKey, id);
+      }
+      return id;
+    } catch {
+      return "anon";
+    }
+  });
 
   useEffect(() => {
     if (project && !project.requiresCode && !codeVerified && !codeSkipped) {
@@ -68,32 +82,54 @@ export function ProjectRegister() {
     }
   }, [project]);
 
-  // Restore autosaved draft once fields are loaded
+  // Restore autosaved draft once fields are loaded — try server first (works across devices/browsers),
+  // fall back to localStorage (works instantly, even offline).
   useEffect(() => {
     if (draftRestoredRef.current) return;
-    if (!fields.length) return;
+    if (!fields.length || !projectId) return;
     draftRestoredRef.current = true;
-    try {
-      const raw = localStorage.getItem(draftKey);
-      if (raw) {
-        const draft = JSON.parse(raw);
-        if (draft && typeof draft === "object") {
-          Object.entries(draft.values || {}).forEach(([key, val]) => {
-            setValue(key, val as any);
-          });
-          if (typeof draft.step === "number" && draft.step >= 0 && draft.step < totalSteps) {
-            setStep(draft.step);
-          }
-          setDraftRestored(true);
-        }
-      }
-    } catch {
-      // ignore corrupt draft
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fields.length]);
 
-  // Autosave form values + current step to localStorage (debounced)
+    const applyDraft = (values: Record<string, any>, draftStep: number) => {
+      Object.entries(values || {}).forEach(([key, val]) => setValue(key, val as any));
+      if (typeof draftStep === "number" && draftStep >= 0 && draftStep < totalSteps) {
+        setStep(draftStep);
+      }
+      setDraftRestored(true);
+    };
+
+    fetch(`/api/pform/${projectId}/draft/${draftId}`)
+      .then(r => r.json())
+      .then(res => {
+        if (res?.draft?.data && Object.keys(res.draft.data).length > 0) {
+          applyDraft(res.draft.data, res.draft.step);
+          return;
+        }
+        // Fallback to localStorage
+        try {
+          const raw = localStorage.getItem(draftKey);
+          if (raw) {
+            const draft = JSON.parse(raw);
+            if (draft && typeof draft === "object") applyDraft(draft.values || {}, draft.step);
+          }
+        } catch {
+          // ignore corrupt draft
+        }
+      })
+      .catch(() => {
+        try {
+          const raw = localStorage.getItem(draftKey);
+          if (raw) {
+            const draft = JSON.parse(raw);
+            if (draft && typeof draft === "object") applyDraft(draft.values || {}, draft.step);
+          }
+        } catch {
+          // ignore corrupt draft
+        }
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fields.length, projectId]);
+
+  // Autosave form values + current step to localStorage (fast, local) and the server (durable, cross-device)
   const watchedValues = watch();
   useEffect(() => {
     if (!codeVerified || submitted) return;
@@ -103,13 +139,23 @@ export function ProjectRegister() {
       } catch {
         // storage unavailable — ignore
       }
-    }, 500);
+      if (projectId) {
+        fetch(`/api/pform/${projectId}/draft/${draftId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: watchedValues, step }),
+        }).catch(() => { /* best-effort — ignore network errors */ });
+      }
+    }, 800);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(watchedValues), step, codeVerified, submitted]);
 
   const clearDraft = () => {
     try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+    if (projectId) {
+      fetch(`/api/pform/${projectId}/draft/${draftId}`, { method: "DELETE" }).catch(() => { /* ignore */ });
+    }
   };
 
   useEffect(() => {
@@ -123,16 +169,7 @@ export function ProjectRegister() {
     }
   }, [codeVerified]);
 
-  const isFieldVisible = (f: ProjectField, watched: Record<string, any>) => {
-    const cf = (f as any).conditionField as string | null | undefined;
-    const cv = (f as any).conditionValue as string | null | undefined;
-    if (!cf) return true;
-    const triggerVal = watched[cf];
-    if (cv === null || cv === undefined || cv === "") {
-      return triggerVal !== "" && triggerVal !== null && triggerVal !== undefined;
-    }
-    return String(triggerVal ?? "") === cv;
-  };
+  const isFieldVisible = (f: ProjectField, watched: Record<string, any>) => checkFieldVisible(f as any, watched);
 
   const getStepFields = (stepNum: number) =>
     fields.filter(f => (f.stepNumber || 1) === stepNum && f.isVisible !== false);

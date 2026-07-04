@@ -42,8 +42,9 @@ export function ProjectSettings() {
     matched?: string[]; missing?: string[]; extra?: string[];
   } | null>(null);
   const [importResult, setImportResult] = useState<any | null>(null);
+  const [importPreview, setImportPreview] = useState<any | null>(null);
   const [syncDeleted, setSyncDeleted] = useState(false);
-  const [sheetsLoading, setSheetsLoading] = useState<"check" | "fix" | "import" | "export" | null>(null);
+  const [sheetsLoading, setSheetsLoading] = useState<"check" | "fix" | "preview" | "import" | "export" | null>(null);
 
   // Telegram-specific state
   const [chatIdLoading, setChatIdLoading] = useState(false);
@@ -80,6 +81,7 @@ export function ProjectSettings() {
         formEnabled: project.formEnabled, formDisabledMessage: project.formDisabledMessage,
         steps: Array.isArray(project.steps) ? project.steps.join("\n") : "",
         googleSheetId: project.googleSheetId, googleSheetName: project.googleSheetName,
+        importSheetId: project.importSheetId,
         googleServiceAccountEmail: project.googleServiceAccountEmail,
         telegramChatId: project.telegramChatId,
       });
@@ -130,8 +132,15 @@ export function ProjectSettings() {
     setSheetsLoading(null);
   };
 
+  const previewImport = async () => {
+    setSheetsLoading("preview"); setImportPreview(null); setImportResult(null);
+    const res: any = await apiRequest("POST", `/api/projects/${id}/import-from-sheets`, { syncDeleted, dryRun: true }).catch(e => ({ ok: false, message: `❌ ${e.message}` }));
+    setImportPreview(res);
+    setSheetsLoading(null);
+  };
+
   const doImport = async () => {
-    setSheetsLoading("import"); setImportResult(null);
+    setSheetsLoading("import"); setImportResult(null); setImportPreview(null);
     const res: any = await apiRequest("POST", `/api/projects/${id}/import-from-sheets`, { syncDeleted }).catch(e => ({ ok: false, message: `❌ ${e.message}` }));
     setImportResult(res);
     if (res.ok) qc.invalidateQueries({ queryKey: ["/api/projects", id, "records"] });
@@ -170,7 +179,7 @@ export function ProjectSettings() {
       fieldType: "text", isRequired: false, isVisible: true,
       options: null, stepNumber: 1, orderIndex: prev.length, placeholder: null,
       validationMin: null, validationMax: null, validationRegex: null, validationMessage: null,
-      conditionField: null, conditionValue: null,
+      conditions: [], conditionOperator: "AND", visibleTo: "all", isReadOnly: false,
     } as any]);
   };
 
@@ -441,57 +450,164 @@ export function ProjectSettings() {
 
                         {/* ── Conditional Visibility ── */}
                         <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-                          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                            {isAr ? "ظهور مشروط (اختياري)" : "Conditional Visibility (optional)"}
-                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                              {isAr ? "ظهور مشروط (اختياري)" : "Conditional Visibility (optional)"}
+                            </p>
+                            {((f as any).conditions?.length || 0) > 1 && (
+                              <div className="flex items-center gap-1 text-[10px]">
+                                <label className="text-muted-foreground">{isAr ? "الشرط" : "Match"}</label>
+                                <select
+                                  value={(f as any).conditionOperator || "AND"}
+                                  onChange={e => updateField(idx, { conditionOperator: e.target.value } as any)}
+                                  className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-1.5 py-0.5 text-[10px] h-6"
+                                  data-testid={`field-condop-${idx}`}
+                                >
+                                  <option value="AND">{isAr ? "كل الشروط (AND)" : "All (AND)"}</option>
+                                  <option value="OR">{isAr ? "أي شرط (OR)" : "Any (OR)"}</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
                           <p className="text-[10px] text-muted-foreground">
                             {isAr
-                              ? "أظهر هذا الحقل فقط عندما يكون حقل آخر يساوي قيمة محددة."
-                              : "Show this field only when another field equals a specific value."}
+                              ? "أظهر هذا الحقل فقط عند تحقق شرط واحد أو أكثر."
+                              : "Show this field only when one or more conditions are met."}
+                          </p>
+
+                          {((f as any).conditions || []).map((cond: any, ci: number) => (
+                            <div key={ci} className="grid grid-cols-[1fr_auto_1fr_auto] gap-2 items-end">
+                              <div className="space-y-1">
+                                <label className="text-[11px] text-muted-foreground">{isAr ? "الحقل" : "Field"}</label>
+                                <select
+                                  value={cond.field ?? ""}
+                                  onChange={e => {
+                                    const next = [...((f as any).conditions || [])];
+                                    next[ci] = { ...next[ci], field: e.target.value };
+                                    updateField(idx, { conditions: next } as any);
+                                  }}
+                                  className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-xs h-7"
+                                  data-testid={`field-condfield-${idx}-${ci}`}
+                                >
+                                  <option value="">{isAr ? "اختر حقلاً" : "Select a field"}</option>
+                                  {fields
+                                    .filter((other, oi) => oi !== idx && other.fieldType !== "autoincrement")
+                                    .map(other => (
+                                      <option key={other.id} value={other.key}>{other.label}</option>
+                                    ))}
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[11px] text-muted-foreground">{isAr ? "ليس" : "Not"}</label>
+                                <div className="h-7 flex items-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!cond.negate}
+                                    onChange={e => {
+                                      const next = [...((f as any).conditions || [])];
+                                      next[ci] = { ...next[ci], negate: e.target.checked };
+                                      updateField(idx, { conditions: next } as any);
+                                    }}
+                                    className="rounded"
+                                    data-testid={`field-condnegate-${idx}-${ci}`}
+                                  />
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[11px] text-muted-foreground">{isAr ? "يساوي القيمة" : "Equals value"}</label>
+                                <Input
+                                  value={cond.value ?? ""}
+                                  onChange={e => {
+                                    const next = [...((f as any).conditions || [])];
+                                    next[ci] = { ...next[ci], value: e.target.value };
+                                    updateField(idx, { conditions: next } as any);
+                                  }}
+                                  className="h-7 text-xs"
+                                  placeholder={isAr ? "القيمة المطلوبة..." : "Required value..."}
+                                  data-testid={`field-condvalue-${idx}-${ci}`}
+                                />
+                              </div>
+                              <Button
+                                type="button" variant="ghost" size="icon"
+                                className="h-7 w-7 text-red-400 hover:text-red-600"
+                                onClick={() => {
+                                  const next = ((f as any).conditions || []).filter((_: any, i: number) => i !== ci);
+                                  updateField(idx, { conditions: next } as any);
+                                }}
+                                data-testid={`button-remove-cond-${idx}-${ci}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ))}
+
+                          <Button
+                            type="button" variant="outline" size="sm" className="h-7 text-xs"
+                            onClick={() => {
+                              const next = [...((f as any).conditions || []), { field: "", value: "", negate: false }];
+                              updateField(idx, { conditions: next } as any);
+                            }}
+                            data-testid={`button-add-cond-${idx}`}
+                          >
+                            <Plus className="h-3.5 w-3.5 ml-1" />{isAr ? "إضافة شرط" : "Add condition"}
+                          </Button>
+
+                          {((f as any).conditions || []).filter((c: any) => c.field).length > 0 && (
+                            <div className="flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-md px-2 py-1.5">
+                              <span>⚡</span>
+                              <span>
+                                {(f as any).conditions.filter((c: any) => c.field).map((c: any, i: number) => {
+                                  const label = fields.find(o => o.key === c.field)?.label || c.field;
+                                  const expr = isAr
+                                    ? `"${label}" ${c.negate ? "≠" : "="} "${c.value || (isAr ? '(أي قيمة)' : '(any value)')}"`
+                                    : `"${label}" ${c.negate ? "!=" : "="} "${c.value || '(any value)'}"`;
+                                  return i === 0 ? expr : ` ${(f as any).conditionOperator === "OR" ? (isAr ? "أو" : "OR") : (isAr ? "و" : "AND")} ${expr}`;
+                                }).join("")}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ── Access Control ── */}
+                        <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                            {isAr ? "التحكم بالوصول" : "Access Control"}
                           </p>
                           <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1">
                               <label className="text-[11px] text-muted-foreground">
-                                {isAr ? "عندما يكون الحقل" : "When field"}
+                                {isAr ? "مرئي لصلاحية" : "Visible to role"}
                               </label>
                               <select
-                                value={(f as any).conditionField ?? ""}
-                                onChange={e => updateField(idx, { conditionField: e.target.value || null, conditionValue: e.target.value ? (f as any).conditionValue : null } as any)}
+                                value={(f as any).visibleTo || "all"}
+                                onChange={e => updateField(idx, { visibleTo: e.target.value } as any)}
                                 className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-xs h-7"
-                                data-testid={`field-condfield-${idx}`}
+                                data-testid={`field-visibleto-${idx}`}
                               >
-                                <option value="">{isAr ? "— لا شرط —" : "— No condition —"}</option>
-                                {fields
-                                  .filter((other, oi) => oi !== idx && other.fieldType !== "autoincrement")
-                                  .map(other => (
-                                    <option key={other.id} value={other.key}>{other.label}</option>
-                                  ))}
+                                <option value="all">{isAr ? "الجميع" : "Everyone"}</option>
+                                <option value="admin">{isAr ? "المدير فقط" : "Admin only"}</option>
+                                <option value="editor">{isAr ? "المحرر فقط" : "Editor only"}</option>
                               </select>
                             </div>
                             <div className="space-y-1">
                               <label className="text-[11px] text-muted-foreground">
-                                {isAr ? "يساوي القيمة" : "Equals value"}
+                                {isAr ? "قراءة فقط بعد الإنشاء" : "Read-only after creation"}
                               </label>
-                              <Input
-                                value={(f as any).conditionValue ?? ""}
-                                onChange={e => updateField(idx, { conditionValue: e.target.value || null } as any)}
-                                className="h-7 text-xs"
-                                placeholder={isAr ? "القيمة المطلوبة..." : "Required value..."}
-                                disabled={!(f as any).conditionField}
-                                data-testid={`field-condvalue-${idx}`}
-                              />
+                              <div className="h-7 flex items-center gap-1.5">
+                                <input
+                                  type="checkbox"
+                                  checked={!!(f as any).isReadOnly}
+                                  onChange={e => updateField(idx, { isReadOnly: e.target.checked } as any)}
+                                  className="rounded"
+                                  id={`readonly-${idx}`}
+                                  data-testid={`field-readonly-${idx}`}
+                                />
+                                <label htmlFor={`readonly-${idx}`} className="text-xs">
+                                  {isAr ? "لا يمكن تعديله بعد الإنشاء" : "Cannot be edited after creation"}
+                                </label>
+                              </div>
                             </div>
                           </div>
-                          {(f as any).conditionField && (
-                            <div className="flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-md px-2 py-1.5">
-                              <span>⚡</span>
-                              <span>
-                                {isAr
-                                  ? `هذا الحقل يظهر فقط عندما "${fields.find(o => o.key === (f as any).conditionField)?.label || (f as any).conditionField}" = "${(f as any).conditionValue || '(أي قيمة)'}"`
-                                  : `This field shows only when "${fields.find(o => o.key === (f as any).conditionField)?.label || (f as any).conditionField}" = "${(f as any).conditionValue || '(any value)'}"` }
-                              </span>
-                            </div>
-                          )}
                         </div>
 
                       </div>
@@ -568,8 +684,17 @@ export function ProjectSettings() {
             <form onSubmit={handleSubmit(d => saveMut.mutate(d))}>
               <Card className="p-5 space-y-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">{isAr ? "رابط أو ID ملف Spreadsheet" : "Spreadsheet URL or ID"}</Label>
+                  <Label className="text-xs">{isAr ? "رابط أو ID ملف Spreadsheet (للمزامنة والتصدير)" : "Spreadsheet URL or ID (for sync & export)"}</Label>
                   <Input {...register("googleSheetId")} placeholder="https://docs.google.com/spreadsheets/d/..." data-testid="input-googleSheetId" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{isAr ? "رابط أو ID ملف مصدر الاستيراد (اختياري)" : "Import Source Spreadsheet URL or ID (optional)"}</Label>
+                  <Input {...register("importSheetId")} placeholder={isAr ? "اتركه فارغاً لاستخدام نفس ملف المزامنة أعلاه" : "Leave empty to use the same sheet as above"} data-testid="input-importSheetId" />
+                  <p className="text-[10px] text-muted-foreground">
+                    {isAr
+                      ? "استخدم هذا إذا أردت الاستيراد من ملف مختلف عن ملف المزامنة/التصدير."
+                      : "Use this if you want to import from a different sheet than the one used for sync/export."}
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -612,9 +737,9 @@ export function ProjectSettings() {
                   {sheetsLoading === "fix" ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1" /> : <Wrench className="h-3.5 w-3.5 ml-1" />}
                   {isAr ? "إصلاح الترويسات" : "Fix Headers"}
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={doImport} disabled={sheetsLoading === "import"} data-testid="button-import-sheets">
-                  {sheetsLoading === "import" ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1" /> : <Upload className="h-3.5 w-3.5 ml-1" />}
-                  {isAr ? "استيراد من Sheet" : "Import from Sheet"}
+                <Button type="button" variant="outline" size="sm" onClick={previewImport} disabled={sheetsLoading === "preview"} data-testid="button-preview-import">
+                  {sheetsLoading === "preview" ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1" /> : <Upload className="h-3.5 w-3.5 ml-1" />}
+                  {isAr ? "معاينة الاستيراد" : "Preview Import"}
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={doExport} disabled={sheetsLoading === "export"} data-testid="button-export-sheets">
                   {sheetsLoading === "export" ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1" /> : <ArrowUpToLine className="h-3.5 w-3.5 ml-1" />}
@@ -629,6 +754,36 @@ export function ProjectSettings() {
                   )}
                   {checkResult.extra && checkResult.extra.length > 0 && (
                     <p className="text-xs">{isAr ? "زائدة: " : "Extra: "}{checkResult.extra.join(", ")}</p>
+                  )}
+                </div>
+              )}
+              {importPreview && (
+                <div className={`p-3 rounded-lg text-sm space-y-2 ${importPreview.ok ? "bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300" : "bg-red-50 dark:bg-red-900/20 text-red-700"}`}>
+                  <p className="font-semibold">{importPreview.message}</p>
+                  {importPreview.ok && (importPreview.added > 0 || importPreview.updated > 0 || (importPreview.deleted || 0) > 0) && (
+                    <>
+                      {importPreview.preview && importPreview.preview.length > 0 && (
+                        <div className="max-h-40 overflow-y-auto rounded-md bg-white/60 dark:bg-black/20 divide-y divide-amber-100 dark:divide-amber-900/30">
+                          {importPreview.preview.map((p: any, i: number) => (
+                            <div key={i} className="flex items-center gap-2 px-2 py-1 text-xs">
+                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${p.action === "add" ? "bg-green-100 text-green-700" : p.action === "update" ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-700"}`}>
+                                {p.action === "add" ? (isAr ? "إضافة" : "Add") : p.action === "update" ? (isAr ? "تحديث" : "Update") : (isAr ? "حذف" : "Delete")}
+                              </span>
+                              <span className="font-mono">#{p.seqNum}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2 pt-1">
+                        <Button type="button" size="sm" onClick={doImport} disabled={sheetsLoading === "import"} data-testid="button-confirm-import">
+                          {sheetsLoading === "import" ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1" /> : <Upload className="h-3.5 w-3.5 ml-1" />}
+                          {isAr ? "تأكيد الاستيراد" : "Confirm Import"}
+                        </Button>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setImportPreview(null)} data-testid="button-cancel-import">
+                          {isAr ? "إلغاء" : "Cancel"}
+                        </Button>
+                      </div>
+                    </>
                   )}
                 </div>
               )}

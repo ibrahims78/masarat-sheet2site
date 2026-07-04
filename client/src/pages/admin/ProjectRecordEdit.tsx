@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useLang } from "@/context/LanguageContext";
 import { FileField } from "@/components/FileField";
+import { isFieldVisible as checkFieldVisible } from "@/lib/fieldVisibility";
+import { useAuth } from "@/context/AuthContext";
 
 function FieldInput({ f, register, errors, watch, setValue, projectId }: {
   f: ProjectField;
@@ -35,6 +37,16 @@ function FieldInput({ f, register, errors, watch, setValue, projectId }: {
       <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50 text-sm text-slate-600 dark:text-slate-400 select-none">
         <span className="font-mono font-bold text-primary">{currentVal || "—"}</span>
         <span className="text-xs text-muted-foreground">({isAr ? "ترقيم تلقائي — للقراءة فقط" : "Auto number — read only"})</span>
+      </div>
+    );
+  }
+
+  if ((f as any).isReadOnly) {
+    return (
+      <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50 text-sm text-slate-600 dark:text-slate-400 select-none">
+        <input type="hidden" {...register(f.key)} />
+        <span className="font-medium">{val || "—"}</span>
+        <span className="text-xs text-muted-foreground">({isAr ? "للقراءة فقط" : "read only"})</span>
       </div>
     );
   }
@@ -160,7 +172,8 @@ export function ProjectRecordEdit() {
     queryFn: () => fetch(`/api/projects/${id}/fields`, { credentials: "include" }).then(r => r.json()),
   });
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<Record<string, any>>();
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<Record<string, any>>({ mode: "onBlur" });
+  const { user } = useAuth();
 
   useEffect(() => {
     if (data?.record) {
@@ -190,19 +203,16 @@ export function ProjectRecordEdit() {
 
   const watchedValues = watch();
 
-  const isFieldVisible = (f: ProjectField) => {
-    const cf = (f as any).conditionField as string | null | undefined;
-    const cv = (f as any).conditionValue as string | null | undefined;
-    if (!cf) return true;
-    const triggerVal = watchedValues[cf];
-    if (cv === null || cv === undefined || cv === "") {
-      return triggerVal !== "" && triggerVal !== null && triggerVal !== undefined;
-    }
-    return String(triggerVal ?? "") === cv;
+  const isFieldVisible = (f: ProjectField) => checkFieldVisible(f as any, watchedValues);
+
+  const isFieldVisibleToRole = (f: ProjectField) => {
+    const visibleTo = (f as any).visibleTo || "all";
+    if (visibleTo === "all") return true;
+    return user?.role === visibleTo || user?.role === "admin";
   };
 
   const grouped = fields
-    .filter(f => f.fieldType !== "autoincrement")
+    .filter(f => f.fieldType !== "autoincrement" && isFieldVisibleToRole(f))
     .reduce<Record<number, ProjectField[]>>((acc, f) => {
       const s = f.stepNumber || 1;
       if (!acc[s]) acc[s] = [];

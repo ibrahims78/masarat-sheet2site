@@ -406,20 +406,23 @@ export async function checkProjectSheetColumns(projectId: string): Promise<{
 
 export async function importFromProjectSheet(
   projectId: string,
-  syncDeleted = false
-): Promise<{ ok: boolean; message: string; added: number; updated: number; skipped: number }> {
+  syncDeleted = false,
+  dryRun = false
+): Promise<{ ok: boolean; message: string; added: number; updated: number; skipped: number; deleted?: number; preview?: any[] }> {
   try {
     const { sheets, proj } = await getSheetsClient(projectId);
-    if (!proj.googleSheetId) {
+    // T3: import can target a separate sheet from the one used for sync/export.
+    const importSpreadsheetId = extractSpreadsheetId(proj.importSheetId || proj.googleSheetId || "");
+    if (!importSpreadsheetId) {
       return { ok: false, message: "لم يتم إدخال Sheet ID", added: 0, updated: 0, skipped: 0 };
     }
 
     const fields = await getProjectFields(projectId);
     const desiredName = sanitizeSheetTabName(proj.googleSheetName || proj.name || "بيانات");
-    const sheetName = await resolveSheetTab(sheets, proj.googleSheetId, desiredName);
+    const sheetName = await resolveSheetTab(sheets, importSpreadsheetId, desiredName);
 
     const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: proj.googleSheetId,
+      spreadsheetId: importSpreadsheetId,
       range: sheetRange(sheetName, "A:ZZ"),
     });
 
@@ -442,6 +445,7 @@ export async function importFromProjectSheet(
     }
 
     let added = 0, updated = 0, skipped = 0, deleted = 0;
+    const preview: any[] = [];
 
     // Collect all valid seqNums seen in the Sheet (used by syncDeleted below)
     const sheetSeqNums: number[] = [];
@@ -469,6 +473,13 @@ export async function importFromProjectSheet(
           .from(prTable)
           .where(and(eq(prTable.projectId, projectId), eq(prTable.sequentialNumber, seqNum)));
 
+        const action = existing.length > 0 ? "update" : "add";
+        if (dryRun) {
+          if (action === "update") updated++; else added++;
+          if (preview.length < 50) preview.push({ seqNum, action, data });
+          continue;
+        }
+
         if (existing.length > 0) {
           await db.update(prTable)
             .set({ data, updatedAt: new Date() })
@@ -490,15 +501,22 @@ export async function importFromProjectSheet(
     // is empty or all rows lack seq numbers, we treat it as "sheet not ready" and skip
     // deletion to avoid accidentally wiping the entire DB.
     if (syncDeleted && sheetSeqNums.length > 0) {
-      const toDelete = await db.select({ id: prTable.id })
+      const toDelete = await db.select({ id: prTable.id, sequentialNumber: prTable.sequentialNumber })
         .from(prTable)
         .where(and(
           eq(prTable.projectId, projectId),
           notInArray(prTable.sequentialNumber, sheetSeqNums)
         ));
-      for (const rec of toDelete) {
-        await db.delete(prTable).where(eq(prTable.id, rec.id));
-        deleted++;
+      if (dryRun) {
+        deleted = toDelete.length;
+        for (const rec of toDelete.slice(0, 50 - preview.length)) {
+          preview.push({ seqNum: rec.sequentialNumber, action: "delete" });
+        }
+      } else {
+        for (const rec of toDelete) {
+          await db.delete(prTable).where(eq(prTable.id, rec.id));
+          deleted++;
+        }
       }
     }
 
@@ -506,8 +524,9 @@ export async function importFromProjectSheet(
     if (syncDeleted) parts.push(`${deleted} مُحذوف`);
     return {
       ok: true,
-      message: `✅ اكتمل: ${parts.join("، ")}`,
-      added, updated, skipped,
+      message: dryRun ? `👁️ معاينة: ${parts.join("، ")}` : `✅ اكتمل: ${parts.join("، ")}`,
+      added, updated, skipped, deleted,
+      ...(dryRun ? { preview } : {}),
     };
   } catch (err: any) {
     return { ok: false, message: `❌ ${err.message}`, added: 0, updated: 0, skipped: 0 };

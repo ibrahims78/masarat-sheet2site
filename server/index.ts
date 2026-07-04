@@ -149,6 +149,7 @@ async function initDB() {
         form_subtitle TEXT,
         steps JSONB DEFAULT '["البيانات الأساسية","البيانات التفصيلية","المراجعة"]',
         google_sheet_id TEXT,
+        import_sheet_id TEXT,
         google_sheet_name TEXT DEFAULT 'بيانات',
         google_service_account_email TEXT,
         google_service_account_key_enc TEXT,
@@ -174,8 +175,20 @@ async function initDB() {
         validation_max INTEGER,
         validation_regex TEXT,
         validation_message TEXT,
-        condition_field TEXT,
-        condition_value TEXT
+        conditions JSONB,
+        condition_operator TEXT DEFAULT 'AND',
+        visible_to TEXT DEFAULT 'all',
+        is_read_only BOOLEAN DEFAULT FALSE
+      );
+
+      CREATE TABLE IF NOT EXISTS project_form_drafts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        draft_id TEXT NOT NULL,
+        data JSONB NOT NULL DEFAULT '{}',
+        step INTEGER DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(project_id, draft_id)
       );
 
       CREATE TABLE IF NOT EXISTS project_records (
@@ -198,6 +211,40 @@ async function initDB() {
         action TEXT NOT NULL,
         changed_at TIMESTAMP DEFAULT NOW(),
         changes_json JSONB
+      );
+    `);
+
+    // Backward-compatible migrations for installs created before newer columns/tables existed
+    await pool.query(`
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS import_sheet_id TEXT;
+      ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS conditions JSONB;
+      ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS condition_operator TEXT DEFAULT 'AND';
+      ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS visible_to TEXT DEFAULT 'all';
+      ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS is_read_only BOOLEAN DEFAULT FALSE;
+    `);
+    // Migrate legacy single-condition columns (if present) into the new conditions[] array, then drop them
+    const legacyColCheck = await pool.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'project_fields' AND column_name = 'condition_field'
+    `);
+    if (legacyColCheck.rows.length > 0) {
+      await pool.query(`
+        UPDATE project_fields
+        SET conditions = jsonb_build_array(jsonb_build_object('field', condition_field, 'value', COALESCE(condition_value, '')))
+        WHERE condition_field IS NOT NULL AND conditions IS NULL;
+        ALTER TABLE project_fields DROP COLUMN IF EXISTS condition_field;
+        ALTER TABLE project_fields DROP COLUMN IF EXISTS condition_value;
+      `);
+    }
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS project_form_drafts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        draft_id TEXT NOT NULL,
+        data JSONB NOT NULL DEFAULT '{}',
+        step INTEGER DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(project_id, draft_id)
       );
     `);
     console.log("✅ Database tables initialized");

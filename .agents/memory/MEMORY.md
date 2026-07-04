@@ -2,3 +2,4 @@
 - [QueryClient default queryFn](queryClient-default-fn.md) — always add defaultQueryFn to queryClient or queries without explicit queryFn will throw
 - [Drizzle eq() type safety](drizzle-eq-casting.md) — always cast useParams() results with String() before passing to eq()
 - [Security hardening decisions](security-hardening.md) — SESSION_SECRET + ENCRYPTION_KEY fail-fast, CORS allowlist, sameSite:lax, route ordering rules
+- [Safe-columns projection pitfall](safe-columns-projection.md) — new project/table columns must be added to the explicit safe-select column map, not just the schema, or GET endpoints silently drop them
