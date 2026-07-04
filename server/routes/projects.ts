@@ -12,9 +12,12 @@ import { v4 as uuidv4 } from "uuid";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import { Readable } from "stream";
-import { fileUpload, publicFileUrl, validateMimeType } from "../middleware/upload.js";
+import { fileUpload, publicFileUrl, validateMimeType, uploadsDir } from "../middleware/upload.js";
 import { handleError } from "../utils/errorHandler.js";
 import { randomBytes } from "crypto";
+import fs from "fs";
+import path from "path";
+import * as driveStorage from "../services/driveStorage.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -49,6 +52,9 @@ const PROJECT_LIST_COLUMNS = {
   formTitle: projects.formTitle,
   steps: projects.steps,
   updatedAt: projects.updatedAt,
+  driveSyncEnabled: projects.driveSyncEnabled,
+  driveRootFolderId: projects.driveRootFolderId,
+  googleDriveFolderId: projects.googleDriveFolderId,
 };
 
 router.get("/", requireAuth, async (req, res) => {
@@ -510,10 +516,38 @@ router.delete("/:id/records/:recordId", requireEditorOrAdmin, requireProjectOwne
   try {
     const pid = String(req.params.id);
     const rid = String(req.params.recordId);
-    const [rec] = await db.select({ sheetsRowIndex: projectRecords.sheetsRowIndex })
-      .from(projectRecords).where(and(eq(projectRecords.id, rid), eq(projectRecords.projectId, pid)));
+    const [rec] = await db.select({
+      sheetsRowIndex: projectRecords.sheetsRowIndex,
+      data: projectRecords.data,
+      driveFiles: projectRecords.driveFiles,
+      driveFolderId: projectRecords.driveFolderId,
+      syncStatus: projectRecords.syncStatus,
+    }).from(projectRecords).where(and(eq(projectRecords.id, rid), eq(projectRecords.projectId, pid)));
     if (!rec) return res.status(404).json({ error: "السجل غير موجود" });
     await db.delete(projectRecords).where(and(eq(projectRecords.id, rid), eq(projectRecords.projectId, pid)));
+
+    // Clean up local uploaded files (best-effort, non-blocking)
+    if (rec.data && typeof rec.data === "object") {
+      Object.values(rec.data as Record<string, any>).forEach(val => {
+        if (typeof val === "string" && val.startsWith("/uploads/")) {
+          const filename = path.basename(val);
+          const filePath = path.join(uploadsDir, filename);
+          fs.unlink(filePath, () => {});
+        }
+      });
+    }
+
+    // Clean up Drive files/folder (best-effort, non-blocking)
+    if (rec.syncStatus === "synced" && rec.driveFiles && typeof rec.driveFiles === "object") {
+      const driveFiles = rec.driveFiles as Record<string, any>;
+      const fileIds = Object.values(driveFiles)
+        .filter(f => f && f.fileId)
+        .map((f: any) => f.fileId as string);
+      fileIds.forEach(fileId => driveStorage.deleteFileFromDrive(pid, fileId).catch(console.error));
+      if (rec.driveFolderId) {
+        driveStorage.deleteFolderFromDrive(pid, rec.driveFolderId).catch(console.error);
+      }
+    }
 
     if (rec?.sheetsRowIndex) {
       const deletedRow = rec.sheetsRowIndex;
@@ -934,6 +968,184 @@ router.get("/:id/audit-log", requireAuth, async (req: Request, res: Response) =>
     .orderBy(desc(projectAuditLog.changedAt))
     .limit(limit);
     res.json(logs);
+  } catch (err: any) {
+    handleError(res, err);
+  }
+});
+
+// ─── DRIVE SYNC ──────────────────────────────────────────────
+
+router.get("/:id/sync-stats", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
+  try {
+    const pid = String(req.params.id);
+    const allRecords = await db.select({
+      syncStatus: projectRecords.syncStatus,
+      data: projectRecords.data,
+    }).from(projectRecords).where(eq(projectRecords.projectId, pid));
+
+    // Only count records that actually have file uploads
+    const fileFields = await db.select({ key: projectFields.key })
+      .from(projectFields)
+      .where(and(eq(projectFields.projectId, pid), sql`${projectFields.fieldType} = 'file'`));
+    const fileKeys = fileFields.map(f => f.key);
+    const hasFileFields = fileKeys.length > 0;
+
+    const recordsWithFiles = hasFileFields
+      ? allRecords.filter(r => {
+          const d = r.data as Record<string, any>;
+          return fileKeys.some(k => d[k] && String(d[k]).startsWith("/uploads/"));
+        })
+      : [];
+
+    const stats = { local: 0, synced: 0, failed: 0, syncing: 0, total: 0, hasFileFields };
+    for (const r of recordsWithFiles) {
+      stats.total++;
+      const s = r.syncStatus || "local";
+      if (s === "local") stats.local++;
+      else if (s === "synced") stats.synced++;
+      else if (s === "sync_failed") stats.failed++;
+      else if (s === "syncing") stats.syncing++;
+    }
+
+    res.json(stats);
+  } catch (err: any) {
+    handleError(res, err);
+  }
+});
+
+router.post("/:id/sync-drive", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
+  try {
+    const pid = String(req.params.id);
+    const mode: "keep_local" | "delete_local" = req.body.mode || "keep_local";
+    const retryFailed: boolean = req.body.retryFailed === true;
+
+    // Load project and validate Drive setup
+    const [proj] = await db.select().from(projects).where(eq(projects.id, pid));
+    if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
+    if (!proj.googleServiceAccountKeyEnc) {
+      return res.status(400).json({ error: "لم يتم إعداد Google Service Account لهذا المشروع" });
+    }
+    const rootFolderId = proj.driveRootFolderId || proj.googleDriveFolderId;
+    if (!rootFolderId) {
+      return res.status(400).json({ error: "لم يتم تحديد مجلد Drive الجذر. أضفه في إعدادات Google Drive." });
+    }
+
+    // Get file fields
+    const fileFields = await db.select({ key: projectFields.key })
+      .from(projectFields)
+      .where(and(eq(projectFields.projectId, pid), sql`${projectFields.fieldType} = 'file'`));
+    const fileKeys = fileFields.map(f => f.key);
+    if (fileKeys.length === 0) {
+      return res.json({ ok: true, synced: 0, failed: 0, failedRecords: [], message: "لا يوجد حقول ملفات في هذا المشروع" });
+    }
+
+    // Find records to sync
+    const statusFilter = retryFailed
+      ? ["local", "sync_failed"]
+      : ["local"];
+    const allRecords = await db.select().from(projectRecords)
+      .where(eq(projectRecords.projectId, pid));
+    const toSync = allRecords.filter(r => {
+      const s = r.syncStatus || "local";
+      if (!statusFilter.includes(s)) return false;
+      const d = r.data as Record<string, any>;
+      return fileKeys.some(k => d[k] && String(d[k]).startsWith("/uploads/"));
+    });
+
+    if (toSync.length === 0) {
+      return res.json({ ok: true, synced: 0, failed: 0, failedRecords: [], message: "لا يوجد ملفات تحتاج مزامنة" });
+    }
+
+    // Ensure project folder exists in Drive
+    let projectFolderId: string;
+    try {
+      projectFolderId = await driveStorage.ensureProjectFolder(pid, proj.name, rootFolderId);
+    } catch (err: any) {
+      return res.status(500).json({ error: `فشل في الوصول إلى Google Drive: ${err.message}` });
+    }
+
+    let synced = 0;
+    let failed = 0;
+    const failedRecords: { id: string; error: string }[] = [];
+
+    for (const record of toSync) {
+      try {
+        // Mark as syncing
+        await db.update(projectRecords)
+          .set({ syncStatus: "syncing" } as any)
+          .where(eq(projectRecords.id, record.id));
+
+        const recordData = record.data as Record<string, any>;
+
+        // Determine folder label from sequential number or record ID
+        const seqNum = record.sequentialNumber;
+        const folderLabel = seqNum ? `السجل ${seqNum}` : `سجل ${record.id.slice(0, 8)}`;
+
+        // Ensure record sub-folder
+        const recordFolderId = await driveStorage.ensureRecordFolder(pid, projectFolderId, folderLabel, record.id);
+
+        // Upload each file field
+        const existingDriveFiles = (record.driveFiles as Record<string, any>) || {};
+        const updatedDriveFiles: Record<string, any> = { ...existingDriveFiles };
+        const updatedData = { ...recordData };
+        const localFilesToDelete: string[] = [];
+
+        for (const fieldKey of fileKeys) {
+          const fileUrl = recordData[fieldKey];
+          if (!fileUrl || !String(fileUrl).startsWith("/uploads/")) continue;
+
+          const localFilename = path.basename(String(fileUrl));
+          const mimeType = driveStorage.guessMimeType(localFilename);
+
+          const { fileId, driveUrl } = await driveStorage.uploadLocalFileToDrive(pid, {
+            localFilename,
+            displayName: localFilename,
+            mimeType,
+            folderId: recordFolderId,
+          });
+
+          updatedDriveFiles[fieldKey] = { fileId, driveUrl, originalName: localFilename, syncedAt: new Date().toISOString() };
+          updatedData[fieldKey] = driveUrl;
+
+          if (mode === "delete_local") {
+            localFilesToDelete.push(localFilename);
+          }
+        }
+
+        // Persist sync results to DB
+        await db.update(projectRecords)
+          .set({
+            driveFiles: updatedDriveFiles,
+            driveFolderId: recordFolderId,
+            syncStatus: "synced",
+            updatedAt: new Date(),
+          } as any)
+          .where(eq(projectRecords.id, record.id));
+
+        // Update Google Sheets row with Drive URLs
+        if (record.sheetsRowIndex) {
+          updateRecordRow(pid, record.sheetsRowIndex, updatedData, record.sequentialNumber || 0).catch(console.error);
+        }
+
+        // Delete local files if requested
+        if (mode === "delete_local") {
+          for (const fname of localFilesToDelete) {
+            fs.unlink(path.join(uploadsDir, fname), () => {});
+          }
+        }
+
+        synced++;
+      } catch (err: any) {
+        console.error(`[sync-drive] Failed record ${record.id}:`, err);
+        await db.update(projectRecords)
+          .set({ syncStatus: "sync_failed" } as any)
+          .where(eq(projectRecords.id, record.id));
+        failed++;
+        failedRecords.push({ id: record.id, error: err.message || "خطأ غير معروف" });
+      }
+    }
+
+    res.json({ ok: true, synced, failed, failedRecords });
   } catch (err: any) {
     handleError(res, err);
   }

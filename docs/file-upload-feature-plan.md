@@ -3,8 +3,45 @@
 
 **تاريخ الإعداد:** 2026-07-04  
 **آخر تحديث:** 2026-07-04  
-**الحالة:** مسودة خطة عمل — لم يُنفَّذ بعد  
+**الحالة:** ✅ المرحلتان 1 و2 منفَّذتان — المراحل 3–5 مخطَّطة  
 **النهج المعتمد:** التخزين المحلي أولاً (Local-First) + مزامنة يدوية إلى Google Drive  
+
+---
+
+## ✅ ملخص ما تم تنفيذه (2026-07-04)
+
+### المرحلة الأولى — إصلاح UX الحرج ✅ مكتملة
+
+| المهمة | الملف | الحالة |
+|---|---|---|
+| إضافة `authSuffix?: string` لـ FileField — يُلحق token بالرابط | `client/src/components/FileField.tsx` | ✅ |
+| إضافة حقل `file` في صفحة التعديل الذاتي مع authSuffix | `client/src/pages/ProjectEditForm.tsx` | ✅ |
+| إضافة عمود `sync_status TEXT DEFAULT 'local'` في DB | `server/index.ts` (ALTER TABLE migration) | ✅ |
+| إضافة عمود `drive_files JSONB DEFAULT '{}'` في project_records | `server/index.ts` | ✅ |
+| إضافة عمود `drive_folder_id TEXT` في project_records | `server/index.ts` | ✅ |
+
+### المرحلة الثانية — خدمة Drive Storage وزر المزامنة ✅ مكتملة
+
+| المهمة | الملف | الحالة |
+|---|---|---|
+| خدمة Drive كاملة: init، ensureProjectFolder، ensureRecordFolder، uploadLocalFileToDrive، deleteFile، deleteFolder | `server/services/driveStorage.ts` | ✅ |
+| Endpoint `GET /api/projects/:id/sync-stats` — إحصاء الملفات المحلية/المُزامَنة/الفاشلة | `server/routes/projects.ts` | ✅ |
+| Endpoint `POST /api/projects/:id/sync-drive` — مزامنة جماعية مع Drive | `server/routes/projects.ts` | ✅ |
+| تنظيف ملفات عند حذف السجل (محلية + Drive) | `server/routes/projects.ts` | ✅ |
+| تبويب "مزامنة Drive" في إعدادات المشروع — حقل معرِّف المجلد | `client/src/pages/admin/ProjectSettings.tsx` | ✅ |
+| إحصائيات الملفات (محلي/مُزامَن/فاشل) مع تحذير أصفر | `client/src/pages/admin/ProjectSettings.tsx` | ✅ |
+| حوار تأكيد المزامنة مع خيار keep_local / delete_local | `client/src/pages/admin/ProjectSettings.tsx` | ✅ |
+| عرض نتيجة المزامنة بعد الانتهاء | `client/src/pages/admin/ProjectSettings.tsx` | ✅ |
+| أعمدة DB جديدة في projects: `drive_sync_enabled`، `drive_root_folder_id` | `shared/schema.ts` + `server/index.ts` | ✅ |
+
+### متطلبات التشغيل للمرحلتين 1 و2
+
+```
+GOOGLE_SERVICE_ACCOUNT_KEY  — مفتاح Service Account مع Drive API مُفعَّل
+```
+1. أنشئ مجلداً في Google Drive وشاركه مع بريد الـ Service Account بصلاحية Editor
+2. في إعدادات المشروع ← تبويب "مزامنة Drive": ألصق معرِّف المجلد واحفظ
+3. اضغط "مزامنة الملفات المحلية" لبدء الرفع
 
 ---
 

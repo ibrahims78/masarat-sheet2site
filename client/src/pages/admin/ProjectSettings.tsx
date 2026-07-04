@@ -16,7 +16,7 @@ import {
   Save, Loader2, Plus, Trash2, GripVertical, ArrowRight, ExternalLink,
   ChevronDown, ChevronUp,
   Upload, TableProperties, Wrench, RefreshCw, BotMessageSquare, ArrowUpToLine,
-  History, User, Clock,
+  History, User, Clock, FolderSync, HardDrive, AlertTriangle, CheckCircle2, XCircle,
 } from "lucide-react";
 import type { Project, ProjectField } from "@shared/schema";
 import { useLang } from "@/context/LanguageContext";
@@ -29,7 +29,7 @@ export function ProjectSettings() {
   const { lang } = useLang();
   const isAr = lang === "ar";
   const { toast } = useToast();
-  const [tab, setTab] = useState<"form" | "fields" | "sheets" | "telegram" | "audit">("form");
+  const [tab, setTab] = useState<"form" | "fields" | "sheets" | "telegram" | "audit" | "drive">("form");
   const [testing, setTesting] = useState(false);
   const [fields, setFields] = useState<ProjectField[]>([]);
   const [showGuide, setShowGuide] = useState(false);
@@ -50,6 +50,13 @@ export function ProjectSettings() {
   const [chatIdLoading, setChatIdLoading] = useState(false);
   const [chatIdChats, setChatIdChats] = useState<{ id: string; title: string; type: string }[] | null>(null);
 
+  // Drive-specific state
+  const [driveModal, setDriveModal] = useState(false);
+  const [driveMode, setDriveMode] = useState<"keep_local" | "delete_local">("keep_local");
+  const [driveResult, setDriveResult] = useState<{ synced: number; failed: number; failedRecords: any[]; message?: string } | null>(null);
+  const [driveSyncing, setDriveSyncing] = useState(false);
+  const [driveRootInput, setDriveRootInput] = useState("");
+
   // Expanded field for validation
   const [expandedFieldIdx, setExpandedFieldIdx] = useState<number | null>(null);
 
@@ -69,6 +76,15 @@ export function ProjectSettings() {
     enabled: tab === "audit",
   });
 
+  const { data: syncStats, refetch: refetchStats } = useQuery<{
+    local: number; synced: number; failed: number; syncing: number; total: number; hasFileFields: boolean;
+  }>({
+    queryKey: ["/api/projects", id, "sync-stats"],
+    queryFn: () => fetch(`/api/projects/${id}/sync-stats`, { credentials: "include" }).then(r => r.json()),
+    enabled: tab === "drive",
+    refetchInterval: driveSyncing ? 3000 : false,
+  });
+
   useEffect(() => { setFields(rawFields); }, [rawFields]);
 
   const { register, handleSubmit, reset, watch, setValue } = useForm<any>();
@@ -85,6 +101,7 @@ export function ProjectSettings() {
         googleServiceAccountEmail: project.googleServiceAccountEmail,
         telegramChatId: project.telegramChatId,
       });
+      setDriveRootInput(project.driveRootFolderId || project.googleDriveFolderId || "");
     }
   }, [project, reset]);
 
@@ -205,11 +222,37 @@ export function ProjectSettings() {
     dragOverItem.current = null;
   };
 
+  const doSyncDrive = async (retryFailed = false) => {
+    setDriveSyncing(true);
+    setDriveResult(null);
+    setDriveModal(false);
+    try {
+      const res: any = await apiRequest("POST", `/api/projects/${id}/sync-drive`, {
+        mode: driveMode, retryFailed,
+      });
+      setDriveResult(res);
+      if (res.ok) {
+        toast({ description: isAr ? `✅ تمت المزامنة: ${res.synced} ملف` : `✅ Synced: ${res.synced} files` });
+        refetchStats();
+      }
+    } catch (err: any) {
+      toast({ variant: "destructive", description: `❌ ${err.message}` });
+    }
+    setDriveSyncing(false);
+  };
+
+  const saveDriveRoot = async () => {
+    await apiRequest("PATCH", `/api/projects/${id}`, { googleDriveFolderId: driveRootInput });
+    qc.invalidateQueries({ queryKey: ["/api/projects", id] });
+    toast({ description: isAr ? "✅ تم حفظ معرِّف مجلد Drive" : "✅ Drive folder ID saved" });
+  };
+
   const tabs = [
     { key: "form",     label: isAr ? "النموذج" : "Form" },
     { key: "fields",   label: isAr ? "الحقول" : "Fields" },
     { key: "sheets",   label: "Google Sheets" },
     { key: "telegram", label: "Telegram" },
+    { key: "drive",    label: isAr ? "مزامنة Drive" : "Drive Sync" },
     { key: "audit",    label: isAr ? "سجل النشاط" : "Activity Log" },
   ] as const;
 
@@ -841,6 +884,186 @@ export function ProjectSettings() {
               </div>
             </Card>
           </form>
+        )}
+
+        {/* ══ DRIVE SYNC TAB ══ */}
+        {tab === "drive" && (
+          <div className="space-y-4">
+
+            {/* Drive root folder config */}
+            <Card className="p-5 space-y-3">
+              <div className="flex items-center gap-2 mb-1">
+                <HardDrive className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">{isAr ? "إعداد مجلد Drive الجذر" : "Drive Root Folder Setup"}</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {isAr
+                  ? "أدخل معرِّف مجلد Google Drive المشترك مع حساب الخدمة. ستُنشأ مجلدات المشروع والسجلات داخله تلقائياً عند المزامنة."
+                  : "Enter the Google Drive folder ID shared with the service account. Project and record folders will be created inside it automatically during sync."}
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={driveRootInput}
+                  onChange={e => setDriveRootInput(e.target.value)}
+                  placeholder={isAr ? "مثال: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" : "e.g. 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"}
+                  className="flex-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+                  data-testid="input-drive-root-folder"
+                />
+                <Button type="button" size="sm" onClick={saveDriveRoot} disabled={!driveRootInput}>
+                  <Save className="h-3.5 w-3.5 ml-1" />{isAr ? "حفظ" : "Save"}
+                </Button>
+              </div>
+              {driveRootInput && (
+                <a href={`https://drive.google.com/drive/folders/${driveRootInput}`} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline" data-testid="link-drive-folder">
+                  <ExternalLink className="h-3 w-3" />{isAr ? "فتح المجلد في Drive" : "Open folder in Drive"}
+                </a>
+              )}
+            </Card>
+
+            {/* Sync stats */}
+            {syncStats && (
+              <>
+                {/* Warning banner */}
+                {syncStats.hasFileFields && syncStats.local > 0 && (
+                  <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800">
+                    <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                        {isAr ? `${syncStats.local} ملف محفوظ مؤقتاً على الخادم` : `${syncStats.local} file(s) stored locally on the server`}
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                        {isAr ? "قد تُفقَد هذه الملفات عند تحديث المنصة. يُنصح بالمزامنة مع Google Drive." : "These files may be lost on platform updates. Sync to Google Drive is recommended."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Stats row */}
+                {syncStats.hasFileFields ? (
+                  <div className="grid grid-cols-3 gap-3">
+                    <Card className="p-4 text-center space-y-1">
+                      <p className="text-2xl font-bold text-amber-500">{syncStats.local}</p>
+                      <p className="text-xs text-muted-foreground">{isAr ? "محلي — لم يُزامَن" : "Local — not synced"}</p>
+                    </Card>
+                    <Card className="p-4 text-center space-y-1">
+                      <p className="text-2xl font-bold text-green-500">{syncStats.synced}</p>
+                      <p className="text-xs text-muted-foreground">{isAr ? "مُزامَن مع Drive" : "Synced to Drive"}</p>
+                    </Card>
+                    <Card className="p-4 text-center space-y-1">
+                      <p className="text-2xl font-bold text-red-500">{syncStats.failed}</p>
+                      <p className="text-xs text-muted-foreground">{isAr ? "فشلت المزامنة" : "Sync failed"}</p>
+                    </Card>
+                  </div>
+                ) : (
+                  <Card className="p-8 text-center">
+                    <p className="text-sm text-muted-foreground">{isAr ? "لا يوجد حقول ملفات في هذا المشروع." : "No file fields configured in this project."}</p>
+                  </Card>
+                )}
+
+                {/* Action buttons */}
+                {syncStats.hasFileFields && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      onClick={() => { setDriveModal(true); setDriveResult(null); }}
+                      disabled={driveSyncing || syncStats.local === 0}
+                      className="gap-2"
+                      data-testid="button-sync-drive"
+                    >
+                      {driveSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSync className="h-4 w-4" />}
+                      {isAr ? `مزامنة الملفات المحلية (${syncStats.local})` : `Sync Local Files (${syncStats.local})`}
+                    </Button>
+                    {syncStats.failed > 0 && (
+                      <Button variant="outline" onClick={() => doSyncDrive(true)} disabled={driveSyncing} className="gap-2" data-testid="button-retry-sync">
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        {isAr ? `إعادة محاولة الفاشلة (${syncStats.failed})` : `Retry Failed (${syncStats.failed})`}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Sync result */}
+            {driveResult && (
+              <Card className="p-4 space-y-2">
+                <div className="flex items-center gap-2 font-semibold text-sm">
+                  {driveResult.failed === 0
+                    ? <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    : <AlertTriangle className="h-4 w-4 text-amber-500" />}
+                  {isAr ? "نتيجة المزامنة" : "Sync Result"}
+                </div>
+                {driveResult.message && <p className="text-sm text-muted-foreground">{driveResult.message}</p>}
+                <div className="flex gap-4 text-sm">
+                  <span className="text-green-600 font-medium">✅ {isAr ? `نجح: ${driveResult.synced}` : `Synced: ${driveResult.synced}`}</span>
+                  {driveResult.failed > 0 && (
+                    <span className="text-red-500 font-medium">❌ {isAr ? `فشل: ${driveResult.failed}` : `Failed: ${driveResult.failed}`}</span>
+                  )}
+                </div>
+                {driveResult.failedRecords && driveResult.failedRecords.length > 0 && (
+                  <div className="space-y-1 mt-2">
+                    {driveResult.failedRecords.map((r: any) => (
+                      <div key={r.id} className="flex items-start gap-2 text-xs text-red-500 dark:text-red-400">
+                        <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>{r.id.slice(0, 8)}… — {r.error}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            )}
+
+            {/* Sync confirmation modal */}
+            {driveModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                <Card className="w-full max-w-md p-6 space-y-4" dir={isAr ? "rtl" : "ltr"}>
+                  <div className="flex items-center gap-2">
+                    <FolderSync className="h-5 w-5 text-primary" />
+                    <h2 className="font-bold text-base">{isAr ? "تأكيد المزامنة مع Drive" : "Confirm Drive Sync"}</h2>
+                  </div>
+
+                  {syncStats && (
+                    <p className="text-sm text-muted-foreground">
+                      {isAr
+                        ? `سيتم رفع ${syncStats.local} ملفاً إلى Google Drive.`
+                        : `${syncStats.local} file(s) will be uploaded to Google Drive.`}
+                    </p>
+                  )}
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">{isAr ? "بعد المزامنة:" : "After sync:"}</p>
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="radio" name="driveMode" value="keep_local" checked={driveMode === "keep_local"}
+                        onChange={() => setDriveMode("keep_local")} className="mt-0.5 accent-primary" data-testid="radio-keep-local" />
+                      <div>
+                        <p className="text-sm font-medium">{isAr ? "إبقاء النسخة المحلية + Drive" : "Keep local copy + Drive"}</p>
+                        <p className="text-xs text-muted-foreground">{isAr ? "الملفات تبقى على الخادم وفي Drive" : "Files remain on server and in Drive"}</p>
+                      </div>
+                    </label>
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="radio" name="driveMode" value="delete_local" checked={driveMode === "delete_local"}
+                        onChange={() => setDriveMode("delete_local")} className="mt-0.5 accent-primary" data-testid="radio-delete-local" />
+                      <div>
+                        <p className="text-sm font-medium">{isAr ? "حذف النسخة المحلية بعد المزامنة" : "Delete local copy after sync"}</p>
+                        <p className="text-xs text-red-500">{isAr ? "⚠️ Drive سيكون المصدر الوحيد — لا يمكن التراجع" : "⚠️ Drive will be the only source — irreversible"}</p>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="flex gap-2 justify-end pt-2">
+                    <Button variant="outline" onClick={() => setDriveModal(false)} data-testid="button-cancel-sync">
+                      {isAr ? "إلغاء" : "Cancel"}
+                    </Button>
+                    <Button onClick={() => doSyncDrive(false)} className="gap-2" data-testid="button-confirm-sync">
+                      <FolderSync className="h-4 w-4" />
+                      {isAr ? "بدء المزامنة" : "Start Sync"}
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+            )}
+
+          </div>
         )}
 
         {/* ══ AUDIT LOG TAB ══ */}

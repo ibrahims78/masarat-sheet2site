@@ -76,6 +76,9 @@ export const projects = pgTable("projects", {
   googleServiceAccountEmail: text("google_service_account_email"),
   googleServiceAccountKeyEnc: text("google_service_account_key_enc"),
   googleDriveFolderId: text("google_drive_folder_id"),
+  // Google Drive sync (file upload integration)
+  driveSyncEnabled: boolean("drive_sync_enabled").default(false),
+  driveRootFolderId: text("drive_root_folder_id"),
   // Telegram
   telegramBotTokenEnc: text("telegram_bot_token_enc"),
   telegramChatId: text("telegram_chat_id"),
@@ -135,6 +138,10 @@ export const projectRecords = pgTable("project_records", {
   submittedAt: timestamp("submitted_at").defaultNow(),
   updatedAt: timestamp("updated_at"),
   sheetsRowIndex: integer("sheets_row_index"),
+  // Drive sync fields
+  driveFiles: jsonb("drive_files").$type<Record<string, { fileId: string; driveUrl: string; originalName: string; syncedAt: string } | null>>().default({}),
+  driveFolderId: text("drive_folder_id"),
+  syncStatus: text("sync_status").default("local"),
 });
 
 // ============================================================

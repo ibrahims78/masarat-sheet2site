@@ -11,6 +11,7 @@ import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { useLang } from "@/context/LanguageContext";
 import type { ProjectField, ProjectRecord } from "@shared/schema";
 import { isFieldVisible as checkFieldVisible } from "@/lib/fieldVisibility";
+import { FileField } from "@/components/FileField";
 
 export function ProjectEditForm() {
   const { projectId, token } = useParams<{ projectId: string; token: string }>();
@@ -32,7 +33,7 @@ export function ProjectEditForm() {
   const fields = formInfo?.fields || [];
   const project = formInfo?.project;
 
-  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<Record<string, any>>({ mode: "onBlur" });
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<Record<string, any>>({ mode: "onBlur" });
 
   useEffect(() => {
     if (record && !record.error) {
@@ -130,6 +131,17 @@ export function ProjectEditForm() {
                           </label>
                         ))}
                       </div>
+                    ) : f.fieldType === "file" ? (
+                      <>
+                        <input type="hidden" {...register(f.key, { required: f.isRequired ? (isAr ? `${f.label} مطلوب` : `${f.label} is required`) : false })} />
+                        <FileField
+                          value={watchedValues[f.key]}
+                          onChange={url => setValue(f.key, url, { shouldValidate: true })}
+                          uploadUrl={`/api/pform/${projectId}/upload`}
+                          fieldKey={f.key}
+                          authSuffix={`?token=${token}&project=${projectId}`}
+                        />
+                      </>
                     ) : (
                       <Input {...register(f.key, { required: f.isRequired ? (isAr ? `${f.label} مطلوب` : `${f.label} is required`) : false })}
                         type={f.fieldType === "number" ? "number" : f.fieldType === "date" ? "date" : f.fieldType === "email" ? "email" : f.fieldType === "phone" ? "tel" : "text"}

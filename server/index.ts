@@ -290,6 +290,11 @@ async function initDB() {
       ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS condition_operator TEXT DEFAULT 'AND';
       ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS visible_to TEXT DEFAULT 'all';
       ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS is_read_only BOOLEAN DEFAULT FALSE;
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS drive_sync_enabled BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS drive_root_folder_id TEXT;
+      ALTER TABLE project_records ADD COLUMN IF NOT EXISTS drive_files JSONB DEFAULT '{}';
+      ALTER TABLE project_records ADD COLUMN IF NOT EXISTS drive_folder_id TEXT;
+      ALTER TABLE project_records ADD COLUMN IF NOT EXISTS sync_status TEXT DEFAULT 'local';
     `);
     // Migrate legacy single-condition columns (if present) into the new conditions[] array, then drop them
     const legacyColCheck = await pool.query(`

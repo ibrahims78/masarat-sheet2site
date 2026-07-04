@@ -8,9 +8,10 @@ interface FileFieldProps {
   onChange: (url: string) => void;
   uploadUrl: string;
   fieldKey: string;
+  authSuffix?: string;
 }
 
-export function FileField({ value, onChange, uploadUrl, fieldKey }: FileFieldProps) {
+export function FileField({ value, onChange, uploadUrl, fieldKey, authSuffix }: FileFieldProps) {
   const { lang } = useLang();
   const isAr = lang === "ar";
   const [uploading, setUploading] = useState(false);
@@ -51,7 +52,7 @@ export function FileField({ value, onChange, uploadUrl, fieldKey }: FileFieldPro
       {value ? (
         <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-sm">
           <FileText className="h-4 w-4 text-primary shrink-0" />
-          <a href={value} target="_blank" rel="noopener noreferrer" className="flex-1 truncate text-primary hover:underline" data-testid={`link-file-${fieldKey}`}>
+          <a href={value + (authSuffix ?? "")} target="_blank" rel="noopener noreferrer" className="flex-1 truncate text-primary hover:underline" data-testid={`link-file-${fieldKey}`}>
             {fileName}
           </a>
           <button
