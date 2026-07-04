@@ -512,6 +512,8 @@ export function ProjectRegister() {
             onChange={url => setValue(f.key, url, { shouldValidate: true })}
             uploadUrl={`/api/pform/${projectId}/upload`}
             fieldKey={f.key}
+            allowedTypes={(f as any).allowedFileTypes}
+            maxSizeMb={(f as any).maxFileSizeMb}
           />
         </>
       ) : (

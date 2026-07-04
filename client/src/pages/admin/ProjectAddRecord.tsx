@@ -114,6 +114,8 @@ function FieldInput({ f, register, errors, watch, setValue, projectId }: {
           onChange={url => setValue(f.key, url, { shouldValidate: true })}
           uploadUrl={`/api/projects/${projectId}/upload`}
           fieldKey={f.key}
+          allowedTypes={(f as any).allowedFileTypes}
+          maxSizeMb={(f as any).maxFileSizeMb}
         />
       </>
     );

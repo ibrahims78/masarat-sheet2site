@@ -87,6 +87,19 @@ function sanitizeSheetTabName(name: string): string {
   return clean;
 }
 
+/**
+ * Resolve a file URL for Google Sheets cells.
+ * - If the value is already a Drive URL or any external URL → return as-is.
+ * - If the value is a local /uploads/ path → prepend APP_BASE_URL (if set) to make it absolute.
+ *   Returns an empty string if no base URL is configured (local paths are not clickable externally).
+ */
+function resolveFileUrlForSheet(value: string): string {
+  if (!value) return "";
+  if (!value.startsWith("/uploads/")) return value; // Drive URL or other — leave as-is
+  const base = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
+  return base ? base + value : ""; // empty = not clickable yet; blank is cleaner than a broken path
+}
+
 /** Wrap sheet name in single quotes so spaces/special chars work in range notation */
 function sheetRange(name: string, range: string): string {
   const escaped = name.replace(/'/g, "''");
@@ -166,7 +179,10 @@ export async function appendRecordToSheet(
     const sheetName = await resolveSheetTab(sheets, proj.googleSheetId, desiredName, true);
     await ensureHeaders(sheets, proj.googleSheetId, sheetName, fields);
 
-    const row = [String(seqNum), ...fields.map(f => String(recordData[f.key] ?? ""))];
+    const row = [String(seqNum), ...fields.map(f => {
+      const val = String(recordData[f.key] ?? "");
+      return f.fieldType === "file" ? resolveFileUrlForSheet(val) : val;
+    })];
 
     const res = await sheets.spreadsheets.values.append({
       spreadsheetId: proj.googleSheetId,
@@ -198,7 +214,10 @@ export async function updateRecordRow(
     const fields = await getProjectFields(projectId);
     const desiredName = sanitizeSheetTabName(proj.googleSheetName || proj.name || "بيانات");
     const sheetName = await resolveSheetTab(sheets, proj.googleSheetId, desiredName);
-    const row = [String(seqNum), ...fields.map(f => String(recordData[f.key] ?? ""))];
+    const row = [String(seqNum), ...fields.map(f => {
+      const val = String(recordData[f.key] ?? "");
+      return f.fieldType === "file" ? resolveFileUrlForSheet(val) : val;
+    })];
 
     await sheets.spreadsheets.values.update({
       spreadsheetId: proj.googleSheetId,

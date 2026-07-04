@@ -111,6 +111,9 @@ export const projectFields = pgTable("project_fields", {
   visibleTo: text("visible_to").default("all"),
   // Field becomes read-only after the record is created (still shown, cannot be edited)
   isReadOnly: boolean("is_read_only").default(false),
+  // File-field restrictions (null = use global defaults)
+  allowedFileTypes: jsonb("allowed_file_types").$type<string[] | null>().default(null),
+  maxFileSizeMb: integer("max_file_size_mb"),
 });
 
 // ============================================================

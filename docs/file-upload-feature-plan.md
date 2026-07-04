@@ -1,636 +1,104 @@
-# خطة تطوير ميزة رفع الملفات — نهج التخزين المحلي أولاً مع المزامنة إلى Google Drive
-## منصة مسارات — Healthcare Staff Management System
+# File Upload Feature Plan — Nawah Healthcare Staff Management
 
-**تاريخ الإعداد:** 2026-07-04  
-**آخر تحديث:** 2026-07-04  
-**الحالة:** ✅ المرحلتان 1 و2 منفَّذتان — المراحل 3–5 مخطَّطة  
-**النهج المعتمد:** التخزين المحلي أولاً (Local-First) + مزامنة يدوية إلى Google Drive  
+## Status Overview (updated 2026-07-04)
 
----
-
-## ✅ ملخص ما تم تنفيذه (2026-07-04)
-
-### المرحلة الأولى — إصلاح UX الحرج ✅ مكتملة
-
-| المهمة | الملف | الحالة |
-|---|---|---|
-| إضافة `authSuffix?: string` لـ FileField — يُلحق token بالرابط | `client/src/components/FileField.tsx` | ✅ |
-| إضافة حقل `file` في صفحة التعديل الذاتي مع authSuffix | `client/src/pages/ProjectEditForm.tsx` | ✅ |
-| إضافة عمود `sync_status TEXT DEFAULT 'local'` في DB | `server/index.ts` (ALTER TABLE migration) | ✅ |
-| إضافة عمود `drive_files JSONB DEFAULT '{}'` في project_records | `server/index.ts` | ✅ |
-| إضافة عمود `drive_folder_id TEXT` في project_records | `server/index.ts` | ✅ |
-
-### المرحلة الثانية — خدمة Drive Storage وزر المزامنة ✅ مكتملة
-
-| المهمة | الملف | الحالة |
-|---|---|---|
-| خدمة Drive كاملة: init، ensureProjectFolder، ensureRecordFolder، uploadLocalFileToDrive، deleteFile، deleteFolder | `server/services/driveStorage.ts` | ✅ |
-| Endpoint `GET /api/projects/:id/sync-stats` — إحصاء الملفات المحلية/المُزامَنة/الفاشلة | `server/routes/projects.ts` | ✅ |
-| Endpoint `POST /api/projects/:id/sync-drive` — مزامنة جماعية مع Drive | `server/routes/projects.ts` | ✅ |
-| تنظيف ملفات عند حذف السجل (محلية + Drive) | `server/routes/projects.ts` | ✅ |
-| تبويب "مزامنة Drive" في إعدادات المشروع — حقل معرِّف المجلد | `client/src/pages/admin/ProjectSettings.tsx` | ✅ |
-| إحصائيات الملفات (محلي/مُزامَن/فاشل) مع تحذير أصفر | `client/src/pages/admin/ProjectSettings.tsx` | ✅ |
-| حوار تأكيد المزامنة مع خيار keep_local / delete_local | `client/src/pages/admin/ProjectSettings.tsx` | ✅ |
-| عرض نتيجة المزامنة بعد الانتهاء | `client/src/pages/admin/ProjectSettings.tsx` | ✅ |
-| أعمدة DB جديدة في projects: `drive_sync_enabled`، `drive_root_folder_id` | `shared/schema.ts` + `server/index.ts` | ✅ |
-
-### متطلبات التشغيل للمرحلتين 1 و2
-
-```
-GOOGLE_SERVICE_ACCOUNT_KEY  — مفتاح Service Account مع Drive API مُفعَّل
-```
-1. أنشئ مجلداً في Google Drive وشاركه مع بريد الـ Service Account بصلاحية Editor
-2. في إعدادات المشروع ← تبويب "مزامنة Drive": ألصق معرِّف المجلد واحفظ
-3. اضغط "مزامنة الملفات المحلية" لبدء الرفع
+| Phase | Title | Status |
+|-------|-------|--------|
+| 1 | UX fixes & DB columns | ✅ Complete |
+| 2 | Drive sync service & UI | ✅ Complete |
+| 3 | Delete cleanup & Sheet URL fix | ✅ Complete |
+| 4 | Per-field restrictions & per-record sync | ✅ Complete |
+| 5 | Testing | ⏳ Planned |
 
 ---
 
-## 0. المبدأ الجوهري للنهج الجديد
+## Phase 1 — UX Fixes & DB Columns ✅
 
-```
-المسجِّل يرفع ملفاً ويُرسِل النموذج
-          ↓
-الملف يُحفَظ فوراً على المنصة (تخزين محلي)
-الوصول متاح فوراً — لا انتظار — لا اعتماد على Drive
-          ↓
-المسؤول (متى شاء) يضغط "مزامنة مع Drive"
-          ↓
-الملفات تُرفَع إلى Google Drive في مجلدات منظَّمة
-رابط Drive يُحدِّث Google Sheets تلقائياً
-المسؤول يختار: إبقاء النسخة المحلية أم حذفها
-```
+- `authSuffix` prop in `FileField` for authenticated file previews
+- File field rendered in self-edit form (ProjectEditForm)
+- DB columns added: `sync_status`, `drive_files`, `drive_folder_id` on `project_records`
+- `fieldKey` prop wired through all FileField usages
 
-**لماذا هذا أفضل من الرفع الفوري إلى Drive؟**
-- تجربة المسجِّل لا تتأثر بأي بطء أو انقطاع في Drive
-- المسؤول يتحقق من البيانات قبل أن تُصدَّر إلى Drive
-- المزامنة تتم بالجملة لكل المشروع دفعةً واحدة — لا سجل سجل
-- النظام يعمل بالكامل حتى لو لم يُعدَّ Drive أصلاً
+## Phase 2 — Drive Sync Service & UI ✅
 
----
+- `server/services/driveStorage.ts` — full Drive API service
+- `POST /:id/sync-drive` — bulk project-level Drive sync endpoint
+- `GET /:id/sync-stats` — sync statistics endpoint
+- Drive tab in ProjectSettings with mode selection (keep_local / delete_local)
+- Sync results shown in UI
 
-## 1. التشخيص الحالي
+## Phase 3 — Delete Cleanup & Sheet URL Fix ✅
 
-### ما يعمل حالياً
-- النوع `file` مُعرَّف في `shared/schema.ts`
-- مكوّن `FileField.tsx` يرفع الملف عبر `POST /api/pform/:id/upload`
-- Multer يحفظ الملف في `/uploads/` بـ UUID عشوائي كاسم
-- التحقق الأمني بطبقتين (امتداد + Magic Bytes) — ناجح ولا يحتاج تعديلاً
-- المسار النسبي يُخزَّن في `project_records.data` (JSONB)
+### Bug fixes implemented:
+- **`sync-drive` delete_local bug fixed**: When `mode=delete_local`, `project_records.data` is now updated
+  in DB so the Drive URL replaces the broken `/uploads/...` path (`updatePayload.data = updatedData`).
+- **`bulk-delete` now includes file cleanup**: Records are fetched before DB deletion; local files are
+  unlinked from disk; Drive files are queued for deletion via `driveStorage.deleteFileFromDrive`.
+- **Project delete now includes file cleanup**: `DELETE /api/projects/:id` fetches all project records
+  first, deletes the project (cascade), then asynchronously unlinks local files and Drive files.
+- **`APP_BASE_URL` resolution in projectSheets.ts**: `resolveFileUrlForSheet()` converts `/uploads/...`
+  paths to absolute URLs using `process.env.APP_BASE_URL` before writing to Google Sheets, making them
+  clickable from outside the server. Applied in both `appendRecordToSheet` and `updateRecordRow`.
+- **Project delete warning dialog** in `Projects.tsx` now includes a note that Drive files are NOT
+  auto-deleted and must be cleaned up manually.
 
-### الأنواع المدعومة حالياً والحد الأقصى
+## Phase 4 — Per-Field Restrictions & Per-Record Sync ✅
 
-| الفئة | الامتدادات | الحد الأقصى |
-|---|---|---|
-| صور | jpg, jpeg, png, gif, webp | 10 MB |
-| وثائق | pdf, doc, docx, txt | 10 MB |
-| جداول | xls, xlsx | 10 MB |
+### Schema changes:
+- `project_fields.allowed_file_types JSONB` — list of allowed extensions, e.g. `["jpg","pdf"]`
+- `project_fields.max_file_size_mb INTEGER` — per-field size cap in MB
+- Migration added in `server/index.ts`
+- Both columns persisted in `POST /:id/fields` (field save) and project creation field rows
 
-### المشاكل المُكتشَفة (تُعالجها هذه الخطة)
+### Server-side validation:
+- `validateFieldRestrictions()` middleware exported from `server/middleware/upload.ts`
+- Admin upload endpoint (`POST /:id/upload`) applies per-field validation when `fieldKey` sent in FormData
+- Public form upload endpoint (`POST /api/pform/:projectId/upload`) applies same validation
+- Both endpoints look up field config from DB using `projectId + fieldKey`
 
-| الكود | المشكلة | الخطورة |
-|---|---|---|
-| P1 | المستخدم العام لا يرى ملفه بعد الإرسال (`/uploads` محمي) | 🔴 حرج |
-| P2 | صفحة التعديل الذاتي لا تعرض حقل الملف | 🔴 حرج |
-| P3 | رابط الملف في Google Sheet نسبي وغير قابل للفتح خارجياً | 🟠 عالٍ |
-| P4 | الملفات لا تُحذف عند حذف السجل | 🟠 عالٍ |
-| P5 | التخزين المحلي مؤقت — يُفقَد عند إعادة النشر | 🔴 حرج في الإنتاج |
-| P6 | لا قيود على نوع الملف أو حجمه لكل حقل | 🟡 متوسط |
+### Client-side validation (FileField.tsx):
+- `allowedTypes?: string[] | null` prop — sets `accept` attribute and checks extension before upload
+- `maxSizeMb?: number | null` prop — checks file size before upload
+- `fieldKey` sent in `FormData` to enable server-side per-field validation
+- Hint text shown under file picker listing accepted types and max size
 
----
+### Field editor (ProjectSettings.tsx):
+- Toggle checkboxes for allowed extensions: jpg, jpeg, png, gif, webp, pdf, doc, docx, xls, xlsx, txt
+- Number input for max file size in MB
+- Both values saved to DB via PUT `/api/projects/:id/fields`
 
-## 2. آلية العمل الكاملة للميزة
+### Props wired to all FileField usages:
+- `ProjectRegister.tsx` — passes `allowedFileTypes` + `maxFileSizeMb` from field config
+- `ProjectAddRecord.tsx` — same
+- `ProjectRecordEdit.tsx` — same
 
-### 2.1 — مرحلة الرفع (من جانب المسجِّل)
+### Per-record Drive sync:
+- New endpoint: `POST /api/projects/:id/records/:recordId/sync-drive`
+  Body: `{ mode: "keep_local" | "delete_local" }`
+- Full sync logic (create Drive folder, upload files, update DB `driveFiles`, `data`, `syncStatus`)
+- Local file cleanup when `mode=delete_local`
+- Sheet row updated via `updateRecordRow` after sync
 
-```
-1. المسجِّل يختار ملفاً في نموذج التسجيل
-        ↓
-2. الملف يُرسَل إلى POST /api/pform/:projectId/upload
-        ↓
-3. Multer يستقبله في /tmp/ مؤقتاً
-        ↓
-4. التحقق الأمني:
-   - فحص الامتداد المسموح به (قائمة بيضاء)
-   - فحص Magic Bytes (محتوى الملف الفعلي)
-   - فحص الحجم (ضمن حد الحقل المحدد)
-   - إذا فشل أي فحص: حذف الملف + رفض الطلب
-        ↓
-5. نقل الملف من /tmp/ إلى /uploads/{uuid}.{ext}
-        ↓
-6. إعادة المسار النسبي إلى الـ Frontend
-        ↓
-7. عند إرسال النموذج: المسار يُخزَّن في project_records.data
-   + حالة المزامنة تُضبَط على: sync_status = "local"
-```
+### Sync status UI:
+- **ProjectRecords.tsx** — sync badge (🟡/✅/🔴) in file column cell with tooltip
+- **ProjectRecordDetails.tsx** — "Attached Files" card shows:
+  - File name, local link, Drive link (if synced), sync date
+  - Warning banner when local-only files exist
+  - Per-record sync button opens modal with mode selection (keep_local / delete_local)
+  - Sync badge in page header
 
-**ما يرى المسجِّل:** شريط تقدم الرفع → رابط "عرض الملف" فوراً بعد الإرسال (عبر edit token)
+## Phase 5 — Testing ⏳ Planned
 
----
-
-### 2.2 — حالات الملف (States)
-
-كل ملف في النظام له حالة واحدة من أربع:
-
-| الحالة | المعنى | ما يرى المسؤول |
-|---|---|---|
-| `local` | محفوظ على المنصة فقط | 🟡 محلي — لم يُزامَن |
-| `syncing` | جاري الرفع إلى Drive | 🔄 جارٍ المزامنة... |
-| `synced` | موجود في Drive + (محلي اختيارياً) | ✅ مُزامَن |
-| `sync_failed` | فشلت المزامنة | 🔴 فشل — حاول مجدداً |
+- Unit tests for `validateFieldRestrictions` middleware
+- Integration tests for per-record sync endpoint
+- E2E tests: upload → validate restrictions → sync → verify Sheet URL absolute
 
 ---
 
-### 2.3 — زر المزامنة (من جانب المسؤول)
-
-#### مكان الزر
-- **في صفحة إعدادات المشروع:** زر "مزامنة جميع ملفات المشروع مع Drive" (يُزامِن كل السجلات غير المُزامَنة دفعةً)
-- **في صفحة تفاصيل السجل:** زر "مزامنة ملفات هذا السجل" (لسجل واحد بعينه)
-
-#### سير عملية المزامنة
-
-```
-المسؤول يضغط "مزامنة مع Drive"
-          ↓
-حوار تأكيد يظهر:
-  ┌─────────────────────────────────────────┐
-  │  مزامنة ملفات مشروع: [اسم المشروع]     │
-  │                                         │
-  │  عدد الملفات غير المُزامَنة: 47 ملفاً  │
-  │  الحجم الإجمالي: 234 MB                │
-  │                                         │
-  │  بعد المزامنة:                          │
-  │  ○ إبقاء النسخة المحلية + Drive        │
-  │  ● حذف النسخة المحلية بعد المزامنة    │
-  │    (Drive سيكون المصدر الوحيد)          │
-  │                                         │
-  │  ⚠️ الحذف لا يمكن التراجع عنه         │
-  │                                         │
-  │     [إلغاء]   [بدء المزامنة]           │
-  └─────────────────────────────────────────┘
-          ↓
-عملية المزامنة تبدأ (في الخلفية):
-
-  لكل سجل فيه ملفات بحالة "local":
-    1. إنشاء مجلد المشروع في Drive (إن لم يكن موجوداً)
-    2. إنشاء مجلد السجل: "{اسم المسجِّل} [{8 أحرف من UUID}]"
-    3. رفع كل ملف إلى مجلد السجل بصلاحية "Anyone with link can view"
-    4. تحديث project_records: drive_files, drive_folder_id, sync_status = "synced"
-    5. تحديث صف Google Sheet بروابط Drive (بدلاً من الروابط المحلية)
-    6. إذا اختار المسؤول "حذف المحلي": حذف الملف من /uploads/
-    
-  شريط تقدم: [████████░░░░] 34/47 ملفاً
-  
-          ↓
-ملخص النتائج:
-  ┌─────────────────────────────────────────┐
-  │  ✅ نجحت المزامنة: 45 ملف             │
-  │  🔴 فشلت: 2 ملف (عرض التفاصيل)       │
-  │  📊 Google Sheets مُحدَّث            │
-  │  📁 مجلد Drive: [رابط مباشر]          │
-  └─────────────────────────────────────────┘
-```
-
----
-
-### 2.4 — بنية Google Drive بعد المزامنة
-
-```
-📁 مسارات — ملفات المنصة  ← تُنشئه يدوياً مرة واحدة
-├── 📁 مشروع: إدارة كوادر المختبرات
-│   ├── 📁 أحمد محمد سالم [a1b2c3d4]
-│   │   ├── 📄 cv_السيرة_الذاتية.pdf
-│   │   └── 🖼 photo_الصورة_الشخصية.jpg
-│   ├── 📁 فاطمة علي حسن [e5f6g7h8]
-│   │   └── 📄 cert_الشهادة_الجامعية.pdf
-│   └── ...
-├── 📁 مشروع: تسجيل الممرضين
-│   └── ...
-```
-
-**صلاحية كل ملف:** `Anyone with the link can view` — يُفتَح مباشرةً من الـ Sheet بدون حساب Google
-
----
-
-### 2.5 — Google Sheets قبل وبعد المزامنة
-
-| الوقت | محتوى خلية الملف في الـ Sheet |
-|---|---|
-| قبل المزامنة | فارغة أو `[محلي — لم يُزامَن]` |
-| بعد المزامنة | `https://drive.google.com/file/d/{fileId}/view` ← رابط قابل للنقر |
-
-> عملية المزامنة تستدعي دالة `updateRecordRow` الموجودة في `projectSheets.ts` لكل سجل مُزامَن لتحديث خلية الملف بالرابط الجديد.
-
----
-
-### 2.6 — رؤية المسجِّل لملفاته
-
-```
-بعد إرسال النموذج (صفحة النجاح / رابط التعديل):
-  → الملف يُفتَح عبر /uploads/{uuid} + edit token (تخزين محلي)
-
-بعد مزامنة المسؤول + اختار "إبقاء المحلي":
-  → رابطان متاحان: المحلي والـ Drive
-
-بعد مزامنة المسؤول + اختار "حذف المحلي":
-  → الملف يُصبح متاحاً عبر رابط Drive مباشرةً
-  → FileField.tsx يعرض الرابط الجديد من drive_files في DB
-```
-
----
-
-## 3. تعديلات قاعدة البيانات
-
-```sql
--- جدول projects: تفعيل Drive + معرف المجلد الجذر
-ALTER TABLE projects
-  ADD COLUMN IF NOT EXISTS drive_sync_enabled     BOOLEAN NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS drive_root_folder_id   TEXT;
-  -- google_drive_folder_id موجود مسبقاً — يُستخدم لمجلد المشروع في Drive
-
--- جدول project_fields: قيود مخصَّصة لكل حقل
-ALTER TABLE project_fields
-  ADD COLUMN IF NOT EXISTS allowed_file_types  TEXT[],   -- null = كل الأنواع
-  ADD COLUMN IF NOT EXISTS max_file_size_mb    INTEGER;  -- null = 10MB
-
--- جدول project_records: بيانات المزامنة
-ALTER TABLE project_records
-  ADD COLUMN IF NOT EXISTS drive_files       JSONB DEFAULT '{}',
-  -- { fieldKey: { fileId, driveUrl, originalName, mimeType, sizeBytes, syncedAt } }
-  ADD COLUMN IF NOT EXISTS drive_folder_id   TEXT,
-  -- معرّف مجلد السجل في Drive
-  ADD COLUMN IF NOT EXISTS sync_status       TEXT DEFAULT 'local';
-  -- 'local' | 'syncing' | 'synced' | 'sync_failed'
-```
-
----
-
-## 4. المتطلبات التقنية للمزامنة مع Drive
-
-### إعداد Google Drive (مرة واحدة — يدوي)
-
-```
-1. Google Cloud Console:
-   ✅ تفعيل Google Drive API (يُضاف لنفس مشروع الـ Sheets)
-   ✅ نفس Service Account المستخدم للـ Sheets — لا داعي لحساب جديد
-
-2. في Google Drive:
-   ✅ إنشاء مجلد جذر (مثال: "مسارات — ملفات المنصة")
-   ✅ مشاركته مع بريد الـ Service Account بصلاحية Editor
-   ✅ نسخ معرِّف المجلد من URL المتصفح
-
-3. في إعدادات النظام (مسارات):
-   ✅ لصق معرِّف المجلد في حقل "معرِّف مجلد Drive الجذر"
-   ✅ تفعيل المزامنة للمشروع المطلوب
-```
-
-### Replit Secrets المطلوبة
-
-```
-GOOGLE_SERVICE_ACCOUNT_KEY   — نفس المفتاح المستخدم للـ Sheets (Drive API يُضاف عليه فقط)
-APP_BASE_URL                 — رابط المنصة الكامل (لروابط الملفات المحلية في الـ Sheet قبل المزامنة)
-```
-
----
-
-## 5. خطة التنفيذ — 5 مراحل
-
----
-
-### المرحلة الأولى — إصلاح UX الحرج (المشاكل P1 و P2)
-**الهدف:** جعل الملفات المحلية تعمل بشكل صحيح قبل إضافة Drive  
-**المدة:** يوم واحد  
-**التبعيات:** لا يوجد
-
-#### المهام
-
-**1.1 — إصلاح رؤية الملف للمستخدم العام (P1)**
-- **الملف:** `client/src/components/FileField.tsx`
-  - إضافة prop اختيارية `authSuffix?: string`
-  - `href={value + (authSuffix ?? "")}`
-- **الملف:** `client/src/pages/ProjectRegister.tsx`
-  - تمرير `authSuffix={`?token=${editToken}&project=${projectId}`}` بعد الإرسال
-
-**1.2 — إضافة حقل الملف في صفحة التعديل الذاتي (P2)**
-- **الملف:** `client/src/pages/ProjectEditForm.tsx`
-  ```tsx
-  case "file":
-    return <FileField
-      value={formValues[f.key]}
-      onChange={(url) => setFieldValue(f.key, url)}
-      uploadUrl={`/api/pform/${projectId}/upload`}
-      fieldKey={f.key}
-      authSuffix={`?token=${editToken}&project=${projectId}`}
-    />;
-  ```
-
-**1.3 — إضافة عمود sync_status إلى قاعدة البيانات**
-- `ALTER TABLE project_records ADD COLUMN IF NOT EXISTS sync_status TEXT DEFAULT 'local';`
-- كل سجل جديد يُضبَط تلقائياً على `'local'`
-
-#### اختبار المرحلة الأولى
-
-| الاختبار | النتيجة المتوقعة |
-|---|---|
-| إرسال نموذج برفع ملف → فتح رابط النجاح | الملف يُفتَح بدون تسجيل دخول |
-| فتح رابط التعديل لسجل فيه حقل file | الحقل يظهر مع الملف السابق |
-| تعديل الملف وإعادة الإرسال | الملف الجديد يُحفَظ في DB |
-| فتح `/uploads/...` بدون token | 401 |
-
-**شرط الانتقال:** اجتياز جميع الاختبارات
-
----
-
-### المرحلة الثانية — خدمة Drive Storage وزر المزامنة (الأساسية)
-**الهدف:** بناء محرك المزامنة الكامل  
-**المدة:** 3 أيام  
-**التبعيات:** تفعيل Drive API على Service Account + إعداد المجلد الجذر
-
-#### المهام
-
-**2.1 — Drive Storage Service**
-
-- **الملف الجديد:** `server/services/driveStorage.ts`
-
-```typescript
-// تهيئة Drive client من Service Account
-initDriveClient(): drive_v3.Drive
-
-// إنشاء مجلد المشروع إذا لم يكن موجوداً (يحفظ ID في projects.google_drive_folder_id)
-ensureProjectFolder(projectId: string, projectName: string, rootFolderId: string): Promise<string>
-
-// إنشاء مجلد السجل: "{اسم} [{uuid.slice(0,8)}]"
-ensureRecordFolder(projectFolderId: string, label: string, recordId: string): Promise<string>
-
-// رفع ملف محلي إلى Drive بصلاحية "Anyone with the link can view"
-uploadLocalFileToDrive(params: {
-  localPath: string;        // /uploads/uuid.ext
-  fileName: string;         // الاسم المعروض
-  mimeType: string;
-  folderId: string;
-}): Promise<{ fileId: string; driveUrl: string }>
-
-// حذف ملف من Drive
-deleteFileFromDrive(fileId: string): Promise<void>
-
-// حذف مجلد (يتحقق أنه فارغ أولاً)
-deleteFolderFromDrive(folderId: string): Promise<void>
-```
-
-**2.2 — Sync API Endpoint**
-
-- **الملف:** `server/routes/projects.ts`
-- **Endpoint جديد:** `POST /api/projects/:id/sync-drive`
-
-```
-يستقبل: { mode: "keep_local" | "delete_local", recordIds?: string[] }
-
-لكل سجل بحالة 'local':
-  1. sync_status → 'syncing'
-  2. ensureProjectFolder()
-  3. ensureRecordFolder()
-  4. uploadLocalFileToDrive() لكل حقل ملف في السجل
-  5. تحديث project_records: drive_files, drive_folder_id, sync_status = 'synced'
-  6. تحديث Google Sheets: استبدال الرابط المحلي برابط Drive
-  7. إذا mode = 'delete_local': حذف /uploads/{file}
-  
-يُعيد: { synced: number, failed: number, failedRecords: [...] }
-```
-
-**2.3 — حالة المزامنة في الواجهة**
-
-- **الملف:** `client/src/pages/admin/ProjectSettings.tsx` (أو صفحة المشروع)
-- **إضافات:**
-  - بطاقة "حالة الملفات" تُظهر: عدد المحلية / المُزامَنة / الفاشلة
-  - زر "مزامنة مع Drive" → حوار التأكيد مع خيار الإبقاء/الحذف
-  - شريط تقدم أثناء المزامنة (polling على endpoint حالة المزامنة)
-  - ملخص النتائج بعد الانتهاء مع رابط مجلد Drive
-
-**2.4 — تحذير التخزين المحلي**
-
-- شارة تحذير صفراء في لوحة تحكم المشروع إذا وُجدت ملفات بحالة `local`:
-  ```
-  ⚠️ 47 ملفاً محفوظاً مؤقتاً على الخادم — قد تُفقَد عند تحديث المنصة.
-  [مزامنة مع Drive الآن]
-  ```
-
-#### اختبار المرحلة الثانية
-
-| الاختبار | النتيجة المتوقعة |
-|---|---|
-| ضغط "مزامنة" مع خيار "إبقاء المحلي" | ملفات في Drive + ملفات محلية باقية + Sheet مُحدَّث |
-| ضغط "مزامنة" مع خيار "حذف المحلي" | ملفات في Drive + ملفات محلية محذوفة + Sheet مُحدَّث |
-| فتح رابط Drive من الـ Sheet | الملف يُفتَح مباشرةً بدون حساب Google |
-| مزامنة مشروع فيه 50 سجل | شريط التقدم يعمل + ملخص النتائج صحيح |
-| فشل Drive أثناء المزامنة | sync_status = 'sync_failed' + ملف محلي باقٍ |
-| فحص Drive مباشرةً | الهيكل صحيح: مشروع/سجل/ملفات |
-
-**شرط الانتقال:** اجتياز جميع الاختبارات + فحص يدوي للـ Drive والـ Sheet
-
----
-
-### المرحلة الثالثة — تنظيف الحذف وإصلاح الـ Sheet
-**الهدف:** معالجة P3 و P4 — ضمان نظافة البيانات عند الحذف  
-**المدة:** يوم واحد  
-**التبعيات:** المرحلتان 1 و2
-
-#### المهام
-
-**3.1 — تنظيف ملفات Drive عند حذف السجل (P4)**
-
-```typescript
-// في route حذف السجل (server/routes/projects.ts):
-
-// 1. حذف من Drive إذا كان مُزامَناً
-const driveFiles = record.driveFiles || {};
-const fileIds = Object.values(driveFiles).filter(f => f?.fileId).map(f => f.fileId);
-await Promise.allSettled(fileIds.map(id => driveStorage.deleteFileFromDrive(id)));
-if (record.driveFolderId) await driveStorage.deleteFolderFromDrive(record.driveFolderId);
-
-// 2. حذف من /uploads/ إذا كان محلياً
-const localPaths = Object.values(recordData)
-  .filter(v => String(v).startsWith("/uploads/"));
-localPaths.forEach(p => fs.unlink(path.join(uploadsDir, path.basename(String(p))), () => {}));
-```
-
-**3.2 — تحذير حذف المشروع**
-
-حوار تأكيد إلزامي يُظهر:
-```
-⚠️ سيتم حذف [X] سجلاً و[Y] ملفاً من المنصة.
-📁 ملفات Drive لن تُحذف تلقائياً — احذف مجلد المشروع يدوياً:
-   [فتح مجلد Drive ↗]
-☐ فهمت أن ملفات Drive تحتاج حذفاً يدوياً
-[تأكيد الحذف — مُقيَّد بالخانة أعلاه]
-```
-
-**3.3 — APP_BASE_URL للروابط المحلية في الـ Sheet (P3 جزئي)**
-
-```typescript
-// في server/services/projectSheets.ts:
-function resolveFileUrl(value: string, driveFiles: any, fieldKey: string): string {
-  const drive = driveFiles?.[fieldKey];
-  if (drive?.driveUrl) return drive.driveUrl;  // مُزامَن → رابط Drive
-  
-  const base = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
-  return base ? base + value : "";  // محلي → رابط مطلق أو فارغ
-}
-```
-
-#### اختبار المرحلة الثالثة
-
-| الاختبار | النتيجة المتوقعة |
-|---|---|
-| حذف سجل مُزامَن | ملف يختفي من Drive + مجلد السجل يُحذف |
-| حذف سجل بملف محلي | الملف يُحذف من `/uploads/` |
-| حذف جماعي لعدة سجلات | جميع الملفات تُنظَّف |
-| محاولة حذف مشروع | حوار التحذير يظهر مع رابط Drive |
-
----
-
-### المرحلة الرابعة — قيود الحقل وتجربة المسؤول
-**الهدف:** تحكم دقيق في أنواع وأحجام الملفات + معاينة في لوحة الإدارة  
-**المدة:** يومان  
-**التبعيات:** المراحل 1 و2 و3
-
-#### المهام
-
-**4.1 — قيود مخصَّصة لكل حقل**
-
-- **في منشئ الحقول:** خيارات الأنواع المسموحة + slider الحجم (1–50 MB)
-- **في FileField.tsx:** قيود `accept` + فحص الحجم قبل الرفع + رسالة رفض واضحة
-- **في Server:** multer fileFilter ديناميكي يقرأ إعدادات الحقل
-
-**4.2 — معاينة الملفات في لوحة الإدارة**
-
-- **جدول السجلات:** thumbnail للصور — أيقونة للـ PDF/Office — badge حالة المزامنة (🟡/✅/🔴)
-- **صفحة السجل:** بطاقة "المستندات" بالاسم الأصلي + الحجم + تاريخ الرفع + حالة Drive + زر فتح
-
-**4.3 — إعدادات Drive في المشروع**
-
-```
-تخزين الملفات:
-  [🟡 47 محلياً] [✅ 103 مُزامَن] [🔴 2 فشل]
-  
-  [مزامنة الملفات المتبقية ↑]   [إعادة محاولة الفاشلة 🔄]
-  
-  📁 مجلد Drive المرتبط: [رابط مباشر] أو [لم يُحدَّد — اضغط للإعداد]
-```
-
-#### اختبار المرحلة الرابعة
-
-| الاختبار | النتيجة المتوقعة |
-|---|---|
-| "صور فقط" + رفع PDF | رسالة رفض واضحة |
-| حجم أقصى 2MB + رفع 5MB | رفض في الـ Client قبل الإرسال |
-| جدول السجلات | حالة المزامنة واضحة لكل سجل |
-| زر "إعادة محاولة" للفاشلة | تُعاد المزامنة لتلك السجلات فقط |
-
----
-
-### المرحلة الخامسة — الاختبار الشامل والتوثيق النهائي
-**الهدف:** اختبار النظام كاملاً قبل الإطلاق  
-**المدة:** يوم واحد  
-**التبعيات:** اجتياز المراحل 1–4
-
-#### سيناريوهات الاختبار الشامل
-
-**السيناريو A — دورة حياة كاملة**
-```
-1. مسؤول يُنشئ مشروعاً + حقل file (صور فقط, 3MB)
-2. 5 مسجِّلين يرسلون نماذج برفع صور
-   → الملفات محلية, sync_status = 'local'
-   → الـ Sheet فارغ في خلايا الملف
-3. مسؤول يضغط "مزامنة" + يختار "حذف المحلي"
-   → شريط التقدم يعمل
-   → Drive: مجلد المشروع + 5 مجلدات سجلات + الصور
-   → الـ Sheet: 5 روابط Drive قابلة للنقر
-   → /uploads/: لا ملفات للمشروع
-4. مسجِّل يفتح رابط التعديل + يغيِّر الصورة
-   → الصورة الجديدة محلية (local)
-   → المسؤول يُزامِن مجدداً → الصورة القديمة تُحذف من Drive والجديدة تُرفَع
-5. مسؤول يحذف سجلاً
-   → ملف Drive + مجلد السجل يُحذفان
-6. مسؤول يحذف المشروع → تحذير مع رابط Drive للحذف اليدوي
-```
-
-**السيناريو B — أخطاء وحدود**
-```
-1. رفع ملف مخالف → رفض (MIME validation)
-2. رفع 15MB → رفض في الـ Client
-3. Drive API معطَّل أثناء المزامنة → sync_failed + ملف محلي محفوظ
-4. مزامنة 100 سجل → لا timeout، شريط التقدم يعمل حتى النهاية
-5. فتح /uploads بـ token منتهٍ → 401
-```
-
-#### قائمة التحقق النهائية
-
-```
-الأمان:
-  ☐ MIME validation fail-closed
-  ☐ edit token auth على /uploads
-  ☐ لا path traversal في أسماء الملفات
-  ☐ Service Account credentials في Secrets فقط
-  ☐ Drive files: "Anyone with link" — ليس "Public on the web"
-
-الوظيفة:
-  ☐ رفع + حفظ محلي + رؤية المسجِّل (edit token)
-  ☐ مزامنة "إبقاء المحلي" → Drive + Sheet مُحدَّث + ملف محلي موجود
-  ☐ مزامنة "حذف المحلي" → Drive + Sheet مُحدَّث + ملف محلي محذوف
-  ☐ إعادة محاولة للفاشلة
-  ☐ حذف سجل → تنظيف Drive والمحلي
-  ☐ حذف مشروع → تحذير Drive
-
-الأداء:
-  ☐ مزامنة 50 سجل تكتمل خلال ≤ 5 دقائق
-  ☐ شريط تقدم يُحدَّث بشكل مستمر
-
-التوثيق:
-  ☐ replit.md مُحدَّث
-  ☐ دليل إعداد Drive API موثَّق
-  ☐ تقارير اختبار المراحل 1-4 مكتملة
-```
-
----
-
-## 6. ترتيب التنفيذ والجدول الزمني
-
-```
-اليوم 1:     المرحلة 1 — إصلاح UX + sync_status column
-             ✅ يمكن نشرها منفردةً (لا Drive بعد)
-
-اليوم 2-4:   المرحلة 2 — Drive Storage Service + زر المزامنة الكامل
-             ✅ نقطة الإطلاق الرئيسية للميزة
-
-اليوم 5:     المرحلة 3 — تنظيف الحذف + إصلاح الـ Sheet
-             
-اليوم 6-7:   المرحلة 4 — قيود الحقل + Admin UX
-             
-اليوم 8:     المرحلة 5 — الاختبار الشامل + إطلاق
-```
-
-**إجمالي:** 8 أيام عمل.
-
----
-
-## 7. مخاطر وتخفيف
-
-| الخطر | الاحتمال | التأثير | التخفيف |
-|---|---|---|---|
-| فقدان الملفات المحلية قبل المزامنة (إعادة نشر) | متوسط | عالٍ | تحذير دائم في الواجهة + توصية بالمزامنة الفورية |
-| انتهاء Drive API quota | منخفض | عالٍ | sync_failed + ملف محلي محفوظ + تنبيه في logs |
-| مزامنة جزئية (انقطاع شبكة) | منخفض | متوسط | كل سجل يُحدَّث مستقلاً — ما نجح يبقى مُزامَناً |
-| المسؤول يحذف مجلد Drive يدوياً | متوسط | منخفض | fileId محفوظ في DB — يُعرَض كـ sync_failed |
-| حذف المشروع بدون حذف Drive | مرتفع | منخفض | تحذير إلزامي + رابط مجلد Drive في الحوار |
-| ملفات كبيرة تُبطئ المزامنة | متوسط | منخفض | المزامنة في الخلفية مع شريط التقدم |
-
----
-
-## 8. حالة التنفيذ
-
-| المرحلة | الحالة |
-|---|---|
-| المرحلة 1 — إصلاح UX + sync_status | ⏳ لم تبدأ |
-| المرحلة 2 — Drive Service + زر المزامنة | ⏳ لم تبدأ |
-| المرحلة 3 — تنظيف الحذف + Sheet | ⏳ لم تبدأ |
-| المرحلة 4 — قيود الحقل + Admin UX | ⏳ لم تبدأ |
-| المرحلة 5 — الاختبار الشامل | ⏳ لم تبدأ |
+## Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `APP_BASE_URL` | Absolute base URL for resolving `/uploads/...` paths in Google Sheets (e.g. `https://your-app.replit.app`) |
+| `ENCRYPTION_KEY` | AES-256 key for encrypting Google service account credentials |
+| `SESSION_SECRET` | Express session signing secret |

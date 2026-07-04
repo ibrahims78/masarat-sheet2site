@@ -563,19 +563,29 @@ export function ProjectRecords() {
                           const txt = val != null ? String(val) : "";
                           const copyKey = `${record.id}-${f.key}`;
                           if (f.fieldType === "file") {
+                            const syncSt = (record as any).syncStatus || "local";
+                            const syncIcon = syncSt === "synced" ? "✅" : syncSt === "sync_failed" ? "🔴" : "🟡";
+                            const syncTitle = syncSt === "synced"
+                              ? (isAr ? "مُزامَن مع Drive" : "Synced to Drive")
+                              : syncSt === "sync_failed"
+                              ? (isAr ? "فشلت المزامنة" : "Sync failed")
+                              : (isAr ? "محلي — لم يُزامَن" : "Local — not synced");
                             return (
-                              <td key={f.id} className="px-3 py-2.5 text-xs max-w-[180px]">
+                              <td key={f.id} className="px-3 py-2.5 text-xs max-w-[200px]">
                                 {txt ? (
-                                  <a
-                                    href={txt}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={e => e.stopPropagation()}
-                                    className="text-primary hover:underline"
-                                    data-testid={`link-file-${copyKey}`}
-                                  >
-                                    {isAr ? "عرض الملف" : "View File"}
-                                  </a>
+                                  <div className="flex items-center gap-1.5">
+                                    <a
+                                      href={txt}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={e => e.stopPropagation()}
+                                      className="text-primary hover:underline truncate"
+                                      data-testid={`link-file-${copyKey}`}
+                                    >
+                                      {isAr ? "عرض الملف" : "View File"}
+                                    </a>
+                                    <span title={syncTitle} className="shrink-0 text-xs">{syncIcon}</span>
+                                  </div>
                                 ) : (
                                   <span className="text-slate-300 dark:text-slate-600">—</span>
                                 )}

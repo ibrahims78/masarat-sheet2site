@@ -6,7 +6,7 @@ import { appendRecordToSheet, updateRecordRow } from "../services/projectSheets.
 import { insertRecordAtomic } from "../services/recordInsert.js";
 import { decrypt } from "../services/crypto.js";
 import rateLimit from "express-rate-limit";
-import { fileUpload, publicFileUrl, validateMimeType } from "../middleware/upload.js";
+import { fileUpload, publicFileUrl, validateMimeType, validateFieldRestrictions } from "../middleware/upload.js";
 import { handleError } from "../utils/errorHandler.js";
 
 const router = Router();
@@ -29,7 +29,21 @@ router.post("/:projectId/upload", uploadLimiter, async (req: Request, res: Respo
     if (err) return res.status(400).json({ error: err.message || "فشل رفع الملف" });
     if (!req.file) return res.status(400).json({ error: "لم يتم رفع ملف" });
     // M-04: Validate magic-bytes MIME type after upload to prevent extension spoofing
-    await validateMimeType(req, res, () => {
+    await validateMimeType(req, res, async () => {
+      // Per-field type/size restrictions
+      const fieldKey = String(req.body.fieldKey || "");
+      if (fieldKey) {
+        const [fieldCfg] = await db.select({
+          allowedFileTypes: projectFields.allowedFileTypes,
+          maxFileSizeMb: projectFields.maxFileSizeMb,
+        }).from(projectFields).where(and(eq(projectFields.projectId, pid), eq(projectFields.key, fieldKey)));
+        if (fieldCfg && (fieldCfg.allowedFileTypes || fieldCfg.maxFileSizeMb)) {
+          await validateFieldRestrictions(req, res, () => {
+            res.json({ url: publicFileUrl(req.file!.filename), originalName: req.file!.originalname });
+          }, fieldCfg.allowedFileTypes, fieldCfg.maxFileSizeMb);
+          return;
+        }
+      }
       res.json({ url: publicFileUrl(req.file!.filename), originalName: req.file!.originalname });
     });
   });

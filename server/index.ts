@@ -295,6 +295,8 @@ async function initDB() {
       ALTER TABLE project_records ADD COLUMN IF NOT EXISTS drive_files JSONB DEFAULT '{}';
       ALTER TABLE project_records ADD COLUMN IF NOT EXISTS drive_folder_id TEXT;
       ALTER TABLE project_records ADD COLUMN IF NOT EXISTS sync_status TEXT DEFAULT 'local';
+      ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS allowed_file_types JSONB;
+      ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS max_file_size_mb INTEGER;
     `);
     // Migrate legacy single-condition columns (if present) into the new conditions[] array, then drop them
     const legacyColCheck = await pool.query(`

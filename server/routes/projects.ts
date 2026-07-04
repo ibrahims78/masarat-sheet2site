@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { db } from "../db.js";
 import { projects, projectFields, projectRecords, projectAuditLog, users, userInvitations, systemSettings, projectFieldSchema, createProjectSchema, updateProjectSchema, updateUserRoleSchema, globalSettingsSchema, createUserSchema, bulkDeleteSchema } from "../../shared/schema.js";
-import { eq, desc, count, gte, and, ilike, or, gt, sql } from "drizzle-orm";
+import { eq, desc, count, gte, and, ilike, or, gt, sql, inArray } from "drizzle-orm";
 import { requireAuth, requireAdmin, requireEditorOrAdmin } from "../middleware/auth.js";
 import { encrypt, decrypt } from "../services/crypto.js";
 import { insertRecordAtomic } from "../services/recordInsert.js";
@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from "uuid";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import { Readable } from "stream";
-import { fileUpload, publicFileUrl, validateMimeType, uploadsDir } from "../middleware/upload.js";
+import { fileUpload, publicFileUrl, validateMimeType, validateFieldRestrictions, uploadsDir } from "../middleware/upload.js";
 import { handleError } from "../utils/errorHandler.js";
 import { randomBytes } from "crypto";
 import fs from "fs";
@@ -175,6 +175,8 @@ router.post("/", requireEditorOrAdmin, async (req: Request, res: Response) => {
         stepNumber: f.stepNumber || 1,
         orderIndex: f.orderIndex ?? idx,
         placeholder: f.placeholder || null,
+        allowedFileTypes: Array.isArray(f.allowedFileTypes) && f.allowedFileTypes.length > 0 ? f.allowedFileTypes : null,
+        maxFileSizeMb: f.maxFileSizeMb ? Number(f.maxFileSizeMb) : null,
       }));
       await db.insert(projectFields).values(fieldRows);
     }
@@ -237,7 +239,38 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
 
 router.delete("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
-    await db.delete(projects).where(eq(projects.id, String(req.params.id)));
+    const pid = String(req.params.id);
+
+    // Fetch all records before cascade deletion for file cleanup
+    const allRecords = await db.select({
+      data: projectRecords.data,
+      driveFiles: projectRecords.driveFiles,
+      driveFolderId: projectRecords.driveFolderId,
+      syncStatus: projectRecords.syncStatus,
+    }).from(projectRecords).where(eq(projectRecords.projectId, pid));
+
+    // Delete project (cascade deletes records, fields, audit logs, etc.)
+    await db.delete(projects).where(eq(projects.id, pid));
+
+    // Async cleanup of local files and Drive files (non-blocking)
+    for (const rec of allRecords) {
+      if (rec.data && typeof rec.data === "object") {
+        Object.values(rec.data as Record<string, any>).forEach(val => {
+          if (typeof val === "string" && val.startsWith("/uploads/")) {
+            fs.unlink(path.join(uploadsDir, path.basename(val)), () => {});
+          }
+        });
+      }
+      if (rec.syncStatus === "synced" && rec.driveFiles && typeof rec.driveFiles === "object") {
+        const df = rec.driveFiles as Record<string, any>;
+        Object.values(df).filter(f => f?.fileId)
+          .forEach((f: any) => driveStorage.deleteFileFromDrive(pid, f.fileId).catch(console.error));
+        if (rec.driveFolderId) {
+          driveStorage.deleteFolderFromDrive(pid, rec.driveFolderId).catch(console.error);
+        }
+      }
+    }
+
     res.json({ ok: true });
   } catch (err: any) {
     handleError(res, err);
@@ -292,12 +325,26 @@ router.post("/parse-excel", requireEditorOrAdmin, upload.single("file"), async (
 
 // ─── FILE UPLOADS (admin — for add/edit record forms) ─────────
 
-// M-04: validateMimeType checks magic-bytes after multer saves the file to disk
+// M-04: validateMimeType checks magic-bytes; validateFieldRestrictions enforces per-field limits
 router.post("/:id/upload", requireEditorOrAdmin, requireProjectOwnership, (req: Request, res: Response, next: NextFunction) => {
+  const pid = String(req.params.id);
   fileUpload.single("file")(req, res, async (err: any) => {
     if (err) return res.status(400).json({ error: err.message || "فشل رفع الملف" });
     if (!req.file) return res.status(400).json({ error: "لم يتم رفع ملف" });
-    await validateMimeType(req, res, () => {
+    await validateMimeType(req, res, async () => {
+      const fieldKey = String(req.body.fieldKey || "");
+      if (fieldKey) {
+        const [fieldCfg] = await db.select({
+          allowedFileTypes: projectFields.allowedFileTypes,
+          maxFileSizeMb: projectFields.maxFileSizeMb,
+        }).from(projectFields).where(and(eq(projectFields.projectId, pid), eq(projectFields.key, fieldKey)));
+        if (fieldCfg && (fieldCfg.allowedFileTypes || fieldCfg.maxFileSizeMb)) {
+          await validateFieldRestrictions(req, res, () => {
+            res.json({ url: publicFileUrl(req.file!.filename), originalName: req.file!.originalname });
+          }, fieldCfg.allowedFileTypes, fieldCfg.maxFileSizeMb);
+          return;
+        }
+      }
       res.json({ url: publicFileUrl(req.file!.filename), originalName: req.file!.originalname });
     });
   });
@@ -348,6 +395,9 @@ router.post("/:id/fields", requireEditorOrAdmin, requireProjectOwnership, async 
         conditionOperator: f.conditionOperator === "OR" ? "OR" : "AND",
         visibleTo: ["admin", "editor"].includes(f.visibleTo) ? f.visibleTo : "all",
         isReadOnly: !!f.isReadOnly,
+        // Per-field file restrictions (null = use global defaults)
+        allowedFileTypes: Array.isArray(f.allowedFileTypes) && f.allowedFileTypes.length > 0 ? f.allowedFileTypes : null,
+        maxFileSizeMb: f.maxFileSizeMb ? Number(f.maxFileSizeMb) : null,
       })));
     }
     res.json({ ok: true });
@@ -573,10 +623,45 @@ router.post("/:id/records/bulk-delete", requireEditorOrAdmin, requireProjectOwne
     if (!parsed.success) { res.status(400).json({ error: parsed.error.errors[0].message }); return; }
     const { ids } = parsed.data;
     const pid = String(req.params.id);
+
+    // Fetch records before deletion to allow file cleanup
+    const toDelete = ids.length > 0
+      ? await db.select({
+          id: projectRecords.id,
+          data: projectRecords.data,
+          driveFiles: projectRecords.driveFiles,
+          driveFolderId: projectRecords.driveFolderId,
+          syncStatus: projectRecords.syncStatus,
+        }).from(projectRecords).where(and(
+          inArray(projectRecords.id, ids),
+          eq(projectRecords.projectId, pid),
+        ))
+      : [];
+
+    // Delete from DB (scoped to project to prevent cross-project IDOR)
     for (const rid of ids) {
-      // Scope deletion to this project to prevent cross-project IDOR
       await db.delete(projectRecords).where(and(eq(projectRecords.id, rid), eq(projectRecords.projectId, pid)));
     }
+
+    // Async cleanup of local and Drive files (non-blocking)
+    for (const rec of toDelete) {
+      if (rec.data && typeof rec.data === "object") {
+        Object.values(rec.data as Record<string, any>).forEach(val => {
+          if (typeof val === "string" && val.startsWith("/uploads/")) {
+            fs.unlink(path.join(uploadsDir, path.basename(val)), () => {});
+          }
+        });
+      }
+      if (rec.syncStatus === "synced" && rec.driveFiles && typeof rec.driveFiles === "object") {
+        const df = rec.driveFiles as Record<string, any>;
+        Object.values(df).filter(f => f?.fileId)
+          .forEach((f: any) => driveStorage.deleteFileFromDrive(pid, f.fileId).catch(console.error));
+        if (rec.driveFolderId) {
+          driveStorage.deleteFolderFromDrive(pid, rec.driveFolderId).catch(console.error);
+        }
+      }
+    }
+
     res.json({ ok: true });
   } catch (err: any) {
     handleError(res, err);
@@ -1113,13 +1198,18 @@ router.post("/:id/sync-drive", requireEditorOrAdmin, requireProjectOwnership, as
         }
 
         // Persist sync results to DB
+        const updatePayload: Record<string, any> = {
+          driveFiles: updatedDriveFiles,
+          driveFolderId: recordFolderId,
+          syncStatus: "synced",
+          updatedAt: new Date(),
+        };
+        // When deleting local files, also update data so Drive URLs replace broken /uploads/ paths
+        if (mode === "delete_local") {
+          updatePayload.data = updatedData;
+        }
         await db.update(projectRecords)
-          .set({
-            driveFiles: updatedDriveFiles,
-            driveFolderId: recordFolderId,
-            syncStatus: "synced",
-            updatedAt: new Date(),
-          } as any)
+          .set(updatePayload as any)
           .where(eq(projectRecords.id, record.id));
 
         // Update Google Sheets row with Drive URLs
@@ -1147,6 +1237,89 @@ router.post("/:id/sync-drive", requireEditorOrAdmin, requireProjectOwnership, as
 
     res.json({ ok: true, synced, failed, failedRecords });
   } catch (err: any) {
+    handleError(res, err);
+  }
+});
+
+// ─── PER-RECORD DRIVE SYNC ───────────────────────────────────
+
+router.post("/:id/records/:recordId/sync-drive", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
+  try {
+    const pid = String(req.params.id);
+    const rid = String(req.params.recordId);
+    const mode: "keep_local" | "delete_local" = req.body.mode || "keep_local";
+
+    const [proj] = await db.select().from(projects).where(eq(projects.id, pid));
+    if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
+    if (!proj.googleServiceAccountKeyEnc) {
+      return res.status(400).json({ error: "لم يتم إعداد Google Service Account لهذا المشروع" });
+    }
+    const rootFolderId = proj.driveRootFolderId || proj.googleDriveFolderId;
+    if (!rootFolderId) {
+      return res.status(400).json({ error: "لم يتم تحديد مجلد Drive الجذر. أضفه في إعدادات Drive." });
+    }
+
+    const [record] = await db.select().from(projectRecords)
+      .where(and(eq(projectRecords.id, rid), eq(projectRecords.projectId, pid)));
+    if (!record) return res.status(404).json({ error: "السجل غير موجود" });
+
+    const fileFields = await db.select({ key: projectFields.key })
+      .from(projectFields)
+      .where(and(eq(projectFields.projectId, pid), sql`${projectFields.fieldType} = 'file'`));
+    const fileKeys = fileFields.map(f => f.key);
+    const recordData = record.data as Record<string, any>;
+
+    const filesToSync = fileKeys.filter(k => recordData[k] && String(recordData[k]).startsWith("/uploads/"));
+    if (filesToSync.length === 0) {
+      return res.json({ ok: true, synced: 0, message: "لا يوجد ملفات محلية في هذا السجل" });
+    }
+
+    await db.update(projectRecords).set({ syncStatus: "syncing" } as any).where(eq(projectRecords.id, rid));
+
+    const projectFolderId = await driveStorage.ensureProjectFolder(pid, proj.name, rootFolderId);
+    const folderLabel = record.sequentialNumber ? `السجل ${record.sequentialNumber}` : `سجل ${rid.slice(0, 8)}`;
+    const recordFolderId = await driveStorage.ensureRecordFolder(pid, projectFolderId, folderLabel, rid);
+
+    const existingDriveFiles = (record.driveFiles as Record<string, any>) || {};
+    const updatedDriveFiles: Record<string, any> = { ...existingDriveFiles };
+    const updatedData = { ...recordData };
+    const localFilesToDelete: string[] = [];
+
+    for (const fieldKey of filesToSync) {
+      const localFilename = path.basename(String(recordData[fieldKey]));
+      const mimeType = driveStorage.guessMimeType(localFilename);
+      const { fileId, driveUrl } = await driveStorage.uploadLocalFileToDrive(pid, {
+        localFilename, displayName: localFilename, mimeType, folderId: recordFolderId,
+      });
+      updatedDriveFiles[fieldKey] = { fileId, driveUrl, originalName: localFilename, syncedAt: new Date().toISOString() };
+      updatedData[fieldKey] = driveUrl;
+      if (mode === "delete_local") localFilesToDelete.push(localFilename);
+    }
+
+    const updatePayload: Record<string, any> = {
+      driveFiles: updatedDriveFiles,
+      driveFolderId: recordFolderId,
+      syncStatus: "synced",
+      updatedAt: new Date(),
+    };
+    if (mode === "delete_local") updatePayload.data = updatedData;
+    await db.update(projectRecords).set(updatePayload as any).where(eq(projectRecords.id, rid));
+
+    if (record.sheetsRowIndex) {
+      updateRecordRow(pid, record.sheetsRowIndex, updatedData, record.sequentialNumber || 0).catch(console.error);
+    }
+    if (mode === "delete_local") {
+      for (const fname of localFilesToDelete) {
+        fs.unlink(path.join(uploadsDir, fname), () => {});
+      }
+    }
+
+    res.json({ ok: true, synced: filesToSync.length });
+  } catch (err: any) {
+    await db.update(projectRecords)
+      .set({ syncStatus: "sync_failed" } as any)
+      .where(eq(projectRecords.id, String(req.params.recordId)))
+      .catch(() => {});
     handleError(res, err);
   }
 });

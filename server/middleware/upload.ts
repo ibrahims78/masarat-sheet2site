@@ -115,3 +115,42 @@ export async function validateMimeType(req: Request, res: Response, next: NextFu
 export function publicFileUrl(filename: string): string {
   return `/uploads/${filename}`;
 }
+
+/**
+ * Validate per-field file restrictions (allowed types + max size).
+ * Call AFTER validateMimeType. Deletes the file and responds with 400 if invalid.
+ */
+export async function validateFieldRestrictions(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+  allowedFileTypes: string[] | null | undefined,
+  maxFileSizeMb: number | null | undefined,
+): Promise<void> {
+  if (!req.file) { next(); return; }
+
+  const filePath = path.join(uploadsDir, req.file.filename);
+
+  // Size check
+  if (maxFileSizeMb && maxFileSizeMb > 0) {
+    const sizeMb = req.file.size / (1024 * 1024);
+    if (sizeMb > maxFileSizeMb) {
+      fs.unlink(filePath, () => {});
+      res.status(400).json({ error: `حجم الملف يتجاوز الحد المسموح (${maxFileSizeMb} MB) / File exceeds the ${maxFileSizeMb} MB limit` });
+      return;
+    }
+  }
+
+  // Allowed extensions check
+  if (allowedFileTypes && allowedFileTypes.length > 0) {
+    const ext = path.extname(req.file.originalname).toLowerCase().replace(/^\./, "");
+    const allowed = allowedFileTypes.map((t: string) => t.toLowerCase().replace(/^\./, ""));
+    if (!allowed.includes(ext)) {
+      fs.unlink(filePath, () => {});
+      res.status(400).json({ error: `نوع الملف غير مسموح. الأنواع المقبولة: ${allowedFileTypes.join(", ")} / Allowed types: ${allowedFileTypes.join(", ")}` });
+      return;
+    }
+  }
+
+  next();
+}

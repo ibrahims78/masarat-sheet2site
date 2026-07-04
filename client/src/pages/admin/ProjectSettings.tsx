@@ -197,6 +197,7 @@ export function ProjectSettings() {
       options: null, stepNumber: 1, orderIndex: prev.length, placeholder: null,
       validationMin: null, validationMax: null, validationRegex: null, validationMessage: null,
       conditions: [], conditionOperator: "AND", visibleTo: "all", isReadOnly: false,
+      allowedFileTypes: null, maxFileSizeMb: null,
     } as any]);
   };
 
@@ -409,6 +410,55 @@ export function ProjectSettings() {
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
+
+                    {/* File field restrictions */}
+                    {f.fieldType === "file" && (
+                      <div className="pr-6 space-y-3">
+                        <div>
+                          <p className="text-[11px] text-muted-foreground mb-1">
+                            {isAr ? "أنواع الملفات المسموحة (اتركه فارغاً للسماح بالكل)" : "Allowed file types (leave empty to allow all)"}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {["jpg", "jpeg", "png", "gif", "webp", "pdf", "doc", "docx", "xls", "xlsx", "txt"].map(ext => {
+                              const current: string[] = (f as any).allowedFileTypes || [];
+                              const isChecked = current.includes(ext);
+                              return (
+                                <label key={ext} className={`inline-flex items-center gap-1 px-2 py-1 rounded border text-xs cursor-pointer select-none transition-colors
+                                  ${isChecked
+                                    ? "bg-primary/10 border-primary text-primary font-medium"
+                                    : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"}`}>
+                                  <input
+                                    type="checkbox"
+                                    className="hidden"
+                                    checked={isChecked}
+                                    onChange={e => {
+                                      const prev: string[] = (f as any).allowedFileTypes || [];
+                                      const next = e.target.checked ? [...prev, ext] : prev.filter(t => t !== ext);
+                                      updateField(idx, { allowedFileTypes: next.length > 0 ? next : null } as any);
+                                    }}
+                                  />
+                                  .{ext}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground mb-1">
+                            {isAr ? "الحجم الأقصى (MB) — اتركه فارغاً لاستخدام الحد الافتراضي (10 MB)" : "Max size (MB) — leave empty to use default (10 MB)"}
+                          </p>
+                          <input
+                            type="number"
+                            min={1}
+                            max={50}
+                            value={(f as any).maxFileSizeMb || ""}
+                            onChange={e => updateField(idx, { maxFileSizeMb: e.target.value ? Number(e.target.value) : null } as any)}
+                            placeholder={isAr ? "مثال: 5" : "e.g. 5"}
+                            className="w-28 h-8 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 text-sm"
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     {/* Options editor */}
                     {(f.fieldType === "select" || f.fieldType === "radio") && (

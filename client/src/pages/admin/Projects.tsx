@@ -227,10 +227,17 @@ export function Projects() {
             <DialogHeader>
               <DialogTitle>{ar ? "تأكيد حذف المشروع" : "Delete Project"}</DialogTitle>
             </DialogHeader>
-            <p className="text-sm text-muted-foreground">
-              {ar ? <>هل أنت متأكد من حذف المشروع{" "}<strong>"{projects.find(p => p.id === deleteId)?.name}"</strong>؟<br />سيتم حذف <span className="text-red-500 font-semibold">جميع السجلات والبيانات</span> المرتبطة به نهائياً.</>
-                 : <>Are you sure you want to delete <strong>"{projects.find(p => p.id === deleteId)?.name}"</strong>?<br />All <span className="text-red-500 font-semibold">records and data</span> will be permanently deleted.</>}
-            </p>
+            <div className="text-sm text-muted-foreground space-y-2">
+              <p>
+                {ar ? <>هل أنت متأكد من حذف المشروع{" "}<strong>"{projects.find(p => p.id === deleteId)?.name}"</strong>؟<br />سيتم حذف <span className="text-red-500 font-semibold">جميع السجلات والبيانات</span> المرتبطة به نهائياً.</>
+                   : <>Are you sure you want to delete <strong>"{projects.find(p => p.id === deleteId)?.name}"</strong>?<br />All <span className="text-red-500 font-semibold">records and data</span> will be permanently deleted.</>}
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded p-2">
+                ⚠️ {ar
+                  ? "ملفات Google Drive المزامنة لن تُحذف تلقائياً — احذف مجلد المشروع يدوياً من Drive إذا لزم الأمر."
+                  : "Google Drive files that were synced will NOT be deleted automatically — delete the project folder in Drive manually if needed."}
+              </p>
+            </div>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setDeleteId(null)} data-testid="button-cancel-delete">
                 {ar ? "إلغاء" : "Cancel"}
