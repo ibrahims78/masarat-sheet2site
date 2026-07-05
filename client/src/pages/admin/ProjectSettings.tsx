@@ -442,6 +442,27 @@ export function ProjectSettings() {
                       </select>
                     </div>
 
+                    {/* ── PLACEHOLDER / SUBTITLE ROW ── */}
+                    {f.fieldType !== "autoincrement" && f.fieldType !== "select" && f.fieldType !== "radio" && (
+                      <div className="px-3 pb-2">
+                        <Input
+                          value={(f as any).placeholder ?? ""}
+                          onChange={e => updateField(idx, { placeholder: e.target.value || null } as any)}
+                          className="text-xs h-7 text-slate-500"
+                          data-testid={`field-placeholder-${idx}`}
+                          placeholder={
+                            f.fieldType === "checkbox"
+                              ? (isAr ? "النص بجانب مربع الاختيار (مثال: أوافق على الشروط)" : "Text next to the checkbox")
+                              : f.fieldType === "heading"
+                              ? (isAr ? "نص توضيحي أسفل العنوان (اختياري)" : "Subtitle below heading (optional)")
+                              : f.fieldType === "file"
+                              ? (isAr ? "تعليمات الرفع (مثال: ارفع صورة شخصية واضحة)" : "Upload hint (e.g. Upload a clear photo)")
+                              : (isAr ? "نص تلميح داخل الحقل (Placeholder)" : "Hint text inside the field (Placeholder)")
+                          }
+                        />
+                      </div>
+                    )}
+
                     {/* ── CONTROLS BAR ── */}
                     <div className="flex items-center gap-2 px-3 pb-3 flex-wrap">
 
