@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest, fetchJson } from "@/lib/queryClient";
 import {
-  Save, Loader2, Plus, Trash2, GripVertical, ArrowRight, ExternalLink,
+  Save, Loader2, Plus, Trash2, ArrowUp, ArrowDown, ArrowRight, ExternalLink,
   ChevronDown, ChevronUp, Eye, EyeOff, GitBranch, Settings2, FileUp,
   Upload, TableProperties, Wrench, RefreshCw, BotMessageSquare, ArrowUpToLine,
   History, User, Clock, FolderSync, HardDrive, AlertTriangle, CheckCircle2, XCircle,
@@ -33,8 +33,7 @@ export function ProjectSettings() {
   const [testing, setTesting] = useState(false);
   const [fields, setFields] = useState<ProjectField[]>([]);
   const [showGuide, setShowGuide] = useState(false);
-  const dragItem = useRef<number | null>(null);
-  const dragOverItem = useRef<number | null>(null);
+
 
   // Sheets-specific state
   const [checkResult, setCheckResult] = useState<{
@@ -216,20 +215,14 @@ export function ProjectSettings() {
   };
   const updateField = (idx: number, upd: Partial<ProjectField>) => setFields(prev => prev.map((f, i) => i === idx ? { ...f, ...upd } : f));
 
-  // Drag-and-drop handlers
-  const handleDragStart = (idx: number) => { dragItem.current = idx; };
-  const handleDragEnter = (idx: number) => { dragOverItem.current = idx; };
-  const handleDragEnd = () => {
-    if (dragItem.current === null || dragOverItem.current === null) return;
-    if (dragItem.current === dragOverItem.current) { dragItem.current = null; dragOverItem.current = null; return; }
+  const moveField = (idx: number, dir: -1 | 1) => {
+    const target = idx + dir;
     setFields(prev => {
+      if (target < 0 || target >= prev.length) return prev;
       const next = [...prev];
-      const dragged = next.splice(dragItem.current!, 1)[0];
-      next.splice(dragOverItem.current!, 0, dragged);
+      [next[idx], next[target]] = [next[target], next[idx]];
       return next.map((f, i) => ({ ...f, orderIndex: i }));
     });
-    dragItem.current = null;
-    dragOverItem.current = null;
   };
 
   const doSyncDrive = async (retryFailed = false) => {
@@ -386,18 +379,28 @@ export function ProjectSettings() {
                     }`}
                     data-testid={`field-${idx}`}
                   >
-                    {/* ── TOP: Drag + Inputs + Type + Step ── */}
-                    <div
-                      className="flex items-center gap-2 p-3 cursor-grab active:cursor-grabbing"
-                      draggable
-                      onDragStart={() => handleDragStart(idx)}
-                      onDragEnter={() => handleDragEnter(idx)}
-                      onDragEnd={handleDragEnd}
-                      onDragOver={e => e.preventDefault()}
-                    >
-                      <span title={isAr ? "اسحب لإعادة الترتيب" : "Drag to reorder"} className="flex-shrink-0">
-                        <GripVertical className="h-4 w-4 text-slate-300 dark:text-slate-600" />
-                      </span>
+                    {/* ── TOP: Order buttons + Inputs + Type + Step ── */}
+                    <div className="flex items-center gap-2 p-3">
+                      <div className="flex flex-col gap-0.5 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => moveField(idx, -1)}
+                          disabled={idx === 0}
+                          className="h-5 w-5 flex items-center justify-center rounded text-slate-400 hover:text-primary hover:bg-primary/10 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                          title={isAr ? "تحريك لأعلى" : "Move up"}
+                        >
+                          <ArrowUp className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveField(idx, 1)}
+                          disabled={idx === fields.length - 1}
+                          className="h-5 w-5 flex items-center justify-center rounded text-slate-400 hover:text-primary hover:bg-primary/10 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                          title={isAr ? "تحريك لأسفل" : "Move down"}
+                        >
+                          <ArrowDown className="h-3 w-3" />
+                        </button>
+                      </div>
 
                       {/* Label + Key */}
                       <div className="grid grid-cols-2 gap-2 flex-1 min-w-0">
