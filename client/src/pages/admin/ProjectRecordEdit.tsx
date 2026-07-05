@@ -18,13 +18,14 @@ import { FileField } from "@/components/FileField";
 import { isFieldVisible as checkFieldVisible } from "@/lib/fieldVisibility";
 import { useAuth } from "@/context/AuthContext";
 
-function FieldInput({ f, register, errors, watch, setValue, projectId }: {
+function FieldInput({ f, register, errors, watch, setValue, projectId, uploadFolder }: {
   f: ProjectField;
   register: any;
   errors: any;
   watch: any;
   setValue: any;
   projectId: string;
+  uploadFolder: string;
 }) {
   const { lang } = useLang();
   const isAr = lang === "ar";
@@ -126,6 +127,7 @@ function FieldInput({ f, register, errors, watch, setValue, projectId }: {
           onChange={url => setValue(f.key, url, { shouldValidate: true })}
           uploadUrl={`/api/projects/${projectId}/upload`}
           fieldKey={f.key}
+          uploadFolder={uploadFolder}
           allowedTypes={(f as any).allowedFileTypes}
           maxSizeMb={(f as any).maxFileSizeMb}
         />
@@ -284,7 +286,7 @@ export function ProjectRecordEdit() {
                       {f.label}
                       {f.isRequired && <span className="text-red-500 mr-1">*</span>}
                     </Label>
-                    <FieldInput f={f} register={register} errors={errors} watch={watch} setValue={setValue} projectId={id!} />
+                    <FieldInput f={f} register={register} errors={errors} watch={watch} setValue={setValue} projectId={id!} uploadFolder={recordId!} />
                     {(errors as any)[f.key] && (
                       <p className="text-xs text-red-500">{(errors as any)[f.key]?.message}</p>
                     )}

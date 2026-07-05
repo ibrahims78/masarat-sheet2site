@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from "uuid";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import { Readable } from "stream";
-import { fileUpload, publicFileUrl, validateMimeType, validateFieldRestrictions, uploadsDir } from "../middleware/upload.js";
+import { fileUpload, publicFileUrl, validateMimeType, validateFieldRestrictions, uploadsDir, organizeUploadedFile } from "../middleware/upload.js";
 import { handleError } from "../utils/errorHandler.js";
 import { randomBytes } from "crypto";
 import fs from "fs";
@@ -272,11 +272,15 @@ router.delete("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req:
     await db.delete(projects).where(eq(projects.id, pid));
 
     // Async cleanup of local files and Drive files (non-blocking)
+    // Handles both flat (/uploads/uuid.ext) and organised (/uploads/project/folder/uuid.ext) paths.
     for (const rec of allRecords) {
       if (rec.data && typeof rec.data === "object") {
         Object.values(rec.data as Record<string, any>).forEach(val => {
           if (typeof val === "string" && val.startsWith("/uploads/")) {
-            fs.unlink(path.join(uploadsDir, path.basename(val)), () => {});
+            const relativePath = val.slice("/uploads/".length);
+            const normalized = path.normalize(relativePath).replace(/^(\.\.[/\\])+/, "");
+            const filePath = path.join(uploadsDir, normalized);
+            if (filePath.startsWith(uploadsDir + path.sep)) fs.unlink(filePath, () => {});
           }
         });
       }
@@ -344,12 +348,31 @@ router.post("/parse-excel", requireEditorOrAdmin, parseExcelLimiter, upload.sing
 
 // ─── FILE UPLOADS (admin — for add/edit record forms) ─────────
 
-// M-04: validateMimeType checks magic-bytes; validateFieldRestrictions enforces per-field limits
+// M-04: validateMimeType checks magic-bytes; validateFieldRestrictions enforces per-field limits.
+// After validation passes, file is moved from flat uploads/ into uploads/{project-slug}/{upload-folder}/
 router.post("/:id/upload", requireEditorOrAdmin, requireProjectOwnership, (req: Request, res: Response, next: NextFunction) => {
   const pid = String(req.params.id);
   fileUpload.single("file")(req, res, async (err: any) => {
     if (err) return res.status(400).json({ error: err.message || "فشل رفع الملف" });
     if (!req.file) return res.status(400).json({ error: "لم يتم رفع ملف" });
+
+    // Build the final response — organise into subfolders if uploadFolder provided
+    const buildResponse = async () => {
+      const uploadFolder = String(req.body.uploadFolder || "").trim();
+      if (uploadFolder) {
+        try {
+          const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, pid));
+          if (proj?.name) {
+            const relPath = organizeUploadedFile(req.file!.filename, proj.name, uploadFolder);
+            return res.json({ url: `/uploads/${relPath}`, originalName: req.file!.originalname });
+          }
+        } catch {
+          // Fall through to flat path on any error
+        }
+      }
+      res.json({ url: publicFileUrl(req.file!.filename), originalName: req.file!.originalname });
+    };
+
     await validateMimeType(req, res, async () => {
       const fieldKey = String(req.body.fieldKey || "");
       if (fieldKey) {
@@ -358,13 +381,11 @@ router.post("/:id/upload", requireEditorOrAdmin, requireProjectOwnership, (req: 
           maxFileSizeMb: projectFields.maxFileSizeMb,
         }).from(projectFields).where(and(eq(projectFields.projectId, pid), eq(projectFields.key, fieldKey)));
         if (fieldCfg && (fieldCfg.allowedFileTypes || fieldCfg.maxFileSizeMb)) {
-          await validateFieldRestrictions(req, res, () => {
-            res.json({ url: publicFileUrl(req.file!.filename), originalName: req.file!.originalname });
-          }, fieldCfg.allowedFileTypes, fieldCfg.maxFileSizeMb);
+          await validateFieldRestrictions(req, res, buildResponse, fieldCfg.allowedFileTypes, fieldCfg.maxFileSizeMb);
           return;
         }
       }
-      res.json({ url: publicFileUrl(req.file!.filename), originalName: req.file!.originalname });
+      await buildResponse();
     });
   });
 });
@@ -596,12 +617,17 @@ router.delete("/:id/records/:recordId", requireEditorOrAdmin, requireProjectOwne
     await db.delete(projectRecords).where(and(eq(projectRecords.id, rid), eq(projectRecords.projectId, pid)));
 
     // Clean up local uploaded files (best-effort, non-blocking)
+    // Handles both flat paths (/uploads/uuid.ext) and organised paths (/uploads/project/folder/uuid.ext)
     if (rec.data && typeof rec.data === "object") {
       Object.values(rec.data as Record<string, any>).forEach(val => {
         if (typeof val === "string" && val.startsWith("/uploads/")) {
-          const filename = path.basename(val);
-          const filePath = path.join(uploadsDir, filename);
-          fs.unlink(filePath, () => {});
+          const relativePath = val.slice("/uploads/".length); // strip leading /uploads/
+          const normalized = path.normalize(relativePath).replace(/^(\.\.[/\\])+/, "");
+          const filePath = path.join(uploadsDir, normalized);
+          // Safety: only delete inside uploadsDir
+          if (filePath.startsWith(uploadsDir + path.sep)) {
+            fs.unlink(filePath, () => {});
+          }
         }
       });
     }
@@ -663,11 +689,15 @@ router.post("/:id/records/bulk-delete", requireEditorOrAdmin, requireProjectOwne
     }
 
     // Async cleanup of local and Drive files (non-blocking)
+    // Handles both flat (/uploads/uuid.ext) and organised (/uploads/project/folder/uuid.ext) paths.
     for (const rec of toDelete) {
       if (rec.data && typeof rec.data === "object") {
         Object.values(rec.data as Record<string, any>).forEach(val => {
           if (typeof val === "string" && val.startsWith("/uploads/")) {
-            fs.unlink(path.join(uploadsDir, path.basename(val)), () => {});
+            const relativePath = val.slice("/uploads/".length);
+            const normalized = path.normalize(relativePath).replace(/^(\.\.[/\\])+/, "");
+            const filePath = path.join(uploadsDir, normalized);
+            if (filePath.startsWith(uploadsDir + path.sep)) fs.unlink(filePath, () => {});
           }
         });
       }
@@ -1192,13 +1222,16 @@ router.post("/:id/sync-drive", requireEditorOrAdmin, requireProjectOwnership, as
         const existingDriveFiles = (record.driveFiles as Record<string, any>) || {};
         const updatedDriveFiles: Record<string, any> = { ...existingDriveFiles };
         const updatedData = { ...recordData };
-        const localFilesToDelete: string[] = [];
+        const localFilesToDelete: string[] = []; // relative paths from uploadsDir root
 
         for (const fieldKey of fileKeys) {
           const fileUrl = recordData[fieldKey];
           if (!fileUrl || !String(fileUrl).startsWith("/uploads/")) continue;
 
+          // basename used only for Drive upload display name and MIME detection
           const localFilename = path.basename(String(fileUrl));
+          // Full relative path (handles both flat and organised uploads)
+          const localRelPath = String(fileUrl).slice("/uploads/".length);
           const mimeType = driveStorage.guessMimeType(localFilename);
 
           const { fileId, driveUrl } = await driveStorage.uploadLocalFileToDrive(pid, {
@@ -1212,7 +1245,7 @@ router.post("/:id/sync-drive", requireEditorOrAdmin, requireProjectOwnership, as
           updatedData[fieldKey] = driveUrl;
 
           if (mode === "delete_local") {
-            localFilesToDelete.push(localFilename);
+            localFilesToDelete.push(localRelPath);
           }
         }
 
@@ -1236,10 +1269,12 @@ router.post("/:id/sync-drive", requireEditorOrAdmin, requireProjectOwnership, as
           updateRecordRow(pid, record.sheetsRowIndex, updatedData, record.sequentialNumber || 0).catch(console.error);
         }
 
-        // Delete local files if requested
+        // Delete local files if requested (localFilesToDelete contains relative paths from uploadsDir)
         if (mode === "delete_local") {
-          for (const fname of localFilesToDelete) {
-            fs.unlink(path.join(uploadsDir, fname), () => {});
+          for (const relPath of localFilesToDelete) {
+            const normalized = path.normalize(relPath).replace(/^(\.\.[/\\])+/, "");
+            const filePath = path.join(uploadsDir, normalized);
+            if (filePath.startsWith(uploadsDir + path.sep)) fs.unlink(filePath, () => {});
           }
         }
 

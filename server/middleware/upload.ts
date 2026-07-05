@@ -117,6 +117,47 @@ export function publicFileUrl(filename: string): string {
 }
 
 /**
+ * Slugify a project name into a safe directory name.
+ * Arabic text → dashes; only alphanumeric + dashes remain.
+ */
+export function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\s]+/g, "-")
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50) || "project";
+}
+
+/**
+ * Move the freshly-uploaded file from the flat uploads root into the
+ * organised tree:  uploads/{project-slug}/{upload-folder}/{uuid.ext}
+ *
+ * Call AFTER all validation passes (validateMimeType + validateFieldRestrictions),
+ * because those middlewares read the file from the flat uploadsDir.
+ *
+ * @param tempFilename  The uuid.ext filename multer created in uploadsDir.
+ * @param projectName   Raw project name (Arabic/English) — will be slugified.
+ * @param uploadFolder  Client-supplied session UUID — sanitised server-side.
+ * @returns             Relative path from uploads root, e.g. "my-project/abc123/uuid.ext"
+ */
+export function organizeUploadedFile(
+  tempFilename: string,
+  projectName: string,
+  uploadFolder: string,
+): string {
+  const slug = slugify(projectName);
+  // Allow only alphanumeric + dash/underscore (UUIDs use these)
+  const safeFolder = uploadFolder.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || "misc";
+  const destDir = path.join(uploadsDir, slug, safeFolder);
+  fs.mkdirSync(destDir, { recursive: true });
+  const destPath = path.join(destDir, tempFilename);
+  fs.renameSync(path.join(uploadsDir, tempFilename), destPath);
+  return `${slug}/${safeFolder}/${tempFilename}`;
+}
+
+/**
  * Validate per-field file restrictions (allowed types + max size).
  * Call AFTER validateMimeType. Deletes the file and responds with 400 if invalid.
  */

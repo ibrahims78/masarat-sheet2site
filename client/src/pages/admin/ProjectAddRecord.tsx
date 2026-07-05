@@ -10,20 +10,21 @@ import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/queryClient";
 import { ArrowRight, Plus, Loader2, CheckCircle2 } from "lucide-react";
 import type { ProjectField, Project } from "@shared/schema";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { useLang } from "@/context/LanguageContext";
 import { FileField } from "@/components/FileField";
 import { isFieldVisible as checkFieldVisible } from "@/lib/fieldVisibility";
 import { useAuth } from "@/context/AuthContext";
 
-function FieldInput({ f, register, errors, watch, setValue, projectId }: {
+function FieldInput({ f, register, errors, watch, setValue, projectId, uploadFolder }: {
   f: ProjectField;
   register: any;
   errors: any;
   watch: any;
   setValue: any;
   projectId: string;
+  uploadFolder: string;
 }) {
   const { lang } = useLang();
   const isAr = lang === "ar";
@@ -114,6 +115,7 @@ function FieldInput({ f, register, errors, watch, setValue, projectId }: {
           onChange={url => setValue(f.key, url, { shouldValidate: true })}
           uploadUrl={`/api/projects/${projectId}/upload`}
           fieldKey={f.key}
+          uploadFolder={uploadFolder}
           allowedTypes={(f as any).allowedFileTypes}
           maxSizeMb={(f as any).maxFileSizeMb}
         />
@@ -145,6 +147,8 @@ export function ProjectAddRecord() {
   const { lang } = useLang();
   const isAr = lang === "ar";
   const [success, setSuccess] = useState(false);
+  // Stable UUID groups all file uploads for this new record into one folder
+  const uploadFolder = useMemo(() => crypto.randomUUID(), []);
 
   const { data: project } = useQuery<Project>({
     queryKey: ["/api/projects", id],
@@ -256,7 +260,7 @@ export function ProjectAddRecord() {
                       {f.label}
                       {f.isRequired && <span className="text-red-500 mr-1">*</span>}
                     </Label>
-                    <FieldInput f={f} register={register} errors={errors} watch={watch} setValue={setValue} projectId={id!} />
+                    <FieldInput f={f} register={register} errors={errors} watch={watch} setValue={setValue} projectId={id!} uploadFolder={uploadFolder} />
                     {(errors as any)[f.key] && (
                       <p className="text-xs text-red-500">{(errors as any)[f.key]?.message}</p>
                     )}

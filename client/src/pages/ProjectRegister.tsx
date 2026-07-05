@@ -1,7 +1,7 @@
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -55,6 +55,8 @@ export function ProjectRegister() {
   const [fromReview, setFromReview] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(200);
+  // Stable UUID for the upload session — groups all files for this submission into one folder
+  const uploadFolder = useMemo(() => crypto.randomUUID(), []);
 
   const { data: formInfo, isLoading } = useQuery<FormInfo>({
     queryKey: ["/api/pform", projectId, "info"],
@@ -513,6 +515,7 @@ export function ProjectRegister() {
             onChange={url => setValue(f.key, url, { shouldValidate: true })}
             uploadUrl={`/api/pform/${projectId}/upload`}
             fieldKey={f.key}
+            uploadFolder={uploadFolder}
             allowedTypes={(f as any).allowedFileTypes}
             maxSizeMb={(f as any).maxFileSizeMb}
           />

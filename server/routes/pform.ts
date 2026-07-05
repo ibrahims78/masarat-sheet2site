@@ -6,7 +6,7 @@ import { appendRecordToSheet, updateRecordRow } from "../services/projectSheets.
 import { insertRecordAtomic } from "../services/recordInsert.js";
 import { decrypt } from "../services/crypto.js";
 import rateLimit from "express-rate-limit";
-import { fileUpload, publicFileUrl, validateMimeType, validateFieldRestrictions } from "../middleware/upload.js";
+import { fileUpload, publicFileUrl, validateMimeType, validateFieldRestrictions, organizeUploadedFile } from "../middleware/upload.js";
 import { handleError } from "../utils/errorHandler.js";
 
 const router = Router();
@@ -19,6 +19,7 @@ const uploadLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, message: { error
 router.post("/:projectId/upload", uploadLimiter, async (req: Request, res: Response) => {
   const pid = String(req.params.projectId);
   const [proj] = await db.select({
+    name: projects.name,
     formEnabled: projects.formEnabled,
     formDisabledMessage: projects.formDisabledMessage,
   }).from(projects).where(eq(projects.id, pid));
@@ -28,6 +29,21 @@ router.post("/:projectId/upload", uploadLimiter, async (req: Request, res: Respo
   fileUpload.single("file")(req, res, async (err: any) => {
     if (err) return res.status(400).json({ error: err.message || "فشل رفع الملف" });
     if (!req.file) return res.status(400).json({ error: "لم يتم رفع ملف" });
+
+    // Build the final response — organise into subfolders if uploadFolder provided
+    const buildResponse = () => {
+      const uploadFolder = String(req.body.uploadFolder || "").trim();
+      if (uploadFolder && proj.name) {
+        try {
+          const relPath = organizeUploadedFile(req.file!.filename, proj.name, uploadFolder);
+          return res.json({ url: `/uploads/${relPath}`, originalName: req.file!.originalname });
+        } catch {
+          // Fall through to flat path on error
+        }
+      }
+      res.json({ url: publicFileUrl(req.file!.filename), originalName: req.file!.originalname });
+    };
+
     // M-04: Validate magic-bytes MIME type after upload to prevent extension spoofing
     await validateMimeType(req, res, async () => {
       // Per-field type/size restrictions
@@ -38,13 +54,11 @@ router.post("/:projectId/upload", uploadLimiter, async (req: Request, res: Respo
           maxFileSizeMb: projectFields.maxFileSizeMb,
         }).from(projectFields).where(and(eq(projectFields.projectId, pid), eq(projectFields.key, fieldKey)));
         if (fieldCfg && (fieldCfg.allowedFileTypes || fieldCfg.maxFileSizeMb)) {
-          await validateFieldRestrictions(req, res, () => {
-            res.json({ url: publicFileUrl(req.file!.filename), originalName: req.file!.originalname });
-          }, fieldCfg.allowedFileTypes, fieldCfg.maxFileSizeMb);
+          await validateFieldRestrictions(req, res, buildResponse, fieldCfg.allowedFileTypes, fieldCfg.maxFileSizeMb);
           return;
         }
       }
-      res.json({ url: publicFileUrl(req.file!.filename), originalName: req.file!.originalname });
+      buildResponse();
     });
   });
 });

@@ -1,7 +1,7 @@
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -140,6 +140,7 @@ export function ProjectEditForm() {
                           onChange={url => setValue(f.key, url, { shouldValidate: true })}
                           uploadUrl={`/api/pform/${projectId}/upload`}
                           fieldKey={f.key}
+                          uploadFolder={token}
                           authSuffix={`?token=${token}&project=${projectId}`}
                         />
                       </>

@@ -113,10 +113,24 @@ app.use(session({
 
 // Protected uploads: requires an active session OR a valid (non-expired) edit token
 // passed as ?token=<uuid>&project=<projectId>
-app.get("/uploads/:filename", async (req, res) => {
+// Supports both flat (/uploads/uuid.ext) and organised (/uploads/project-slug/folder/uuid.ext) paths.
+app.get("/uploads/*", async (req, res) => {
   const sessionUserId = (req.session as any)?.userId;
   const sessionRole = (req.session as any)?.role;
-  const filename = path.basename(req.params.filename); // prevent path traversal
+
+  // Extract and sanitize path after /uploads/
+  const rawPath = (req.params as any)[0] as string || "";
+  const normalized = path.normalize(rawPath);          // resolves any .. sequences
+  const filePath   = path.join(uploadsDir, normalized);
+
+  // Path-traversal guard: resolved path must stay inside uploadsDir
+  const uploadsRoot = uploadsDir + path.sep;
+  if (!filePath.startsWith(uploadsRoot)) {
+    return res.status(400).json({ error: "مسار غير صالح" });
+  }
+
+  // For the IDOR check we use the leaf filename (UUID is globally unique)
+  const filename = path.basename(normalized);
 
   if (!sessionUserId) {
     // Try edit-token auth: ?token=<uuid>&project=<projectId>
@@ -138,8 +152,7 @@ app.get("/uploads/:filename", async (req, res) => {
     }
   } else if (sessionRole !== "admin" && sessionRole !== "viewer") {
     // Editors: only allow access to files that belong to a record in a project they created.
-    // Prevents IDOR — an editor guessing/knowing another editor's file UUID could otherwise
-    // read it since the file itself carries no ownership metadata.
+    // The UUID leaf filename is globally unique, so the ILIKE check is sufficient.
     try {
       const [owned] = await db
         .select({ id: projectRecords.id })
@@ -158,7 +171,6 @@ app.get("/uploads/:filename", async (req, res) => {
     }
   }
 
-  const filePath = path.join(uploadsDir, filename);
   try {
     await stat(filePath);
   } catch {

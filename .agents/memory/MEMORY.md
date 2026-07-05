@@ -6,3 +6,4 @@
 - [Safe-columns projection pitfall](safe-columns-projection.md) — new project/table columns must be added to the explicit safe-select column map, not just the schema, or GET endpoints silently drop them
 - [Field save mapping completeness](field-save-mapping.md) — POST /:id/fields uses an explicit column mapping; any new projectFields column must be added there AND in the project-create fieldRows map or it silently drops on save
 - [Column type mismatch in joins](drizzle-join-type-mismatch.md) — `changed_by` (text) vs `users.id` (uuid) broke audit-log join with "operator does not exist"; check actual DB column types (psql \d), not just schema.ts, when a join/eq throws a type operator error
+- [Organised file uploads](organised-uploads.md) — uploads now stored at uploads/{slug}/{uploadFolder}/{uuid.ext}; deletion and serving must use full relative path, not path.basename()

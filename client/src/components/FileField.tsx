@@ -13,11 +13,17 @@ interface FileFieldProps {
   allowedTypes?: string[] | null;
   /** Max file size in MB. null/0 = no client-side limit (server still enforces 10 MB) */
   maxSizeMb?: number | null;
+  /**
+   * A UUID generated once per form session (or the record ID for edits).
+   * Sent to the server so uploaded files land in uploads/{project}/{uploadFolder}/
+   * instead of the flat uploads root.
+   */
+  uploadFolder?: string;
 }
 
 export function FileField({
   value, onChange, uploadUrl, fieldKey, authSuffix,
-  allowedTypes, maxSizeMb,
+  allowedTypes, maxSizeMb, uploadFolder,
 }: FileFieldProps) {
   const { lang } = useLang();
   const isAr = lang === "ar";
@@ -61,6 +67,7 @@ export function FileField({
       const formData = new FormData();
       formData.append("file", file);
       formData.append("fieldKey", fieldKey); // for server-side per-field validation
+      if (uploadFolder) formData.append("uploadFolder", uploadFolder);
       const res = await fetch(uploadUrl, { method: "POST", credentials: "include", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || (isAr ? "فشل رفع الملف" : "File upload failed"));
