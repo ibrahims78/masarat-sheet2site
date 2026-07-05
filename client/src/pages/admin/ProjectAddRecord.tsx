@@ -40,6 +40,19 @@ function FieldInput({ f, register, errors, watch, setValue, projectId, uploadFol
     );
   }
 
+  if (f.fieldType === "heading") {
+    return (
+      <div className="pt-1">
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 border-r-4 border-primary pr-3 py-1">
+          {f.label}
+        </p>
+        {f.placeholder && (
+          <p className="text-xs text-muted-foreground mt-1 pr-4">{f.placeholder}</p>
+        )}
+      </div>
+    );
+  }
+
   if (f.fieldType === "textarea") {
     return (
       <Textarea

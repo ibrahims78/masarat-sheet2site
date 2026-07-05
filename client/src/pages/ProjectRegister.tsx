@@ -475,6 +475,19 @@ export function ProjectRegister() {
   const renderField = (f: ProjectField) => {
     // autoincrement fields are filled server-side — never shown to the public
     if (f.fieldType === "autoincrement") return null;
+    // heading fields render as static instructional text — no input, no label wrapper
+    if (f.fieldType === "heading") {
+      return (
+        <div key={f.id} className="col-span-2 pt-2">
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 border-r-4 border-primary pr-3 py-1">
+            {f.label}
+          </p>
+          {f.placeholder && (
+            <p className="text-xs text-muted-foreground mt-1 pr-4">{f.placeholder}</p>
+          )}
+        </div>
+      );
+    }
     return (
     <div key={f.id} className={cn("space-y-1.5", f.fieldType === "textarea" ? "col-span-2" : "")}>
       <Label className="text-sm font-medium text-slate-700 dark:text-slate-200">
@@ -482,7 +495,17 @@ export function ProjectRegister() {
         {f.isRequired && <span className="text-red-500 mr-1">*</span>}
       </Label>
 
-      {f.fieldType === "textarea" ? (
+      {f.fieldType === "checkbox" ? (
+        <label className="flex items-center gap-2 cursor-pointer pt-1">
+          <input
+            type="checkbox"
+            {...register(f.key, { required: f.isRequired ? (isAr ? `${f.label} مطلوب` : `${f.label} is required`) : false })}
+            className="accent-primary w-4 h-4 rounded"
+            data-testid={`checkbox-${f.key}`}
+          />
+          <span className="text-sm text-slate-600 dark:text-slate-300">{f.placeholder || ""}</span>
+        </label>
+      ) : f.fieldType === "textarea" ? (
         <Textarea
           {...register(f.key, { required: f.isRequired ? (isAr ? `${f.label} مطلوب` : `${f.label} is required`) : false })}
           placeholder={f.placeholder || ""}

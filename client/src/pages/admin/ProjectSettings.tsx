@@ -121,7 +121,16 @@ export function ProjectSettings() {
   });
 
   const saveFieldsMut = useMutation({
-    mutationFn: () => apiRequest("POST", `/api/projects/${id}/fields`, { fields }),
+    mutationFn: () => {
+      // Strip incomplete conditions (field === "") before sending to avoid Zod validation errors
+      const cleanedFields = fields.map(f => ({
+        ...f,
+        conditions: Array.isArray((f as any).conditions)
+          ? (f as any).conditions.filter((c: any) => c.field && c.field.trim() !== "")
+          : (f as any).conditions,
+      }));
+      return apiRequest("POST", `/api/projects/${id}/fields`, { fields: cleanedFields });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/projects", id, "fields"] });
       toast({ description: isAr ? "✅ تم حفظ الحقول بنجاح" : "✅ Fields saved successfully" });
@@ -364,8 +373,8 @@ export function ProjectSettings() {
 
                   // field type label map
                   const typeLabels: Record<string, string> = isAr
-                    ? { text: "📝 نص", number: "🔢 رقم", date: "📅 تاريخ", select: "📋 قائمة", radio: "🔘 راديو", textarea: "📄 نص طويل", phone: "📞 هاتف", email: "✉️ بريد", file: "📎 رفع ملف", autoincrement: "🔁 ترقيم تلقائي" }
-                    : { text: "📝 Text", number: "🔢 Number", date: "📅 Date", select: "📋 Select", radio: "🔘 Radio", textarea: "📄 Textarea", phone: "📞 Phone", email: "✉️ Email", file: "📎 File Upload", autoincrement: "🔁 Auto Number" };
+                    ? { text: "📝 نص", number: "🔢 رقم", date: "📅 تاريخ", select: "📋 قائمة", radio: "🔘 راديو", textarea: "📄 نص طويل", phone: "📞 هاتف", email: "✉️ بريد", checkbox: "☑️ خانة اختيار", file: "📎 رفع ملف", autoincrement: "🔁 ترقيم تلقائي", heading: "🔤 نص توجيهي / عنوان" }
+                    : { text: "📝 Text", number: "🔢 Number", date: "📅 Date", select: "📋 Select", radio: "🔘 Radio", textarea: "📄 Textarea", phone: "📞 Phone", email: "✉️ Email", checkbox: "☑️ Checkbox", file: "📎 File Upload", autoincrement: "🔁 Auto Number", heading: "🔤 Heading / Info Text" };
 
                   return (
                   <div

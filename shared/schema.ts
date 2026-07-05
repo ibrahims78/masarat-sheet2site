@@ -196,7 +196,7 @@ export const bulkDeleteSchema = z.object({
 export const projectFieldSchema = z.object({
   key: z.string().min(1),
   label: z.string().min(1),
-  fieldType: z.enum(["text", "number", "date", "select", "radio", "textarea", "phone", "email", "checkbox", "autoincrement", "file"]).default("text"),
+  fieldType: z.enum(["text", "number", "date", "select", "radio", "textarea", "phone", "email", "checkbox", "autoincrement", "file", "heading"]).default("text"),
   isRequired: z.boolean().default(false),
   isVisible: z.boolean().default(true),
   options: z.array(z.string()).optional(),

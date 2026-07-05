@@ -102,7 +102,21 @@ export function ProjectEditForm() {
                 {Array.isArray(project?.steps) ? (project.steps[Number(step) - 1] || (isAr ? `الخطوة ${step}` : `Step ${step}`)) : (isAr ? `الخطوة ${step}` : `Step ${step}`)}
               </h3>
               <div className="space-y-4">
-                {stepFields.filter(f => f.fieldType !== "autoincrement" && isFieldVisible(f)).map(f => (
+                {stepFields.filter(f => f.fieldType !== "autoincrement" && isFieldVisible(f)).map(f => {
+                  // heading fields render as static instructional text — no input
+                  if (f.fieldType === "heading") {
+                    return (
+                      <div key={f.id} className="pt-2">
+                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 border-r-4 border-primary pr-3 py-1">
+                          {f.label}
+                        </p>
+                        {f.placeholder && (
+                          <p className="text-xs text-muted-foreground mt-1 pr-4">{f.placeholder}</p>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
                   <div key={f.id} className="space-y-1.5">
                     <Label className="text-sm font-medium">
                       {f.label}{f.isRequired && <span className="text-red-500 mr-1">*</span>}
@@ -132,6 +146,16 @@ export function ProjectEditForm() {
                           </label>
                         ))}
                       </div>
+                    ) : f.fieldType === "checkbox" ? (
+                      <label className="flex items-center gap-2 cursor-pointer pt-1">
+                        <input
+                          type="checkbox"
+                          {...register(f.key, { required: f.isRequired ? (isAr ? `${f.label} مطلوب` : `${f.label} is required`) : false })}
+                          className="accent-primary w-4 h-4 rounded"
+                          data-testid={`checkbox-${f.key}`}
+                        />
+                        <span className="text-sm text-slate-600 dark:text-slate-300">{f.placeholder || ""}</span>
+                      </label>
                     ) : f.fieldType === "file" ? (
                       <>
                         <input type="hidden" {...register(f.key, { required: f.isRequired ? (isAr ? `${f.label} مطلوب` : `${f.label} is required`) : false })} />
@@ -152,7 +176,8 @@ export function ProjectEditForm() {
                     )}
                     {(errors as any)[f.key] && <p className="text-xs text-red-500">{(errors as any)[f.key]?.message}</p>}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </Card>
           ))}
