@@ -52,6 +52,8 @@ async function findOrCreateFolder(
     q: `name = '${safeName.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
     fields: "files(id)",
     pageSize: 1,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
   if (search.data.files && search.data.files.length > 0) {
     return search.data.files[0].id!;
@@ -64,6 +66,7 @@ async function findOrCreateFolder(
       parents: [parentId],
     },
     fields: "id",
+    supportsAllDrives: true,
   });
   return folder.data.id!;
 }
@@ -132,6 +135,7 @@ export async function uploadLocalFileToDrive(
       body: fileStream,
     },
     fields: "id",
+    supportsAllDrives: true,
   });
 
   const fileId = created.data.id!;
@@ -139,6 +143,7 @@ export async function uploadLocalFileToDrive(
   await drive.permissions.create({
     fileId,
     requestBody: { role: "reader", type: "anyone" },
+    supportsAllDrives: true,
   });
 
   return {
@@ -153,7 +158,7 @@ export async function uploadLocalFileToDrive(
 export async function deleteFileFromDrive(projectId: string, fileId: string): Promise<void> {
   try {
     const { drive } = await getDriveClient(projectId);
-    await drive.files.delete({ fileId });
+    await drive.files.delete({ fileId, supportsAllDrives: true });
   } catch (err: any) {
     if (err?.code === 404 || err?.status === 404) return;
     throw err;
@@ -166,7 +171,7 @@ export async function deleteFileFromDrive(projectId: string, fileId: string): Pr
 export async function deleteFolderFromDrive(projectId: string, folderId: string): Promise<void> {
   try {
     const { drive } = await getDriveClient(projectId);
-    await drive.files.delete({ fileId: folderId });
+    await drive.files.delete({ fileId: folderId, supportsAllDrives: true });
   } catch (err: any) {
     if (err?.code === 404 || err?.status === 404) return;
     throw err;
