@@ -247,6 +247,7 @@ export function ProjectRegister() {
       } else {
         setStep(s => Math.min(s + 1, totalSteps - 1));
       }
+      setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50);
     }
   };
 
@@ -489,7 +490,7 @@ export function ProjectRegister() {
       );
     }
     return (
-    <div key={f.id} className={cn("space-y-1.5", f.fieldType === "textarea" ? "col-span-2" : "")}>
+    <div key={f.id} className={cn("space-y-1.5", (f.fieldType === "textarea" || f.fieldType === "file" || f.fieldType === "checkbox") ? "col-span-2" : "")}>
       <Label className="text-sm font-medium text-slate-700 dark:text-slate-200">
         {f.label}
         {f.isRequired && <span className="text-red-500 mr-1">*</span>}
