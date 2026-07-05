@@ -233,7 +233,7 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
     const plainFields = ["name", "description", "formTitle", "formSubtitle", "invitationCode",
       "editTokenHours", "formEnabled", "formDisabledMessage", "steps",
       "googleSheetId", "importSheetId", "googleSheetName", "googleServiceAccountEmail",
-      "googleDriveFolderId", "telegramChatId"];
+      "googleDriveFolderId", "driveRootFolderId", "telegramChatId"];
 
     for (const field of plainFields) {
       if (field in body) update[field] = body[field];
@@ -244,6 +244,11 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
     }
     if ("importSheetId" in update && update.importSheetId) {
       update.importSheetId = extractSpreadsheetId(update.importSheetId);
+    }
+    if ("driveRootFolderId" in update && update.driveRootFolderId) {
+      // Extract folder ID from full Drive URL e.g. https://drive.google.com/drive/folders/FOLDER_ID
+      const folderMatch = String(update.driveRootFolderId).match(/\/folders\/([a-zA-Z0-9_-]+)/);
+      if (folderMatch) update.driveRootFolderId = folderMatch[1];
     }
 
     if (body.googleServiceAccountKey) update.googleServiceAccountKeyEnc = encrypt(body.googleServiceAccountKey);

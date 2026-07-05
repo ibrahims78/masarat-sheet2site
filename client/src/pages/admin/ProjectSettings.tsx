@@ -246,7 +246,7 @@ export function ProjectSettings() {
 
   const saveDriveRoot = async () => {
     try {
-      await apiRequest("PATCH", `/api/projects/${id}`, { googleDriveFolderId: driveRootInput });
+      await apiRequest("PATCH", `/api/projects/${id}`, { driveRootFolderId: driveRootInput });
       qc.invalidateQueries({ queryKey: ["/api/projects", id] });
       toast({ description: isAr ? "✅ تم حفظ معرِّف مجلد Drive" : "✅ Drive folder ID saved" });
     } catch (err: any) {
