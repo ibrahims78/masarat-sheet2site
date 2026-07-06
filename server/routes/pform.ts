@@ -178,13 +178,51 @@ router.post("/:projectId/submit", submitLimiter, async (req: Request, res: Respo
       const sendTelegram = async () => {
         const token = decrypt(proj.telegramBotTokenEnc!);
         if (!token) return;
+
+        // Fetch field labels for human-readable output
+        const fieldDefs = await db
+          .select({ key: projectFields.key, label: projectFields.label })
+          .from(projectFields)
+          .where(eq(projectFields.projectId, pid));
+        const labelMap = Object.fromEntries(fieldDefs.map(f => [f.key, f.label]));
+
         const data = finalData as Record<string, any>;
-        const preview = Object.entries(data).slice(0, 4).map(([, v]) => `• ${v}`).join("\n");
-        const msg = `📋 *تسجيل جديد — ${proj.name}*\n\n${preview}\n\n🕒 ${new Date().toLocaleString("ar-SY", { timeZone: "Asia/Damascus" })}`;
+        const escape = (s: string) =>
+          String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+        const rows = Object.entries(data)
+          .filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== "")
+          .map(([k, v]) => {
+            const label = escape(labelMap[k] || k);
+            const val   = escape(String(v));
+            return `<b>${label}:</b> ${val}`;
+          })
+          .join("\n");
+
+        const now = new Date().toLocaleString("ar-SY", {
+          timeZone: "Asia/Damascus",
+          dateStyle: "full",
+          timeStyle: "medium",
+        });
+
+        const lines: string[] = [
+          `🔔 <b>تسجيل جديد</b>`,
+          `📁 المشروع: <b>${escape(proj.name)}</b>`,
+        ];
+        if (seqNum) lines.push(`🔢 رقم السجل: <b>${seqNum}</b>`);
+        if (rows) {
+          lines.push(``);
+          lines.push(rows);
+        }
+        lines.push(``);
+        lines.push(`🕒 ${now}`);
+
+        const msg = lines.join("\n");
+
         await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: proj.telegramChatId, text: msg, parse_mode: "Markdown" }),
+          body: JSON.stringify({ chat_id: proj.telegramChatId, text: msg, parse_mode: "HTML" }),
         });
       };
       sendTelegram().catch(console.error);

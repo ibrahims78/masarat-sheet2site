@@ -1175,8 +1175,10 @@ router.post("/:id/sync-drive", requireEditorOrAdmin, requireProjectOwnership, as
     // Load project and validate Drive setup
     const [proj] = await db.select().from(projects).where(eq(projects.id, pid));
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
-    if (!proj.googleServiceAccountKeyEnc) {
-      return res.status(400).json({ error: "لم يتم إعداد Google Service Account لهذا المشروع" });
+    const hasSA    = !!proj.googleServiceAccountKeyEnc;
+    const hasOAuth = !!(proj.driveOAuthRefreshTokenEnc && proj.driveOAuthClientId && proj.driveOAuthClientSecretEnc);
+    if (!hasSA && !hasOAuth) {
+      return res.status(400).json({ error: "لم يتم إعداد Google Drive — أضف Service Account أو أكمل ربط OAuth2 (Client ID + Secret + تفويض)" });
     }
     const rootFolderId = proj.driveRootFolderId || proj.googleDriveFolderId;
     if (!rootFolderId) {
@@ -1323,8 +1325,10 @@ router.post("/:id/records/:recordId/sync-drive", requireEditorOrAdmin, requirePr
 
     const [proj] = await db.select().from(projects).where(eq(projects.id, pid));
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
-    if (!proj.googleServiceAccountKeyEnc) {
-      return res.status(400).json({ error: "لم يتم إعداد Google Service Account لهذا المشروع" });
+    const hasSA2    = !!proj.googleServiceAccountKeyEnc;
+    const hasOAuth2 = !!(proj.driveOAuthRefreshTokenEnc && proj.driveOAuthClientId && proj.driveOAuthClientSecretEnc);
+    if (!hasSA2 && !hasOAuth2) {
+      return res.status(400).json({ error: "لم يتم إعداد Google Drive — أضف Service Account أو أكمل ربط OAuth2 (Client ID + Secret + تفويض)" });
     }
     const rootFolderId = proj.driveRootFolderId || proj.googleDriveFolderId;
     if (!rootFolderId) {
