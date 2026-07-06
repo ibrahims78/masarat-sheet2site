@@ -258,6 +258,15 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
     if (body.telegramBotToken) update.telegramBotTokenEnc = encrypt(body.telegramBotToken);
     if (body.driveOAuthClientSecret) update.driveOAuthClientSecretEnc = encrypt(body.driveOAuthClientSecret);
 
+    // If Client ID changed, invalidate any stored refresh token (it belongs to old credentials)
+    if ("driveOAuthClientId" in update) {
+      const [cur] = await db.select({ driveOAuthClientId: projects.driveOAuthClientId })
+        .from(projects).where(eq(projects.id, String(req.params.id)));
+      if (cur && cur.driveOAuthClientId !== update.driveOAuthClientId) {
+        update.driveOAuthRefreshTokenEnc = null;
+      }
+    }
+
     await db.update(projects).set(update).where(eq(projects.id, String(req.params.id)));
     res.json({ ok: true });
   } catch (err: any) {

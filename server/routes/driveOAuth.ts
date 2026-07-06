@@ -1,12 +1,13 @@
 /**
  * Google Drive OAuth2 flow routes.
  *
- * GET  /api/projects/:id/drive-oauth/url        — generate authorization URL
- * GET  /api/drive-oauth/callback                 — Google redirect target (exchange code → tokens)
- * DELETE /api/projects/:id/drive-oauth/disconnect — remove stored refresh token
+ * GET    /api/projects/:id/drive-oauth/url        — generate authorization URL (requires auth)
+ * GET    /api/drive-oauth/callback                 — Google redirect target; validates session nonce
+ * DELETE /api/projects/:id/drive-oauth/disconnect  — remove stored refresh token (requires auth)
  */
 import express, { Request, Response } from "express";
 import { google } from "googleapis";
+import crypto from "crypto";
 import { db } from "../db.js";
 import { projects } from "../../shared/schema.js";
 import { eq } from "drizzle-orm";
@@ -15,7 +16,7 @@ import { requireAuth } from "../middleware/auth.js";
 
 const router = express.Router();
 
-/** Redirect URI registered in Google Cloud Console. Must match exactly. */
+/** Redirect URI — must be registered verbatim in Google Cloud Console. */
 export function getRedirectUri(): string {
   if (process.env.REPLIT_DEV_DOMAIN) {
     return `https://${process.env.REPLIT_DEV_DOMAIN}/api/drive-oauth/callback`;
@@ -28,6 +29,8 @@ export function getRedirectUri(): string {
 router.get("/projects/:id/drive-oauth/url", requireAuth, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.id);
+    const sess = req.session as any;
+
     const [proj] = await db
       .select({ driveOAuthClientId: projects.driveOAuthClientId, driveOAuthClientSecretEnc: projects.driveOAuthClientSecretEnc })
       .from(projects)
@@ -37,14 +40,22 @@ router.get("/projects/:id/drive-oauth/url", requireAuth, async (req: Request, re
       return res.status(400).json({ error: "أدخل Client ID و Client Secret واحفظهما أولاً" });
     }
 
+    // CSRF: generate a one-time nonce tied to this session + project
+    const nonce = crypto.randomBytes(16).toString("hex");
+    sess.driveOAuthNonce = nonce;
+    sess.driveOAuthProjectId = pid;
+
     const clientSecret = decrypt(proj.driveOAuthClientSecretEnc!);
     const oauth2Client = new google.auth.OAuth2(proj.driveOAuthClientId, clientSecret, getRedirectUri());
 
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: "offline",
-      prompt: "consent",          // always return refresh_token
-      scope: ["https://www.googleapis.com/auth/drive"],
-      state: pid,
+      prompt: "consent",   // always returns a refresh_token
+      scope: [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/spreadsheets",
+      ],
+      state: `${nonce}:${pid}`,
     });
 
     res.json({ authUrl, redirectUri: getRedirectUri() });
@@ -55,9 +66,14 @@ router.get("/projects/:id/drive-oauth/url", requireAuth, async (req: Request, re
 
 // ── OAuth2 callback (Google redirects here) ───────────────────────────────────
 router.get("/drive-oauth/callback", async (req: Request, res: Response) => {
-  const { code, state: projectId, error } = req.query;
+  const { code, state, error } = req.query;
+  const sess = req.session as any;
 
-  // Construct frontend base URL for redirects
+  // Parse state: "nonce:projectId"
+  const stateParts = String(state || "").split(":");
+  const nonce = stateParts[0];
+  const projectId = stateParts.slice(1).join(":"); // handle UUIDs with dashes safely
+
   const frontendBase = process.env.REPLIT_DEV_DOMAIN
     ? `https://${process.env.REPLIT_DEV_DOMAIN}`
     : (process.env.APP_BASE_URL || "http://localhost:5000").replace(/\/$/, "");
@@ -68,15 +84,27 @@ router.get("/drive-oauth/callback", async (req: Request, res: Response) => {
   if (error) {
     return res.redirect(settingsUrl(`&oauth=error&msg=${encodeURIComponent(String(error))}`));
   }
-  if (!code || !projectId) {
-    return res.redirect(settingsUrl("&oauth=error&msg=missing_params"));
+
+  // CSRF: validate nonce and that this session initiated the flow
+  if (
+    !nonce ||
+    !projectId ||
+    !code ||
+    nonce !== sess.driveOAuthNonce ||
+    projectId !== sess.driveOAuthProjectId
+  ) {
+    return res.redirect(settingsUrl("&oauth=error&msg=invalid_state"));
   }
+
+  // Clear nonce so it cannot be replayed
+  delete sess.driveOAuthNonce;
+  delete sess.driveOAuthProjectId;
 
   try {
     const [proj] = await db
       .select({ driveOAuthClientId: projects.driveOAuthClientId, driveOAuthClientSecretEnc: projects.driveOAuthClientSecretEnc })
       .from(projects)
-      .where(eq(projects.id, String(projectId)));
+      .where(eq(projects.id, projectId));
 
     if (!proj?.driveOAuthClientId || !proj?.driveOAuthClientSecretEnc) {
       return res.redirect(settingsUrl("&oauth=error&msg=missing_credentials"));
@@ -87,13 +115,14 @@ router.get("/drive-oauth/callback", async (req: Request, res: Response) => {
     const { tokens } = await oauth2Client.getToken(String(code));
 
     if (!tokens.refresh_token) {
-      // This happens when the user already authorized before without prompt:consent.
+      // Happens when the app was previously authorized without prompt:consent.
+      // User must revoke access at https://myaccount.google.com/permissions then retry.
       return res.redirect(settingsUrl("&oauth=error&msg=no_refresh_token"));
     }
 
     await db.update(projects)
       .set({ driveOAuthRefreshTokenEnc: encrypt(tokens.refresh_token) })
-      .where(eq(projects.id, String(projectId)));
+      .where(eq(projects.id, projectId));
 
     return res.redirect(settingsUrl("&oauth=success"));
   } catch (err: any) {
@@ -101,7 +130,7 @@ router.get("/drive-oauth/callback", async (req: Request, res: Response) => {
   }
 });
 
-// ── Disconnect (remove stored tokens) ────────────────────────────────────────
+// ── Disconnect ────────────────────────────────────────────────────────────────
 router.delete("/projects/:id/drive-oauth/disconnect", requireAuth, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.id);

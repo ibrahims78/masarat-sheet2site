@@ -249,8 +249,11 @@ export const updateProjectSchema = z.object({
   googleServiceAccountEmail: z.string().email().optional().or(z.literal("")).or(z.null()),
   googleServiceAccountKey: z.string().nullish(),
   googleDriveFolderId: z.string().nullish(),
+  driveRootFolderId: z.string().nullish(),
   telegramChatId: z.string().nullish(),
   telegramBotToken: z.string().nullish(),
+  driveOAuthClientId: z.string().nullish(),
+  driveOAuthClientSecret: z.string().nullish(),
 });
 
 export const updateUserRoleSchema = z.object({
