@@ -283,6 +283,9 @@ export const projectCollaborators = pgTable("project_collaborators", {
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   grantedBy: uuid("granted_by").references(() => users.id),
+  /** "edit"  — content only (records/fields/uploads); cannot delete project or change settings.
+   *  "full"  — equivalent to project owner; all operations including settings & delete. */
+  permission: text("permission").notNull().default("edit"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

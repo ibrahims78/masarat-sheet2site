@@ -36,6 +36,7 @@ export function ProjectSettings() {
   const isAdmin = user?.role === "admin";
   const [tab, setTab] = useState<"form" | "fields" | "sheets" | "telegram" | "audit" | "drive" | "collaborators">("form");
   const [newCollabUserId, setNewCollabUserId] = useState<string>("");
+  const [newCollabPermission, setNewCollabPermission] = useState<"edit" | "full">("edit");
   const [testing, setTesting] = useState(false);
   const [fields, setFields] = useState<ProjectField[]>([]);
   const [showGuide, setShowGuide] = useState(false);
@@ -106,18 +107,33 @@ export function ProjectSettings() {
   );
 
   const addCollabMut = useMutation({
-    mutationFn: (userId: string) =>
+    mutationFn: ({ userId, permission }: { userId: string; permission: "edit" | "full" }) =>
       fetch(`/api/projects/${id}/collaborators`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ userId, permission }),
       }).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
     onSuccess: () => {
       setNewCollabUserId("");
+      setNewCollabPermission("edit");
       qc.invalidateQueries({ queryKey: ["/api/projects", id, "collaborators"] });
       toast({ description: isAr ? "✅ تم منح الوصول للمحرر" : "✅ Access granted" });
     },
     onError: () => toast({ variant: "destructive", description: isAr ? "فشل في منح الوصول" : "Failed to grant access" }),
+  });
+
+  const updatePermMut = useMutation({
+    mutationFn: ({ userId, permission }: { userId: string; permission: "edit" | "full" }) =>
+      fetch(`/api/projects/${id}/collaborators/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permission }),
+      }).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/projects", id, "collaborators"] });
+      toast({ description: isAr ? "✅ تم تحديث مستوى الصلاحية" : "✅ Permission updated" });
+    },
+    onError: () => toast({ variant: "destructive", description: isAr ? "فشل تحديث الصلاحية" : "Failed to update permission" }),
   });
 
   const removeCollabMut = useMutation({
@@ -1433,9 +1449,9 @@ export function ProjectSettings() {
                   ? "يمكن للمدير منح أي محرر صلاحية العمل على هذا المشروع حتى لو لم يكن هو من أنشأه. لا يتغير صاحب المشروع."
                   : "Admins can let any editor work on this project even if they didn't create it. Ownership doesn't change."}
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Select value={newCollabUserId} onValueChange={setNewCollabUserId}>
-                  <SelectTrigger className="flex-1 h-9 text-sm">
+                  <SelectTrigger className="flex-1 min-w-[160px] h-9 text-sm">
                     <SelectValue placeholder={isAr ? "اختر محرراً..." : "Select an editor..."} />
                   </SelectTrigger>
                   <SelectContent>
@@ -1450,11 +1466,20 @@ export function ProjectSettings() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Select value={newCollabPermission} onValueChange={v => setNewCollabPermission(v as "edit" | "full")}>
+                  <SelectTrigger className="w-36 h-9 text-sm shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="edit">{isAr ? "محرر محدود" : "Limited editor"}</SelectItem>
+                    <SelectItem value="full">{isAr ? "صلاحية كاملة" : "Full access"}</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Button
                   size="sm"
                   className="h-9 px-3 shrink-0"
                   disabled={!newCollabUserId || addCollabMut.isPending}
-                  onClick={() => newCollabUserId && addCollabMut.mutate(newCollabUserId)}
+                  onClick={() => newCollabUserId && addCollabMut.mutate({ userId: newCollabUserId, permission: newCollabPermission })}
                 >
                   {addCollabMut.isPending
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1491,10 +1516,37 @@ export function ProjectSettings() {
                         <p className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">{c.fullName}</p>
                         <p className="text-xs text-muted-foreground truncate">{c.email}</p>
                       </div>
+                      {/* Permission toggle */}
+                      <Select
+                        value={c.permission ?? "edit"}
+                        onValueChange={v => updatePermMut.mutate({ userId: c.userId, permission: v as "edit" | "full" })}
+                        disabled={updatePermMut.isPending}
+                      >
+                        <SelectTrigger className={`w-36 h-7 text-xs shrink-0 font-medium border ${
+                          c.permission === "full"
+                            ? "border-amber-400/60 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400"
+                            : "border-slate-200 dark:border-slate-600"
+                        }`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="edit">
+                            <span className="flex items-center gap-1.5">
+                              <span>{isAr ? "محرر محدود" : "Limited editor"}</span>
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="full">
+                            <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                              <ShieldCheck className="h-3 w-3" />
+                              <span>{isAr ? "صلاحية كاملة" : "Full access"}</span>
+                            </span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-8 px-2.5 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
+                        className="h-8 px-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
                         disabled={removeCollabMut.isPending}
                         onClick={() => removeCollabMut.mutate(c.userId)}
                       >

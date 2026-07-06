@@ -3,16 +3,20 @@ name: Collaborator access model
 description: How admin-granted editor collaboration works across routes and file serving.
 ---
 
+## Permission levels on `project_collaborators`
+- `"edit"` (default) — content operations only (records, fields, uploads, exports). Cannot delete project or change settings/credentials.
+- `"full"` — treated as project owner for ALL operations including `PATCH /:id` (settings) and `DELETE /:id`.
+
 ## Rule
 Three distinct server-side guards exist in `server/routes/projects.ts`:
 
-1. **`requireProjectOwnership`** (strict) — admin or project `createdBy` only.
+1. **`requireProjectOwnership`** (strict) — admin, project `createdBy`, or collaborator with `permission="full"`.
    Applied to: `PATCH /:id` (project settings/credentials), `DELETE /:id` (delete project).
 
-2. **`requireProjectEditAccess`** (broad) — admin, project owner, OR `project_collaborators` entry.
+2. **`requireProjectEditAccess`** (broad) — admin, project owner, OR any collaborator (edit or full).
    Applied to: all content operations (records CRUD, fields, uploads, sheets/telegram/drive ops).
 
-3. **`requireProjectReadAccess`** — admin, viewer, project owner, OR collaborator.
+3. **`requireProjectReadAccess`** — admin, viewer, project owner, OR any collaborator.
    Applied to: read-only routes (GET project, fields, records, stats, export, audit log).
 
 **Why:** Collaborators must be able to work on records/fields but must NOT be able to delete the project or change its integration credentials. Splitting into two edit guards enforces this without per-route duplication.

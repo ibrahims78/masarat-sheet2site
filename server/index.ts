@@ -350,6 +350,11 @@ async function initDB() {
       );
     `);
 
+    // Add permission column to project_collaborators if not already present
+    await pool.query(`
+      ALTER TABLE project_collaborators ADD COLUMN IF NOT EXISTS permission TEXT NOT NULL DEFAULT 'edit';
+    `);
+
     // Backward-compatible migrations for installs created before newer columns/tables existed
     await pool.query(`
       ALTER TABLE projects ADD COLUMN IF NOT EXISTS import_sheet_id TEXT;

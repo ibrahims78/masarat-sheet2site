@@ -26,8 +26,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 
 // ─── PROJECT ACCESS GUARDS ────────────────────────────────────
 
-/** STRICT — admin or project owner only. Used for irreversible/sensitive operations
- *  (delete project, update project settings & integration credentials). */
+/** STRICT — admin, project owner, or collaborator with permission="full".
+ *  Used for irreversible/sensitive operations (delete project, update settings & credentials). */
 async function requireProjectOwnership(req: Request, res: Response, next: NextFunction): Promise<void> {
   const role = (req.session as any)?.role;
   if (role === "admin") { next(); return; }
@@ -36,8 +36,14 @@ async function requireProjectOwnership(req: Request, res: Response, next: NextFu
   try {
     const [proj] = await db.select({ createdBy: projects.createdBy }).from(projects).where(eq(projects.id, pid));
     if (!proj) { res.status(404).json({ error: "المشروع غير موجود" }); return; }
-    if (proj.createdBy !== userId) { res.status(403).json({ error: "لا تملك صلاحية تعديل هذا المشروع" }); return; }
-    next();
+    if (proj.createdBy === userId) { next(); return; }
+    // Collaborator with full permission is treated as an owner
+    const [collab] = await db
+      .select({ permission: projectCollaborators.permission })
+      .from(projectCollaborators)
+      .where(and(eq(projectCollaborators.projectId, pid), eq(projectCollaborators.userId, userId)));
+    if (collab?.permission === "full") { next(); return; }
+    res.status(403).json({ error: "لا تملك صلاحية تعديل هذا المشروع" });
   } catch (err: any) {
     handleError(res, err);
   }
@@ -1454,6 +1460,7 @@ router.get("/:id/collaborators", requireAuth, requireAdmin, async (req: Request,
         fullName: users.fullName,
         email: users.email,
         grantedBy: projectCollaborators.grantedBy,
+        permission: projectCollaborators.permission,
         createdAt: projectCollaborators.createdAt,
       })
       .from(projectCollaborators)
@@ -1469,12 +1476,12 @@ router.get("/:id/collaborators", requireAuth, requireAdmin, async (req: Request,
 router.post("/:id/collaborators", requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.id);
-    const { userId } = req.body;
+    const { userId, permission } = req.body;
     if (!userId || typeof userId !== "string") return res.status(400).json({ error: "userId مطلوب" });
+    const perm = permission === "full" ? "full" : "edit";
 
     // Must be an editor
-    const [target] = await db.select({ role: users.role, fullName: users.fullName, email: users.email })
-      .from(users).where(eq(users.id, userId));
+    const [target] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId));
     if (!target) return res.status(404).json({ error: "المستخدم غير موجود" });
     if (target.role !== "editor") return res.status(400).json({ error: "يمكن منح الوصول للمحررين فقط" });
 
@@ -1483,12 +1490,28 @@ router.post("/:id/collaborators", requireAuth, requireAdmin, async (req: Request
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
     if (proj.createdBy === userId) return res.status(400).json({ error: "هذا المستخدم هو صاحب المشروع بالفعل" });
 
-    await db.insert(projectCollaborators).values({
-      projectId: pid,
-      userId,
-      grantedBy: (req.session as any).userId,
-    }).onConflictDoNothing();
+    await db.insert(projectCollaborators)
+      .values({ projectId: pid, userId, grantedBy: (req.session as any).userId, permission: perm })
+      .onConflictDoNothing();
 
+    res.json({ ok: true });
+  } catch (err: any) {
+    handleError(res, err);
+  }
+});
+
+// PATCH /:id/collaborators/:userId — change permission level (edit ↔ full)
+router.patch("/:id/collaborators/:userId", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const pid = String(req.params.id);
+    const uid = String(req.params.userId);
+    const { permission } = req.body;
+    if (permission !== "edit" && permission !== "full") {
+      return res.status(400).json({ error: "قيمة permission غير صالحة (edit أو full)" });
+    }
+    await db.update(projectCollaborators)
+      .set({ permission })
+      .where(and(eq(projectCollaborators.projectId, pid), eq(projectCollaborators.userId, uid)));
     res.json({ ok: true });
   } catch (err: any) {
     handleError(res, err);
