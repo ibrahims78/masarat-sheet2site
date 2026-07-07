@@ -6,3 +6,9 @@ id = "IUz7GUguXh2_EHgWqYMSx"
 uri = "file://future-improvements.md"
 type = "text"
 title = "التحسينات المستقبلية المقترحة"
+
+[[outputs]]
+id = "3x3GnTWi_mCHmABdbnkWW"
+uri = "file://attached_assets/participant-tracking-feature_1783457602713.md"
+type = "text"
+title = "وثيقة تتبع المشاركين — النسخة المحدّثة"
