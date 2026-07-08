@@ -46,7 +46,13 @@ export async function apiRequest<T = any>(
       const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error(err.error || "حدث خطأ غير متوقع");
     }
-    return res.json();
+    const text = await res.text();
+    if (!text) return {} as T;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error("استجابة غير صالحة من الخادم");
+    }
   } catch (err: any) {
     if (err.name === "AbortError") {
       throw new Error("انتهت مهلة الطلب — تحقق من اتصالك بالإنترنت وأعد المحاولة");

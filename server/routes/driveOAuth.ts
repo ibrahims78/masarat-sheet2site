@@ -23,16 +23,21 @@ async function requireDriveProjectAccess(req: Request, res: Response, next: Func
   const role = sess?.role;
   if (role === "admin") return next();
   const userId = sess?.userId;
-  const [proj] = await db.select({ createdBy: projects.createdBy }).from(projects).where(eq(projects.id, pid));
-  if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
-  if (proj.createdBy === userId) return next();
-  // Collaborator with full permission is treated as an owner
-  const [collab] = await db
-    .select({ permission: projectCollaborators.permission })
-    .from(projectCollaborators)
-    .where(and(eq(projectCollaborators.projectId, pid), eq(projectCollaborators.userId, userId)));
-  if (collab?.permission === "full") return next();
-  return res.status(403).json({ error: "لا تملك صلاحية تعديل هذا المشروع" });
+  try {
+    const [proj] = await db.select({ createdBy: projects.createdBy }).from(projects).where(eq(projects.id, pid));
+    if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
+    if (proj.createdBy === userId) return next();
+    // Collaborator with full permission is treated as an owner
+    const [collab] = await db
+      .select({ permission: projectCollaborators.permission })
+      .from(projectCollaborators)
+      .where(and(eq(projectCollaborators.projectId, pid), eq(projectCollaborators.userId, userId)));
+    if (collab?.permission === "full") return next();
+    return res.status(403).json({ error: "لا تملك صلاحية تعديل هذا المشروع" });
+  } catch (err: any) {
+    console.error("[ERROR] requireDriveProjectAccess:", err);
+    return res.status(500).json({ error: "خطأ في التحقق من الصلاحيات" });
+  }
 }
 
 /** Redirect URI — must be registered verbatim in Google Cloud Console. */
