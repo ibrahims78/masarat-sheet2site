@@ -1,4 +1,5 @@
 import { useParams, useLocation } from "wouter";
+import { fetchJson } from "@/lib/queryClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -48,17 +49,17 @@ export function ProjectRecordDetails() {
 
   const { data: project } = useQuery<Project>({
     queryKey: ["/api/projects", id],
-    queryFn: () => fetch(`/api/projects/${id}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}`),
   });
 
   const { data, isLoading, refetch } = useQuery<DetailsResponse>({
     queryKey: ["/api/projects", id, "records", recordId],
-    queryFn: () => fetch(`/api/projects/${id}/records/${recordId}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}/records/${recordId}`),
   });
 
   const { data: fields = [] } = useQuery<ProjectField[]>({
     queryKey: ["/api/projects", id, "fields"],
-    queryFn: () => fetch(`/api/projects/${id}/fields`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}/fields`),
   });
 
   const syncMut = useMutation({

@@ -1,4 +1,5 @@
 import { useParams, useLocation } from "wouter";
+import { fetchJson } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { Card } from "@/components/ui/card";
@@ -40,23 +41,23 @@ export function ProjectDashboard() {
 
   const { data: project } = useQuery<Project & { formEnabled?: boolean }>({
     queryKey: ["/api/projects", id],
-    queryFn: () => fetch(`/api/projects/${id}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}`),
   });
 
   const { data: stats, isLoading } = useQuery<Stats>({
     queryKey: ["/api/projects", id, "stats"],
-    queryFn: () => fetch(`/api/projects/${id}/stats`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}/stats`),
   });
 
   const { data: distData } = useQuery<DistData>({
     queryKey: ["/api/projects", id, "stats", "distributions"],
-    queryFn: () => fetch(`/api/projects/${id}/stats/distributions`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}/stats/distributions`),
     staleTime: 60_000,
   });
 
   const { data: pStats } = useQuery<{ total: number; unopened: number; submitted: number; withTelegram: number }>({
     queryKey: ["/api/projects", id, "participants", "stats"],
-    queryFn: () => fetch(`/api/projects/${id}/participants/stats`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}/participants/stats`),
     enabled: !!(project as any)?.participantsEnabled,
     staleTime: 30_000,
   });

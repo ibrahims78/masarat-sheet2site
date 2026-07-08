@@ -1,4 +1,5 @@
 import { useParams } from "wouter";
+import { fetchJson } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -89,12 +90,12 @@ export function ProjectExport() {
 
   const { data: fields = [] } = useQuery<ProjectField[]>({
     queryKey: ["/api/projects", id, "fields"],
-    queryFn: () => fetch(`/api/projects/${id}/fields`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}/fields`),
   });
 
   const { data: project } = useQuery<{ id: string; name: string; steps?: string[]; [k: string]: any }>({
     queryKey: ["/api/projects", id],
-    queryFn: () => fetch(`/api/projects/${id}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}`),
   });
 
   const visibleFields = useMemo(() => fields.filter(f => f.isVisible !== false), [fields]);
@@ -150,7 +151,7 @@ export function ProjectExport() {
     queryKey: ["/api/projects", id, "export-preview", filterParams],
     queryFn: () =>
       fetch(`/api/projects/${id}/records?page=1&limit=1&${filterParams}`, { credentials: "include" })
-        .then(r => r.json()).then(d => ({ total: d.total ?? 0 })),
+        .then(d => ({ total: d.total ?? 0 })),
     staleTime: 30_000,
   });
 

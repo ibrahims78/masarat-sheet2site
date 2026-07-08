@@ -1,4 +1,5 @@
 import { useParams } from "wouter";
+import { fetchJson } from "@/lib/queryClient";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -60,7 +61,7 @@ export function ProjectRegister() {
 
   const { data: formInfo, isLoading } = useQuery<FormInfo>({
     queryKey: ["/api/pform", projectId, "info"],
-    queryFn: () => fetch(`/api/pform/${projectId}/info`).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/pform/${projectId}/info`),
   });
 
   const { register, handleSubmit, trigger, getValues, setValue, watch, formState: { errors } } = useForm<Record<string, any>>({ mode: "onBlur" });
@@ -110,7 +111,7 @@ export function ProjectRegister() {
     };
 
     fetch(`/api/pform/${projectId}/draft/${draftId}`)
-      .then(r => r.json())
+      
       .then(res => {
         if (res?.draft?.data && Object.keys(res.draft.data).length > 0) {
           applyDraft(res.draft.data, res.draft.step);
@@ -229,7 +230,7 @@ export function ProjectRegister() {
     mutationFn: (formData: Record<string, any>) => fetch(`/api/pform/${projectId}/submit`, {
       method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
       body: JSON.stringify(formData),
-    }).then(r => r.json()),
+    }),
     onSuccess: (data) => {
       if (data.ok) { setSubmitted(true); setEditToken(data.editToken); setTokenHours(data.tokenHours); clearDraft(); }
     },

@@ -6,7 +6,7 @@ import { LanguageProvider, useLang } from "@/context/LanguageContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ProjectProvider } from "@/context/ProjectContext";
 import { AppSettingsProvider } from "@/context/AppSettingsContext";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, fetchJson } from "@/lib/queryClient";
 import { Loader2 } from "lucide-react";
 
 import { Setup } from "@/pages/Setup";
@@ -57,8 +57,7 @@ function SetupCheck({ children }: { children: React.ReactNode }) {
   const [location, nav] = useLocation();
   useEffect(() => {
     if (location === "/setup") return;
-    fetch("/api/auth/setup-required", { credentials: "include" })
-      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+    fetchJson("/api/auth/setup-required")
       .then(d => { if (d.required) nav("/setup"); })
       .catch(err => console.error("[SetupCheck] failed to check setup status:", err));
   }, []);

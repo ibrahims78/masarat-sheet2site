@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { fetchJson } from "@/lib/queryClient";
 import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
@@ -168,7 +169,7 @@ export function ProjectRecords() {
 
   const { data: project } = useQuery<{ id: string; name: string; formEnabled?: boolean; [k: string]: any }>({
     queryKey: ["/api/projects", id],
-    queryFn: () => fetch(`/api/projects/${id}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}`),
   });
 
   useEffect(() => {
@@ -178,7 +179,7 @@ export function ProjectRecords() {
 
   const { data: fields = [] } = useQuery<ProjectField[]>({
     queryKey: ["/api/projects", id, "fields"],
-    queryFn: () => fetch(`/api/projects/${id}/fields`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}/fields`),
   });
 
   const visibleFields = useMemo(() => fields.filter(f => f.isVisible !== false), [fields]);
@@ -202,7 +203,7 @@ export function ProjectRecords() {
 
   const { data, isLoading, refetch } = useQuery<RecordsResponse>({
     queryKey: ["/api/projects", id, "records", params.toString()],
-    queryFn: () => fetch(`/api/projects/${id}/records?${params}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}/records?${params}`),
   });
 
   const deleteMut = useMutation({

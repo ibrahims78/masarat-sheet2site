@@ -6,7 +6,13 @@ export async function fetchJson<T = any>(url: string): Promise<T> {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || `HTTP ${res.status}`);
   }
-  return res.json();
+  const text = await res.text();
+  if (!text) return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error("استجابة غير صالحة من الخادم");
+  }
 }
 
 async function defaultQueryFn({ queryKey }: { queryKey: readonly unknown[] }) {

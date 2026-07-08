@@ -108,11 +108,7 @@ export function ProjectSettings() {
 
   const addCollabMut = useMutation({
     mutationFn: ({ userId, permission }: { userId: string; permission: "edit" | "full" }) =>
-      fetch(`/api/projects/${id}/collaborators`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, permission }),
-      }).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
+      apiRequest("POST", `/api/projects/${id}/collaborators`, { userId, permission }),
     onSuccess: () => {
       setNewCollabUserId("");
       setNewCollabPermission("edit");
@@ -124,11 +120,7 @@ export function ProjectSettings() {
 
   const updatePermMut = useMutation({
     mutationFn: ({ userId, permission }: { userId: string; permission: "edit" | "full" }) =>
-      fetch(`/api/projects/${id}/collaborators/${userId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ permission }),
-      }).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
+      apiRequest("PATCH", `/api/projects/${id}/collaborators/${userId}`, { permission }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/projects", id, "collaborators"] });
       toast({ description: isAr ? "✅ تم تحديث مستوى الصلاحية" : "✅ Permission updated" });
@@ -138,8 +130,7 @@ export function ProjectSettings() {
 
   const removeCollabMut = useMutation({
     mutationFn: (userId: string) =>
-      fetch(`/api/projects/${id}/collaborators/${userId}`, { method: "DELETE" })
-        .then(r => { if (!r.ok) throw new Error(); return r.json(); }),
+      apiRequest("DELETE", `/api/projects/${id}/collaborators/${userId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/projects", id, "collaborators"] });
       toast({ description: isAr ? "تم إلغاء الوصول" : "Access revoked" });

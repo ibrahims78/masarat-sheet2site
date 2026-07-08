@@ -1,4 +1,5 @@
 import { useParams, useLocation } from "wouter";
+import { fetchJson } from "@/lib/queryClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { Layout } from "@/components/Layout";
@@ -165,12 +166,12 @@ export function ProjectAddRecord() {
 
   const { data: project } = useQuery<Project>({
     queryKey: ["/api/projects", id],
-    queryFn: () => fetch(`/api/projects/${id}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}`),
   });
 
   const { data: fields = [] } = useQuery<ProjectField[]>({
     queryKey: ["/api/projects", id, "fields"],
-    queryFn: () => fetch(`/api/projects/${id}/fields`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/projects/${id}/fields`),
   });
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<Record<string, any>>({ mode: "onBlur" });

@@ -1,4 +1,5 @@
 import { useParams } from "wouter";
+import { fetchJson } from "@/lib/queryClient";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useEffect, useState, useMemo } from "react";
@@ -22,13 +23,13 @@ export function ProjectEditForm() {
 
   const { data: record, isLoading, error } = useQuery<ProjectRecord & { error?: string }>({
     queryKey: ["/api/pform", projectId, "edit", token],
-    queryFn: () => fetch(`/api/pform/${projectId}/edit/${token}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/pform/${projectId}/edit/${token}`),
     retry: false,
   });
 
   const { data: formInfo } = useQuery<{ project: any; fields: ProjectField[] }>({
     queryKey: ["/api/pform", projectId, "info"],
-    queryFn: () => fetch(`/api/pform/${projectId}/info`).then(r => r.json()),
+    queryFn: () => fetchJson(`/api/pform/${projectId}/info`),
   });
 
   const fields = formInfo?.fields || [];
@@ -46,7 +47,7 @@ export function ProjectEditForm() {
     mutationFn: (formData: Record<string, any>) => fetch(`/api/pform/${projectId}/edit/${token}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include",
       body: JSON.stringify(formData),
-    }).then(r => r.json()),
+    }),
     onSuccess: (data) => { if (data.ok) setSaved(true); },
   });
 

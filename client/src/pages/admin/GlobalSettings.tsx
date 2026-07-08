@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { fetchJson } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -46,12 +47,12 @@ export function GlobalSettings() {
 
   const { data: settings } = useQuery<any>({
     queryKey: ["/api/projects/global-settings"],
-    queryFn: () => fetch("/api/projects/global-settings", { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson("/api/projects/global-settings"),
   });
 
   const { data: userList = [] } = useQuery<ExtUser[]>({
     queryKey: ["/api/projects/users-list"],
-    queryFn: () => fetch("/api/projects/users-list", { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetchJson("/api/projects/users-list"),
   });
 
   const { register: regGeneral, handleSubmit: hsGeneral, reset: resetGeneral } = useForm<any>();
