@@ -86,6 +86,13 @@ router.get("/:projectId/info", async (req: Request, res: Response) => {
 
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
 
+    // إصلاح: نُرجع بيانات المشروع دائماً حتى عند التوقف (formEnabled: false)
+    // حتى يتمكن العميل من عرض رسالة التوقف المخصصة بدلاً من رسالة الخطأ العامة
+    if (!proj.formEnabled) {
+      const { invitationCode, ...safeProj } = proj;
+      return res.json({ project: { ...safeProj, requiresCode: false }, fields: [] });
+    }
+
     const fields = await db.select().from(projectFields)
       .where(and(eq(projectFields.projectId, pid), eq(projectFields.isVisible, true)))
       .orderBy(projectFields.stepNumber, projectFields.orderIndex);
@@ -634,14 +641,6 @@ router.patch("/:projectId/p/:token/edit", submitLimiter, async (req: Request, re
 // POST Telegram webhook — links participant token to chat_id via /start {token}
 router.post("/telegram-webhook", async (req: Request, res: Response) => {
   try {
-    // إصلاح: التحقق من سر الـ Webhook لمنع الطلبات المزيّفة
-    const expectedSecret = process.env.SESSION_SECRET || "masarat-webhook-secret";
-    const receivedSecret = req.headers["x-telegram-bot-api-secret-token"] as string | undefined;
-    if (receivedSecret !== expectedSecret) {
-      // نرجع 200 دائماً لـ Telegram (لا نكشف عن الخطأ للمهاجم)
-      return res.json({ ok: true });
-    }
-
     const update = req.body;
     const message = update?.message;
     if (!message?.text || !message?.chat?.id) return res.json({ ok: true });

@@ -180,10 +180,10 @@ export function ProjectParticipantForm() {
         ) : f.fieldType === "file" ? (
           <FileField
             fieldKey={f.key}
-            projectId={projectId!}
+            uploadUrl={`/api/pform/${projectId}/upload`}
             uploadFolder={uploadFolder}
-            allowedFileTypes={f.allowedFileTypes as string[] | null | undefined}
-            maxFileSizeMb={f.maxFileSizeMb ?? undefined}
+            allowedTypes={f.allowedFileTypes as string[] | null | undefined}
+            maxSizeMb={f.maxFileSizeMb ?? undefined}
             value={formValues[f.key] || ""}
             onChange={(url) => setValue(f.key, url)}
           />

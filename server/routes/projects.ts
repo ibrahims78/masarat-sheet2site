@@ -329,8 +329,9 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
     if (body.telegramBotToken) {
       const baseUrl = getAppBaseUrl(req);
       const webhookUrl = `${baseUrl}/api/pform/telegram-webhook`;
-      const webhookSecret = process.env.SESSION_SECRET || "masarat-webhook-secret";
-      setWebhook(body.telegramBotToken, webhookUrl, webhookSecret).catch((err) => {
+      // لا نستخدم سراً خاصاً لأن SESSION_SECRET قد يحتوي أحرفاً غير مقبولة في Telegram
+      // الأمان يعتمد على التحقق من رمز المشارك (UUID) في جسم الرسالة
+      setWebhook(body.telegramBotToken, webhookUrl, "").catch((err) => {
         console.error("[setWebhook] فشل تسجيل Webhook:", err);
       });
     }
@@ -1072,8 +1073,7 @@ router.post("/:id/telegram-updates", requireEditorOrAdmin, requireProjectEditAcc
     // نمرر webhookUrl حتى تُعيد getTelegramUpdates تسجيل الـ Webhook بعد getUpdates
     const baseUrl = getAppBaseUrl(req);
     const webhookUrl = `${baseUrl}/api/pform/telegram-webhook`;
-    const webhookSecret = process.env.SESSION_SECRET || "masarat-webhook-secret";
-    const result = await getTelegramUpdates(botToken, webhookUrl, webhookSecret);
+    const result = await getTelegramUpdates(botToken, webhookUrl, "");
     res.json(result);
   } catch (err: any) {
     handleError(res, err, "GET /telegram-updates");
