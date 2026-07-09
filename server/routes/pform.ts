@@ -23,9 +23,15 @@ router.post("/:projectId/upload", uploadLimiter, async (req: Request, res: Respo
     formEnabled: projects.formEnabled,
     formDisabledMessage: projects.formDisabledMessage,
     invitationCode: projects.invitationCode,
+    participantsEnabled: projects.participantsEnabled,
+    participantAllowOpen: projects.participantAllowOpen,
   }).from(projects).where(eq(projects.id, pid));
   if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
   if (!proj.formEnabled) return res.status(403).json({ error: proj.formDisabledMessage || "النموذج متوقف مؤقتاً" });
+  // حظر رفع الملفات عند تفعيل وضع الدعوات الحصرية (نفس سياسة Submit)
+  if (proj.participantsEnabled && !proj.participantAllowOpen) {
+    return res.status(403).json({ error: "التسجيل بالدعوة فقط — يرجى استخدام رابطك الشخصي" });
+  }
   // Gate upload behind invitation-code verification (same check as submit)
   const needsCode = !!(proj.invitationCode?.trim());
   if (needsCode && !(req.session as any)[`code_${pid}`]) {
@@ -82,6 +88,8 @@ router.get("/:projectId/info", async (req: Request, res: Response) => {
       formDisabledMessage: projects.formDisabledMessage,
       steps: projects.steps,
       invitationCode: projects.invitationCode,
+      participantsEnabled: projects.participantsEnabled,
+      participantAllowOpen: projects.participantAllowOpen,
     }).from(projects).where(eq(projects.id, pid));
 
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
@@ -89,7 +97,7 @@ router.get("/:projectId/info", async (req: Request, res: Response) => {
     // إصلاح: نُرجع بيانات المشروع دائماً حتى عند التوقف (formEnabled: false)
     // حتى يتمكن العميل من عرض رسالة التوقف المخصصة بدلاً من رسالة الخطأ العامة
     if (!proj.formEnabled) {
-      const { invitationCode, ...safeProj } = proj;
+      const { invitationCode, participantsEnabled, participantAllowOpen, ...safeProj } = proj;
       return res.json({ project: { ...safeProj, requiresCode: false }, fields: [] });
     }
 
@@ -97,8 +105,12 @@ router.get("/:projectId/info", async (req: Request, res: Response) => {
       .where(and(eq(projectFields.projectId, pid), eq(projectFields.isVisible, true)))
       .orderBy(projectFields.stepNumber, projectFields.orderIndex);
 
-    const { invitationCode, ...safeProj } = proj;
-    res.json({ project: { ...safeProj, requiresCode: !!(invitationCode?.trim()) }, fields });
+    // إذا كانت ميزة المشاركين مفعّلة وكان التسجيل المفتوح مغلقاً،
+    // نُرجع inviteOnly: true كإشارة للعميل — نُرجع الحقول كذلك حتى لا يتأثر نموذج التعديل
+    const inviteOnly = !!(proj.participantsEnabled && !proj.participantAllowOpen);
+
+    const { invitationCode, participantsEnabled, participantAllowOpen, ...safeProj } = proj;
+    res.json({ project: { ...safeProj, requiresCode: !!(invitationCode?.trim()), inviteOnly }, fields });
   } catch (err: any) {
     handleError(res, err);
   }
@@ -140,10 +152,16 @@ router.post("/:projectId/submit", submitLimiter, async (req: Request, res: Respo
       invitationCode: projects.invitationCode,
       formEnabled: projects.formEnabled,
       formDisabledMessage: projects.formDisabledMessage,
+      participantsEnabled: projects.participantsEnabled,
+      participantAllowOpen: projects.participantAllowOpen,
     }).from(projects).where(eq(projects.id, pid));
     if (!projCheck) return res.status(404).json({ error: "المشروع غير موجود" });
     if (!projCheck.formEnabled) {
       return res.status(403).json({ error: projCheck.formDisabledMessage || "النموذج متوقف مؤقتاً" });
+    }
+    // حظر التسجيل المفتوح عند تفعيل وضع الدعوات الحصرية
+    if (projCheck.participantsEnabled && !projCheck.participantAllowOpen) {
+      return res.status(403).json({ error: "التسجيل بالدعوة فقط — يرجى استخدام رابطك الشخصي" });
     }
     const needsCode = !!(projCheck?.invitationCode?.trim());
     if (needsCode && !(req.session as any)[`code_${pid}`]) {

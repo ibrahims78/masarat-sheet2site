@@ -35,6 +35,7 @@ interface FormInfo {
   project: {
     id: string; name: string; formTitle: string; formSubtitle?: string;
     formEnabled: boolean; formDisabledMessage?: string; steps: string[]; requiresCode: boolean;
+    inviteOnly?: boolean;
   };
   fields: ProjectField[];
 }
@@ -581,6 +582,17 @@ export function ProjectRegister() {
       <Card className="p-8 max-w-sm w-full text-center space-y-3">
         <Shield className="h-12 w-12 text-slate-300 mx-auto" />
         <h2 className="text-lg font-bold">{project?.formDisabledMessage || (isAr ? "النموذج متوقف مؤقتاً" : "Form is temporarily disabled")}</h2>
+      </Card>
+    </div>
+  );
+
+  /* ─── Invite-only (participants mode, no open registration) ─── */
+  if (project.inviteOnly) return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 p-4">
+      <Card className="p-8 max-w-sm w-full text-center space-y-3">
+        <ClipboardList className="h-12 w-12 text-primary/40 mx-auto" />
+        <h2 className="text-lg font-bold">{isAr ? "التسجيل بالدعوة فقط" : "Registration by Invitation Only"}</h2>
+        <p className="text-sm text-muted-foreground">{isAr ? "هذا النموذج مخصص للمدعوين فقط. يرجى استخدام رابطك الشخصي للتسجيل." : "This form is for invited participants only. Please use your personal registration link."}</p>
       </Card>
     </div>
   );
