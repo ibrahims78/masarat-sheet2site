@@ -7,6 +7,7 @@ import { encrypt, decrypt } from "../services/crypto.js";
 import { insertRecordAtomic } from "../services/recordInsert.js";
 import { appendRecordToSheet, updateRecordRow, deleteRecordRow, testProjectSheetsConnection, fixProjectSheetHeaders, checkProjectSheetColumns, importFromProjectSheet, exportToProjectSheet, extractSpreadsheetId } from "../services/projectSheets.js";
 import { testTelegramBot, getTelegramUpdates, setWebhook } from "../services/telegram.js";
+import { getTelegramWebhookSecret } from "../routes/pform.js";
 
 /** استخراج عنوان التطبيق الأساسي للـ Webhook */
 function getAppBaseUrl(req: Request): string {
@@ -329,9 +330,7 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
     if (body.telegramBotToken) {
       const baseUrl = getAppBaseUrl(req);
       const webhookUrl = `${baseUrl}/api/pform/telegram-webhook`;
-      // لا نستخدم سراً خاصاً لأن SESSION_SECRET قد يحتوي أحرفاً غير مقبولة في Telegram
-      // الأمان يعتمد على التحقق من رمز المشارك (UUID) في جسم الرسالة
-      setWebhook(body.telegramBotToken, webhookUrl, "").catch((err) => {
+      setWebhook(body.telegramBotToken, webhookUrl, getTelegramWebhookSecret()).catch((err) => {
         console.error("[setWebhook] فشل تسجيل Webhook:", err);
       });
     }
@@ -1073,7 +1072,7 @@ router.post("/:id/telegram-updates", requireEditorOrAdmin, requireProjectEditAcc
     // نمرر webhookUrl حتى تُعيد getTelegramUpdates تسجيل الـ Webhook بعد getUpdates
     const baseUrl = getAppBaseUrl(req);
     const webhookUrl = `${baseUrl}/api/pform/telegram-webhook`;
-    const result = await getTelegramUpdates(botToken, webhookUrl, "");
+    const result = await getTelegramUpdates(botToken, webhookUrl, getTelegramWebhookSecret());
     res.json(result);
   } catch (err: any) {
     handleError(res, err, "GET /telegram-updates");

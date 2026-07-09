@@ -104,7 +104,6 @@ router.get("/stats", requireAuth, requireParticipantReadAccess, async (req: Requ
       telegramChatId: projectParticipants.telegramChatId,
     }).from(projectParticipants).where(eq(projectParticipants.projectId, pid));
 
-    const now = new Date();
     let unopened = 0, opened = 0, submittedEditable = 0, submittedLocked = 0, withTelegram = 0;
     for (const p of list) {
       const st = getStatus({ firstOpenedAt: p.firstOpenedAt, submittedAt: p.submittedAt, participantEditHours: editHours });
@@ -229,8 +228,9 @@ router.post("/import", requireAuth, requireParticipantEditAccess, upload.single(
 
       if (existing.length > 0) {
         if (overwrite) {
+          // إصلاح: تحديث المعرّف (identifier) أيضاً عند الكتابة فوق المكرر
           await db.update(projectParticipants)
-            .set({ name, prefillData })
+            .set({ name, identifier: identifier || null, prefillData })
             .where(eq(projectParticipants.id, existing[0].id));
           updated++;
         } else {

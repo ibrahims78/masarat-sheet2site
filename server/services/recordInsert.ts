@@ -2,8 +2,13 @@
  * Atomically inserts a project record with a deduplicated sequential number.
  * Uses a per-project advisory lock inside a transaction to prevent duplicate
  * sequential_number values under concurrent submissions.
+ *
+ * The optional `postInsert` callback runs inside the same transaction before
+ * COMMIT, so any failure rolls back the record insert as well — preventing
+ * orphaned records when the caller needs to update related rows atomically.
  */
 import { pool } from "../db.js";
+import type { PoolClient } from "pg";
 
 export interface InsertedRecord {
   id: string;
@@ -18,7 +23,8 @@ export async function insertRecordAtomic(
   projectId: string,
   data: object,
   tokenExpiresAt: Date,
-  autoIncrementKeys: string[] = []
+  autoIncrementKeys: string[] = [],
+  postInsert?: (client: PoolClient, recordId: string) => Promise<void>
 ): Promise<InsertedRecord> {
   const client = await pool.connect();
   try {
@@ -48,6 +54,12 @@ export async function insertRecordAtomic(
        RETURNING id, sequential_number, edit_token, sheets_row_index, submitted_at`,
       [projectId, JSON.stringify(enrichedData), seqNum, tokenExpiresAt]
     );
+
+    // Run caller-supplied post-insert work inside the same transaction
+    // so that any failure rolls back the record insert atomically.
+    if (postInsert) {
+      await postInsert(client, rows[0].id);
+    }
 
     await client.query("COMMIT");
     return { ...rows[0], enriched_data: enrichedData };

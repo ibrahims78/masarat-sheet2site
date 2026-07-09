@@ -149,7 +149,7 @@ export function ProjectParticipantForm() {
 
   // ── Render helpers ──
   const renderField = (f: ProjectField) => {
-    const visible = checkFieldVisible(f, formValues, fields);
+    const visible = checkFieldVisible(f as any, formValues);
     if (!visible) return null;
     if (f.fieldType === "heading") return (
       <div key={f.id} className="col-span-2 pt-2">
@@ -182,7 +182,7 @@ export function ProjectParticipantForm() {
         ) : f.fieldType === "file" ? (
           <FileField
             fieldKey={f.key}
-            uploadUrl={`/api/pform/${projectId}/upload`}
+            uploadUrl={`/api/pform/${projectId}/upload${token ? `?participantToken=${encodeURIComponent(token)}` : ""}`}
             uploadFolder={uploadFolder}
             allowedTypes={f.allowedFileTypes as string[] | null | undefined}
             maxSizeMb={f.maxFileSizeMb ?? undefined}
@@ -339,7 +339,7 @@ export function ProjectParticipantForm() {
             <Card className="p-6 shadow-sm">
               <div className="grid grid-cols-2 gap-4">
                 {getAllStepFields(step).map(f => {
-                  if (!checkFieldVisible(f, formValues, fields)) return null;
+                  if (!checkFieldVisible(f as any, formValues)) return null;
                   return renderField(f);
                 })}
               </div>

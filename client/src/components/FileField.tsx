@@ -19,11 +19,16 @@ interface FileFieldProps {
    * instead of the flat uploads root.
    */
   uploadFolder?: string;
+  /**
+   * Extra form fields appended to the upload request body.
+   * Used e.g. to pass a participant token when the project is invite-only.
+   */
+  extraFields?: Record<string, string>;
 }
 
 export function FileField({
   value, onChange, uploadUrl, fieldKey, authSuffix,
-  allowedTypes, maxSizeMb, uploadFolder,
+  allowedTypes, maxSizeMb, uploadFolder, extraFields,
 }: FileFieldProps) {
   const { lang } = useLang();
   const isAr = lang === "ar";
@@ -68,6 +73,9 @@ export function FileField({
       formData.append("file", file);
       formData.append("fieldKey", fieldKey); // for server-side per-field validation
       if (uploadFolder) formData.append("uploadFolder", uploadFolder);
+      if (extraFields) {
+        for (const [k, v] of Object.entries(extraFields)) formData.append(k, v);
+      }
       const res = await fetch(uploadUrl, { method: "POST", credentials: "include", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || (isAr ? "فشل رفع الملف" : "File upload failed"));

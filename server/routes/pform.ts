@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { createHmac } from "crypto";
 import { db } from "../db.js";
 import { projects, projectFields, projectRecords, projectAuditLog, projectFormDrafts, projectParticipants, verifyCodeSchema, submitFormSchema } from "../../shared/schema.js";
 import { eq, and, sql } from "drizzle-orm";
@@ -10,6 +11,18 @@ import { fileUpload, publicFileUrl, validateMimeType, validateFieldRestrictions,
 import { handleError } from "../utils/errorHandler.js";
 
 const router = Router();
+
+/**
+ * Derives a stable Telegram webhook secret from SESSION_SECRET.
+ * The result is a 64-char hex string — safe for Telegram's secret_token field.
+ * Stable across restarts as long as SESSION_SECRET doesn't change.
+ */
+export function getTelegramWebhookSecret(): string {
+  return createHmac("sha256", process.env.SESSION_SECRET!)
+    .update("telegram-webhook-v1")
+    .digest("hex")
+    .substring(0, 64);
+}
 
 const submitLimiter = rateLimit({ windowMs: 60 * 1000, max: 10 });
 const verifyLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { error: "محاولات كثيرة — حاول بعد 15 دقيقة" } });
@@ -28,9 +41,19 @@ router.post("/:projectId/upload", uploadLimiter, async (req: Request, res: Respo
   }).from(projects).where(eq(projects.id, pid));
   if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
   if (!proj.formEnabled) return res.status(403).json({ error: proj.formDisabledMessage || "النموذج متوقف مؤقتاً" });
-  // حظر رفع الملفات عند تفعيل وضع الدعوات الحصرية (نفس سياسة Submit)
+  // إصلاح: عند تفعيل وضع الدعوات الحصرية، نسمح بالرفع للمشاركين الذين يحملون توكن صحيح
+  // نستخدم query string (متاح قبل تشغيل multer) وليس req.body الذي يُعبَّأ بعد التحليل
   if (proj.participantsEnabled && !proj.participantAllowOpen) {
-    return res.status(403).json({ error: "التسجيل بالدعوة فقط — يرجى استخدام رابطك الشخصي" });
+    const pToken = String(req.query.participantToken || "").trim();
+    if (!pToken) {
+      return res.status(403).json({ error: "التسجيل بالدعوة فقط — يرجى استخدام رابطك الشخصي" });
+    }
+    const [pRow] = await db.select({ id: projectParticipants.id })
+      .from(projectParticipants)
+      .where(and(eq(projectParticipants.token, pToken as any), eq(projectParticipants.projectId, pid)));
+    if (!pRow) {
+      return res.status(403).json({ error: "رابط المشارك غير صالح" });
+    }
   }
   // Gate upload behind invitation-code verification (same check as submit)
   const needsCode = !!(proj.invitationCode?.trim());
@@ -552,15 +575,22 @@ router.post("/:projectId/p/:token/submit", submitLimiter, async (req: Request, r
       .where(and(eq(projectFields.projectId, pid), sql`${projectFields.fieldType} = 'autoincrement'`));
     const autoIncrementKeys = autoFields.map(f => f.key);
 
-    const record = await insertRecordAtomic(pid, req.body, tokenExpiresAt, autoIncrementKeys);
+    // إصلاح: ربط المشارك بالسجل داخل نفس الـ transaction لمنع سجلات يتيمة
+    // إذا فشل تحديث المشارك، يُلغى إدخال السجل تلقائياً
+    const record = await insertRecordAtomic(pid, req.body, tokenExpiresAt, autoIncrementKeys,
+      async (client, recordId) => {
+        const { rowCount } = await client.query(
+          `UPDATE project_participants SET record_id = $1, submitted_at = NOW() WHERE id = $2`,
+          [recordId, participant.id]
+        );
+        // إذا لم يُحدَّث أي صف (حُذف المشارك بين القراءة والإدراج)، نُلغي العملية
+        if (!rowCount || rowCount < 1) {
+          throw new Error("لم يُعثر على المشارك أثناء التسجيل — يرجى المحاولة مرة أخرى");
+        }
+      }
+    );
     const seqNum = record.sequential_number;
     const finalData = record.enriched_data;
-
-    // Link participant to record
-    await db.update(projectParticipants).set({
-      recordId: record.id,
-      submittedAt: new Date(),
-    }).where(eq(projectParticipants.id, participant.id));
 
     await db.insert(projectAuditLog).values({
       projectId: pid,
@@ -659,6 +689,15 @@ router.patch("/:projectId/p/:token/edit", submitLimiter, async (req: Request, re
 // POST Telegram webhook — links participant token to chat_id via /start {token}
 router.post("/telegram-webhook", async (req: Request, res: Response) => {
   try {
+    // إصلاح أمني: التحقق من هوية الطلب عبر X-Telegram-Bot-Api-Secret-Token
+    // يمنع أي جهة خارجية من إرسال تحديثات مزيفة وربط chat_id بمشاركين آخرين
+    const expectedSecret = getTelegramWebhookSecret();
+    const receivedSecret = req.headers["x-telegram-bot-api-secret-token"];
+    if (receivedSecret !== expectedSecret) {
+      // نُرجع 200 دائماً حتى لا يُكشف للمهاجم أن الطلب رُفض
+      return res.json({ ok: true });
+    }
+
     const update = req.body;
     const message = update?.message;
     if (!message?.text || !message?.chat?.id) return res.json({ ok: true });

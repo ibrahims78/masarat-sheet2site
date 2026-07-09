@@ -54,7 +54,7 @@ export async function getTelegramUpdates(
 
     // أعِد تسجيل الـ Webhook فورًا بعد الانتهاء حتى لا تُكسَر ميزة المشاركين
     if (webhookUrl) {
-      const reregResult = await setWebhook(token, webhookUrl, "").catch((e) => ({ ok: false, message: String(e) }));
+      const reregResult = await setWebhook(token, webhookUrl, webhookSecret || "").catch((e) => ({ ok: false, message: String(e) }));
       if (!reregResult.ok) {
         console.error("[getTelegramUpdates] فشل إعادة تسجيل الـ Webhook:", reregResult.message);
       }
@@ -90,7 +90,7 @@ export async function getTelegramUpdates(
   } catch (err: any) {
     // حاول إعادة الـ Webhook حتى عند الخطأ
     if (webhookUrl) {
-      await setWebhook(token, webhookUrl, "").catch(() => {});
+      await setWebhook(token, webhookUrl, webhookSecret || "").catch(() => {});
     }
     return { ok: false, message: `❌ ${err.message}` };
   }
