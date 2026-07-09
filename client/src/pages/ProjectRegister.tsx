@@ -62,6 +62,7 @@ export function ProjectRegister() {
   const { data: formInfo, isLoading } = useQuery<FormInfo>({
     queryKey: ["/api/pform", projectId, "info"],
     queryFn: () => fetchJson(`/api/pform/${projectId}/info`),
+    staleTime: 0, // إصلاح: لا نعتمد على الكاش — حالة النموذج قد تتغير في أي وقت
   });
 
   const { register, handleSubmit, trigger, getValues, setValue, watch, formState: { errors } } = useForm<Record<string, any>>({ mode: "onBlur" });

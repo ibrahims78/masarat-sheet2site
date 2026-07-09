@@ -132,7 +132,9 @@ export function ProjectParticipantForm() {
       if (canEdit) editMut.mutate(data);
       else if (canSubmit) submitMut.mutate(data);
     } else {
-      setStep(reviewStep);
+      // إصلاح: نقدّم خطوة واحدة فقط بدلاً من القفز مباشرةً إلى خطوة المراجعة
+      // هذا يمنع تخطي الخطوات عند ضغط Enter في أي حقل وسيط
+      setStep(s => Math.min(s + 1, reviewStep));
       setFromReview(false);
     }
   });
