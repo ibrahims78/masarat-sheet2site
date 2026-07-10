@@ -10,7 +10,7 @@ import { sendParticipantConfirmationEmail } from "../services/email.js";
 import rateLimit from "express-rate-limit";
 import { fileUpload, publicFileUrl, validateMimeType, validateFieldRestrictions, organizeUploadedFile } from "../middleware/upload.js";
 import { handleError } from "../utils/errorHandler.js";
-import { storeChatFromWebhook } from "../services/telegramChatCache.js";
+import { storeChatForProject } from "../services/telegramChatCache.js";
 
 const router = Router();
 
@@ -727,15 +727,13 @@ router.post("/telegram-webhook", async (req: Request, res: Response) => {
 
     const update = req.body;
     const message = update?.message;
-    if (!message?.text || !message?.chat?.id) return res.json({ ok: true });
+    // Require chat.id; text is optional (stickers, photos, etc. still carry chat info)
+    if (!message?.chat?.id) return res.json({ ok: true });
 
-    const text: string = message.text.trim();
     const chatId = String(message.chat.id);
+    const text: string = (message.text || "").trim();
 
-    // Cache every chat that contacts the bot — used by "جلب Chat ID" in admin settings
-    storeChatFromWebhook(chatId, message.chat);
-
-    // Handle /start {token}
+    // Handle /start {token} — only for text messages
     if (text.startsWith("/start ")) {
       const token = text.slice(7).trim();
       if (!token) return res.json({ ok: true });
@@ -750,6 +748,9 @@ router.post("/telegram-webhook", async (req: Request, res: Response) => {
       }).from(projectParticipants).where(eq(projectParticipants.token, token as any));
 
       if (!participant) return res.json({ ok: true });
+
+      // Cache this chat scoped to the project — used by "جلب Chat ID" in admin settings
+      storeChatForProject(participant.projectId, chatId, message.chat);
 
       // Get project bot token for all responses
       const [proj] = await db.select({ telegramBotTokenEnc: projects.telegramBotTokenEnc, name: projects.name })
@@ -768,6 +769,13 @@ router.post("/telegram-webhook", async (req: Request, res: Response) => {
         if (botToken) {
           let replyText: string;
 
+          // ── ربط chat_id دائماً إذا لم يكن مضبوطاً بعد ────────────────
+          if (!participant.telegramChatId) {
+            await db.update(projectParticipants)
+              .set({ telegramChatId: chatId })
+              .where(eq(projectParticipants.id, participant.id));
+          }
+
           if (participant.submittedAt) {
             // ── الحالة: المشارك سبق له التسجيل ─────────────────────
             replyText = formLink
@@ -780,11 +788,6 @@ router.post("/telegram-webhook", async (req: Request, res: Response) => {
               : `🔗 <b>مرحباً مجدداً ${participant.name}!</b>\n\nما زلت مرتبطاً بالبوت — ستصلك الإشعارات هنا.`;
           } else {
             // ── الحالة: تفعيل جديد ────────────────────────────────────
-            // Link chat_id (only update if not already linked or linking to new account)
-            await db.update(projectParticipants)
-              .set({ telegramChatId: chatId })
-              .where(eq(projectParticipants.id, participant.id));
-
             replyText = formLink
               ? `✅ <b>تم التفعيل بنجاح!</b>\n\nأهلاً <b>${participant.name}</b> — ستصلك الإشعارات والتذكيرات هنا.\n\n🔗 <a href="${formLink}">اضغط هنا لفتح النموذج وتعبئة بياناتك</a>`
               : `✅ <b>تم التفعيل بنجاح!</b>\n\nأهلاً <b>${participant.name}</b> — ستصلك الإشعارات والتذكيرات هنا.`;

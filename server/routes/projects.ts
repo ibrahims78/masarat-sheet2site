@@ -7,7 +7,7 @@ import { encrypt, decrypt } from "../services/crypto.js";
 import { insertRecordAtomic } from "../services/recordInsert.js";
 import { appendRecordToSheet, updateRecordRow, deleteRecordRow, testProjectSheetsConnection, fixProjectSheetHeaders, checkProjectSheetColumns, importFromProjectSheet, exportToProjectSheet, extractSpreadsheetId } from "../services/projectSheets.js";
 import { testTelegramBot, getTelegramUpdates, setWebhook } from "../services/telegram.js";
-import { getRecentWebhookChats, hasRecentWebhookChats } from "../services/telegramChatCache.js";
+import { getProjectChats, hasProjectChats } from "../services/telegramChatCache.js";
 import { getTelegramWebhookSecret } from "../routes/pform.js";
 
 /** استخراج عنوان التطبيق الأساسي للـ Webhook */
@@ -1077,11 +1077,13 @@ router.post("/:id/telegram-updates", requireEditorOrAdmin, requireProjectEditAcc
     }
     if (!botToken) return res.status(400).json({ ok: false, message: "أدخل Bot Token أولاً" });
 
-    // ── Strategy 1: read from webhook cache (zero side-effects, instant) ──────
+    // ── Strategy 1: read from project-scoped webhook cache (zero side-effects) ─
     // Messages delivered to the Webhook are consumed immediately and never appear
-    // in getUpdates. The webhook handler stores every incoming chat in this cache.
-    if (hasRecentWebhookChats()) {
-      const chats = getRecentWebhookChats();
+    // in getUpdates. The webhook handler stores chats per-project so admins only
+    // see chats from their own project's bot.
+    const projectId = String(req.params.id);
+    if (hasProjectChats(projectId)) {
+      const chats = getProjectChats(projectId);
       return res.json({ ok: true, chats });
     }
 
