@@ -117,7 +117,32 @@ export function ProjectParticipants() {
   const [importOverwrite, setImportOverwrite] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+  const [templateLoading, setTemplateLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function downloadTemplate() {
+    setTemplateLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${id}/participants/template`);
+      if (!res.ok) throw new Error(isAr ? "فشل تحميل النموذج" : "Failed to download template");
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\r\n]+)/i);
+      const filename = match ? decodeURIComponent(match[1].trim()) + ".xlsx" : "participants-template.xlsx";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast({ title: isAr ? "خطأ" : "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setTemplateLoading(false);
+    }
+  }
 
   const { data: project } = useQuery<any>({
     queryKey: ["/api/projects", id],
@@ -732,7 +757,26 @@ export function ProjectParticipants() {
             <DialogTitle>{isAr ? "استيراد مشاركين من Excel" : "Import Participants from Excel"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-xs text-muted-foreground">{isAr ? "يجب أن يحتوي الملف على عمود الاسم كأول عمود. الحد الأقصى 200 مشارك في المرة الواحدة." : "File must contain a Name column. Max 200 participants per import."}</p>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {isAr
+                  ? "يجب أن يحتوي الملف على عمود الاسم كأول عمود. الحد الأقصى 200 مشارك في المرة الواحدة."
+                  : "File must contain a Name column. Max 200 participants per import."}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 h-8 text-xs gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                disabled={templateLoading}
+                onClick={downloadTemplate}
+              >
+                {templateLoading
+                  ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  : <Download className="h-3.5 w-3.5" />}
+                {isAr ? "نموذج فارغ" : "Blank Template"}
+              </Button>
+            </div>
             <input
               ref={fileInputRef}
               type="file"

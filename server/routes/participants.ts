@@ -162,6 +162,143 @@ router.post("/", requireAuth, requireParticipantEditAccess, async (req: Request,
   } catch (err: any) { handleError(res, err); }
 });
 
+// ─── GET /api/projects/:id/participants/template ─────────────
+router.get("/template", requireAuth, requireParticipantEditAccess, async (req: Request, res: Response) => {
+  try {
+    const pid = String(req.params.id);
+    const [proj] = await db.select({ name: projects.name })
+      .from(projects).where(eq(projects.id, pid));
+    if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
+
+    // Fetch dynamic project fields
+    const fields = await db.select({ key: projectFields.key, label: projectFields.label, type: projectFields.type })
+      .from(projectFields)
+      .where(eq(projectFields.projectId, pid))
+      .orderBy(projectFields.order);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "مسارات — Masarat";
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet("المشاركون", {
+      views: [{ rightToLeft: true }],
+      pageSetup: { fitToPage: true, fitToWidth: 1 },
+    });
+
+    // ── Build columns ──────────────────────────────────────────
+    // Headers MUST match the importer's recognised tokens (case-insensitive):
+    //   name      → "الاسم"
+    //   identifier → "المُعرِّف"
+    //   notes     → "ملاحظات"
+    //   custom fields → their stored label (matched via fieldByLabel map in importer)
+    const cols: { header: string; key: string; width: number; note?: string }[] = [
+      { header: "الاسم", key: "name", width: 28, note: "مطلوب — الاسم الكامل للمشارك" },
+      { header: "المُعرِّف", key: "identifier", width: 30, note: "اختياري — بريد إلكتروني أو رقم هاتف" },
+      { header: "ملاحظات", key: "notes", width: 35, note: "اختياري — ملاحظات خاصة بالمشارك" },
+      ...fields.map(f => ({
+        header: f.label,
+        key: f.key,
+        width: 28,
+        note: `حقل مخصص — ${f.type}`,
+      })),
+    ];
+
+    ws.columns = cols.map(c => ({ header: c.header, key: c.key, width: c.width }));
+
+    // ── Style header row ───────────────────────────────────────
+    const headerRow = ws.getRow(1);
+    headerRow.height = 28;
+    headerRow.eachCell((cell, colIdx) => {
+      const isRequired = colIdx === 1; // الاسم
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: isRequired ? "FF1E40AF" : "FF1E3A8A" }, // blue-800 / blue-900
+      };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11, name: "Calibri" };
+      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      cell.border = {
+        bottom: { style: "medium", color: { argb: "FF3B82F6" } },
+      };
+      const colDef = cols[colIdx - 1];
+      if (colDef?.note) {
+        cell.note = { texts: [{ font: { size: 9 }, text: colDef.note }] };
+      }
+    });
+
+    // ── Empty data rows (rows 2–21, lightly styled) ────────────
+    // NO hint/example rows — any non-empty row after the header is imported as real data
+    for (let r = 2; r <= 21; r++) {
+      const row = ws.addRow([]);
+      row.height = 22;
+      row.eachCell({ includeEmpty: true }, (cell, colIdx) => {
+        if (colIdx <= cols.length) {
+          cell.fill = {
+            type: "pattern", pattern: "solid",
+            fgColor: { argb: r % 2 === 0 ? "FFFAFAFA" : "FFFFFFFF" },
+          };
+          cell.border = {
+            top: { style: "hair", color: { argb: "FFE5E7EB" } },
+            bottom: { style: "hair", color: { argb: "FFE5E7EB" } },
+            left: { style: "hair", color: { argb: "FFE5E7EB" } },
+            right: { style: "hair", color: { argb: "FFE5E7EB" } },
+          };
+          cell.font = { name: "Calibri", size: 11 };
+          cell.alignment = { vertical: "middle" };
+        }
+      });
+    }
+
+    // Freeze header row
+    ws.views = [{ state: "frozen", ySplit: 1, rightToLeft: true }];
+
+    // ── Auto-filter on header row ──────────────────────────────
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
+
+    // ── Instructions sheet ─────────────────────────────────────
+    const wsHelp = wb.addWorksheet("تعليمات الاستيراد", { views: [{ rightToLeft: true }] });
+    wsHelp.columns = [
+      { header: "العمود", key: "col", width: 30 },
+      { header: "الوصف", key: "desc", width: 50 },
+      { header: "مثال", key: "example", width: 35 },
+    ];
+    const helpHeaderRow = wsHelp.getRow(1);
+    helpHeaderRow.height = 24;
+    helpHeaderRow.eachCell(cell => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A8A" } };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11, name: "Calibri" };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+    const helpRows = [
+      { col: "الاسم (مطلوب)", desc: "الاسم الكامل للمشارك — لا يمكن أن يكون فارغاً", example: "أحمد محمد علي" },
+      { col: "المُعرِّف (اختياري)", desc: "بريد إلكتروني أو رقم هاتف — يُستخدم لتفادي التكرار ولإرسال الدعوات", example: "ahmed@email.com أو 0501234567" },
+      { col: "ملاحظات (اختياري)", desc: "أي ملاحظات إضافية خاصة بهذا المشارك", example: "يفضّل التواصل عبر الهاتف" },
+      ...fields.map(f => ({
+        col: `${f.label} (اختياري)`,
+        desc: `حقل مخصص من نوع ${f.type} — سيُعبَّأ مسبقاً في نموذج المشارك`,
+        example: `قيمة ${f.label}`,
+      })),
+      { col: "─────────────", desc: "─────────────────────────────────", example: "──────────────" },
+      { col: "الحد الأقصى", desc: "200 مشارك في عملية استيراد واحدة", example: "" },
+      { col: "ملاحظة مهمة", desc: "أي صف بعد الرأس يُعدّ بيانات حقيقية — لا تترك صفوف وصفية أو أمثلة", example: "" },
+    ];
+    for (const r of helpRows) {
+      const row = wsHelp.addRow(r);
+      row.height = 20;
+      row.eachCell(cell => {
+        cell.font = { name: "Calibri", size: 10 };
+        cell.alignment = { vertical: "middle", wrapText: true };
+      });
+    }
+
+    const safeName = proj.name.replace(/[^\w\u0600-\u06FF]/g, "_").slice(0, 30);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(`participants-template-${safeName}`)}.xlsx`);
+    const buffer = await wb.xlsx.writeBuffer();
+    res.send(Buffer.from(buffer));
+  } catch (err: any) { handleError(res, err); }
+});
+
 // ─── POST /api/projects/:id/participants/import ──────────────
 router.post("/import", requireAuth, requireParticipantEditAccess, upload.single("file"), async (req: Request, res: Response) => {
   try {
@@ -188,9 +325,10 @@ router.post("/import", requireAuth, requireParticipantEditAccess, upload.single(
 
     if (headers.length === 0) return res.status(400).json({ error: "الملف لا يحتوي على رأسيات" });
 
-    // Identify name and identifier columns (case-insensitive)
+    // Identify name, identifier, and notes columns (case-insensitive)
     const nameColIdx = headers.findIndex(h => ["name", "الاسم", "اسم", "full name", "الاسم الكامل"].includes(h.toLowerCase()));
-    const identifierColIdx = headers.findIndex(h => ["identifier", "email", "البريد", "البريد الإلكتروني", "phone", "الهاتف", "رقم الهاتف", "national_id", "رقم الهوية"].includes(h.toLowerCase()));
+    const identifierColIdx = headers.findIndex(h => ["identifier", "المُعرِّف", "المعرف", "email", "البريد", "البريد الإلكتروني", "phone", "الهاتف", "رقم الهاتف", "national_id", "رقم الهوية"].includes(h.toLowerCase()));
+    const notesColIdx = headers.findIndex(h => ["notes", "ملاحظات", "note", "ملاحظة"].includes(h.toLowerCase()));
 
     const rows: ExcelJS.Row[] = [];
     ws.eachRow((row, rowNum) => { if (rowNum > 1) rows.push(row); });
@@ -218,10 +356,13 @@ router.post("/import", requireAuth, requireParticipantEditAccess, upload.single(
 
       const identifier = identifierColIdx >= 0 ? getCellVal(identifierColIdx) : "";
 
-      // Build prefill data from other columns
+      // Extract notes value if a notes column was detected
+      const notesVal = notesColIdx >= 0 ? getCellVal(notesColIdx) : "";
+
+      // Build prefill data from remaining columns (skip system columns)
       const prefillData: Record<string, any> = {};
       headers.forEach((h, idx) => {
-        if (idx === nameColIdx || idx === identifierColIdx) return;
+        if (idx === nameColIdx || idx === identifierColIdx || idx === notesColIdx) return;
         const fieldKey = fieldByLabel[h.toLowerCase()] || h;
         const val = getCellVal(idx);
         if (val) prefillData[fieldKey] = val;
@@ -244,9 +385,8 @@ router.post("/import", requireAuth, requireParticipantEditAccess, upload.single(
 
       if (existing.length > 0) {
         if (overwrite) {
-          // إصلاح: تحديث المعرّف (identifier) أيضاً عند الكتابة فوق المكرر
           await db.update(projectParticipants)
-            .set({ name, identifier: identifier || null, prefillData })
+            .set({ name, identifier: identifier || null, prefillData, notes: notesVal || null })
             .where(eq(projectParticipants.id, existing[0].id));
           updated++;
         } else {
@@ -260,6 +400,7 @@ router.post("/import", requireAuth, requireParticipantEditAccess, upload.single(
         name,
         identifier: identifier || null,
         prefillData,
+        notes: notesVal || null,
       });
       added++;
     }
