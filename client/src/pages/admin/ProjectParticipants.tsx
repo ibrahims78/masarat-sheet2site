@@ -18,7 +18,7 @@ import {
   Users, Plus, Upload, Download, Send, Trash2, Copy, ArrowRight,
   CheckCircle2, Clock, Edit3, Lock, MessageSquare, RefreshCw, Search,
   UserCheck, Bell, Settings2, ExternalLink, Check, Mail, AlertCircle,
-  Save,
+  Save, Link2,
 } from "lucide-react";
 import type { Project, ProjectField } from "@shared/schema";
 
@@ -165,6 +165,13 @@ export function ProjectParticipants() {
     queryFn: () => fetchJson(`/api/projects/${id}/participants/stats`),
     refetchInterval: 30_000,
   });
+
+  const { data: botInfo } = useQuery<{ ok: boolean; username: string | null }>({
+    queryKey: ["/api/projects", id, "participants", "bot-info"],
+    queryFn: () => fetchJson(`/api/projects/${id}/participants/bot-info`),
+    staleTime: 5 * 60_000,
+  });
+  const botUsername = botInfo?.username ?? null;
 
   const addMut = useMutation({
     mutationFn: (data: any) => apiRequest("POST", `/api/projects/${id}/participants`, data),
@@ -504,6 +511,28 @@ export function ProjectParticipants() {
                           <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
                             <Check className="h-3 w-3" />{isAr ? "مُفعَّل" : "Active"}
                           </span>
+                        ) : botUsername ? (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="icon" variant="ghost"
+                              className="h-6 w-6 text-sky-500 hover:text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/20"
+                              title={isAr ? "نسخ رابط تفعيل التيليغرام" : "Copy Telegram activation link"}
+                              onClick={() => {
+                                navigator.clipboard.writeText(`https://t.me/${botUsername}?start=${p.token}`);
+                                toast({ description: isAr ? "✅ تم نسخ رابط التيليغرام" : "✅ Telegram link copied" });
+                              }}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="icon" variant="ghost"
+                              className="h-6 w-6 text-sky-500 hover:text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/20"
+                              title={isAr ? "فتح البوت في تيليغرام" : "Open bot in Telegram"}
+                              onClick={() => window.open(`https://t.me/${botUsername}?start=${p.token}`, "_blank")}
+                            >
+                              <Link2 className="h-3 w-3" />
+                            </Button>
+                          </div>
                         ) : (
                           <span className="text-xs text-slate-400">{isAr ? "غير مُفعَّل" : "Not active"}</span>
                         )}
