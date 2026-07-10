@@ -205,6 +205,11 @@ const PROJECT_SAFE_COLUMNS = {
   participantNameField: projects.participantNameField,
   participantEditHours: projects.participantEditHours,
   participantAllowOpen: projects.participantAllowOpen,
+  // Automated reminders
+  reminderEnabled: projects.reminderEnabled,
+  reminderIntervalDays: projects.reminderIntervalDays,
+  reminderMaxCount: projects.reminderMaxCount,
+  confirmationEmailEnabled: projects.confirmationEmailEnabled,
 };
 
 router.get("/:id", requireAuth, requireProjectReadAccess, async (req: Request, res: Response) => {
@@ -292,7 +297,8 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
       "googleSheetId", "importSheetId", "googleSheetName", "googleServiceAccountEmail",
       "googleDriveFolderId", "driveRootFolderId", "telegramChatId",
       "driveOAuthClientId",
-      "participantsEnabled", "participantNameField", "participantEditHours", "participantAllowOpen"];
+      "participantsEnabled", "participantNameField", "participantEditHours", "participantAllowOpen",
+      "reminderEnabled", "reminderIntervalDays", "reminderMaxCount", "confirmationEmailEnabled"];
 
     for (const field of plainFields) {
       if (field in body) update[field] = body[field];

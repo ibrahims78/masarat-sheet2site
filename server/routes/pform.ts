@@ -6,6 +6,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { appendRecordToSheet, updateRecordRow } from "../services/projectSheets.js";
 import { insertRecordAtomic } from "../services/recordInsert.js";
 import { decrypt } from "../services/crypto.js";
+import { sendParticipantConfirmationEmail } from "../services/email.js";
 import rateLimit from "express-rate-limit";
 import { fileUpload, publicFileUrl, validateMimeType, validateFieldRestrictions, organizeUploadedFile } from "../middleware/upload.js";
 import { handleError } from "../utils/errorHandler.js";
@@ -555,6 +556,7 @@ router.post("/:projectId/p/:token/submit", submitLimiter, async (req: Request, r
       participantsEnabled: projects.participantsEnabled,
       telegramBotTokenEnc: projects.telegramBotTokenEnc,
       telegramChatId: projects.telegramChatId,
+      confirmationEmailEnabled: projects.confirmationEmailEnabled,
     }).from(projects).where(eq(projects.id, pid));
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
     if (!proj.formEnabled) return res.status(403).json({ error: proj.formDisabledMessage || "النموذج متوقف مؤقتاً" });
@@ -603,6 +605,30 @@ router.post("/:projectId/p/:token/submit", submitLimiter, async (req: Request, r
     appendRecordToSheet(pid, finalData as any, seqNum).then(async (rowIndex) => {
       if (rowIndex) await db.update(projectRecords).set({ sheetsRowIndex: rowIndex }).where(eq(projectRecords.id, record.id));
     }).catch(console.error);
+
+    // ── Confirmation email to participant (non-blocking) ──────────────────
+    if (
+      proj.confirmationEmailEnabled !== false &&
+      participant.identifierType === "email" &&
+      participant.identifier
+    ) {
+      const baseUrlForEmail = (() => {
+        const domains = process.env.REPLIT_DOMAINS?.split(",");
+        if (domains?.length) return `https://${domains[0].trim()}`;
+        if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+        return "";
+      })();
+      if (baseUrlForEmail) {
+        const editLink = `${baseUrlForEmail}/p/${pid}/p/${token}`;
+        sendParticipantConfirmationEmail({
+          to: participant.identifier,
+          participantName: participant.name,
+          projectName: proj.name,
+          editLink,
+          editDeadlineIso: tokenExpiresAt.toISOString(),
+        }).catch(console.error);
+      }
+    }
 
     // Telegram notification to admin chat (non-blocking)
     if (proj.telegramBotTokenEnc && proj.telegramChatId) {
@@ -716,44 +742,66 @@ router.post("/telegram-webhook", async (req: Request, res: Response) => {
         name: projectParticipants.name,
         projectId: projectParticipants.projectId,
         telegramChatId: projectParticipants.telegramChatId,
+        submittedAt: projectParticipants.submittedAt,
       }).from(projectParticipants).where(eq(projectParticipants.token, token as any));
 
       if (!participant) return res.json({ ok: true });
 
-      // Link chat_id
-      await db.update(projectParticipants).set({ telegramChatId: chatId }).where(eq(projectParticipants.id, participant.id));
-
-      // Get project bot token to send confirmation
+      // Get project bot token for all responses
       const [proj] = await db.select({ telegramBotTokenEnc: projects.telegramBotTokenEnc, name: projects.name })
         .from(projects).where(eq(projects.id, participant.projectId));
+
+      const domains = process.env.REPLIT_DOMAINS?.split(",");
+      const baseUrl = domains?.length
+        ? `https://${domains[0].trim()}`
+        : process.env.REPLIT_DEV_DOMAIN
+          ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+          : "";
+      const formLink = baseUrl ? `${baseUrl}/p/${participant.projectId}/p/${token}` : null;
 
       if (proj?.telegramBotTokenEnc) {
         const botToken = decrypt(proj.telegramBotTokenEnc);
         if (botToken) {
-          // إصلاح: نضيف رابط النموذج في رسالة التأكيد حتى يعرف المشارك أين يذهب
-          const domains = process.env.REPLIT_DOMAINS?.split(",");
-          const baseUrl = domains?.length
-            ? `https://${domains[0].trim()}`
-            : process.env.REPLIT_DEV_DOMAIN
-              ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-              : "";
-          const formLink = baseUrl ? `${baseUrl}/p/${participant.projectId}/p/${token}` : null;
+          let replyText: string;
 
-          const confirmText = formLink
-            ? `✅ <b>تم التفعيل بنجاح!</b>\n\nأهلاً <b>${participant.name}</b> — سيصلك الإشعارات والتذكيرات هنا.\n\n🔗 <a href="${formLink}">اضغط هنا لفتح النموذج وتعبئة بياناتك</a>`
-            : `✅ <b>تم التفعيل بنجاح!</b>\n\nأهلاً <b>${participant.name}</b> — سيصلك الإشعارات والتذكيرات هنا.`;
+          if (participant.submittedAt) {
+            // ── الحالة: المشارك سبق له التسجيل ─────────────────────
+            replyText = formLink
+              ? `✅ <b>أنت مسجَّل بالفعل!</b>\n\nأهلاً <b>${participant.name}</b> — تسجيلك في <b>${proj.name}</b> مكتمل.\n\n✏️ <a href="${formLink}">اضغط هنا إذا أردت تعديل بياناتك</a>`
+              : `✅ <b>أنت مسجَّل بالفعل!</b>\n\nأهلاً <b>${participant.name}</b> — تسجيلك في <b>${proj.name}</b> مكتمل.`;
+          } else if (participant.telegramChatId && participant.telegramChatId === chatId) {
+            // ── الحالة: إعادة تفعيل البوت (كان مرتبطاً من قبل) ────────
+            replyText = formLink
+              ? `🔗 <b>مرحباً مجدداً ${participant.name}!</b>\n\nما زلت مرتبطاً بالبوت — ستصلك الإشعارات هنا.\n\n📋 <a href="${formLink}">اضغط هنا لاستكمال التسجيل في ${proj.name}</a>`
+              : `🔗 <b>مرحباً مجدداً ${participant.name}!</b>\n\nما زلت مرتبطاً بالبوت — ستصلك الإشعارات هنا.`;
+          } else {
+            // ── الحالة: تفعيل جديد ────────────────────────────────────
+            // Link chat_id (only update if not already linked or linking to new account)
+            await db.update(projectParticipants)
+              .set({ telegramChatId: chatId })
+              .where(eq(projectParticipants.id, participant.id));
+
+            replyText = formLink
+              ? `✅ <b>تم التفعيل بنجاح!</b>\n\nأهلاً <b>${participant.name}</b> — ستصلك الإشعارات والتذكيرات هنا.\n\n🔗 <a href="${formLink}">اضغط هنا لفتح النموذج وتعبئة بياناتك</a>`
+              : `✅ <b>تم التفعيل بنجاح!</b>\n\nأهلاً <b>${participant.name}</b> — ستصلك الإشعارات والتذكيرات هنا.`;
+          }
 
           await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               chat_id: chatId,
-              text: confirmText,
+              text: replyText,
               parse_mode: "HTML",
               disable_web_page_preview: false,
             }),
           }).catch(console.error);
         }
+      } else if (!participant.submittedAt) {
+        // No bot token configured — still link the chat_id silently
+        await db.update(projectParticipants)
+          .set({ telegramChatId: chatId })
+          .where(eq(projectParticipants.id, participant.id));
       }
     }
 

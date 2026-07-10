@@ -18,6 +18,7 @@ import {
   Users, Plus, Upload, Download, Send, Trash2, Copy, ArrowRight,
   CheckCircle2, Clock, Edit3, Lock, MessageSquare, RefreshCw, Search,
   UserCheck, Bell, Settings2, ExternalLink, Check, Mail, AlertCircle,
+  Save,
 } from "lucide-react";
 import type { Project, ProjectField } from "@shared/schema";
 
@@ -102,6 +103,14 @@ export function ProjectParticipants() {
   const [emailBatchDialog, setEmailBatchDialog] = useState(false);
   const [emailResultDialog, setEmailResultDialog] = useState(false);
   const [emailBatchResult, setEmailBatchResult] = useState<{ sent: number; failed: number; noEmail: number; failures: string[] } | null>(null);
+
+  // Reminder settings
+  const [reminderDialog, setReminderDialog] = useState(false);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderIntervalDays, setReminderIntervalDays] = useState(2);
+  const [reminderMaxCount, setReminderMaxCount] = useState(3);
+  const [confirmationEmailEnabled, setConfirmationEmailEnabled] = useState(true);
+  const [reminderSaving, setReminderSaving] = useState(false);
 
   // Import
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -229,6 +238,36 @@ export function ProjectParticipants() {
     onError: (e: any) => toast({ variant: "destructive", description: `❌ ${e.message}` }),
   });
 
+  // Open reminder settings dialog and populate from project data
+  function openReminderSettings() {
+    if (project) {
+      setReminderEnabled(project.reminderEnabled ?? false);
+      setReminderIntervalDays(project.reminderIntervalDays ?? 2);
+      setReminderMaxCount(project.reminderMaxCount ?? 3);
+      setConfirmationEmailEnabled(project.confirmationEmailEnabled ?? true);
+    }
+    setReminderDialog(true);
+  }
+
+  async function saveReminderSettings() {
+    setReminderSaving(true);
+    try {
+      await apiRequest("PATCH", `/api/projects/${id}`, {
+        reminderEnabled,
+        reminderIntervalDays,
+        reminderMaxCount,
+        confirmationEmailEnabled,
+      });
+      qc.invalidateQueries({ queryKey: ["/api/projects", id] });
+      setReminderDialog(false);
+      toast({ description: isAr ? "✅ تم حفظ إعدادات التذكير" : "✅ Reminder settings saved" });
+    } catch (e: any) {
+      toast({ variant: "destructive", description: `❌ ${e.message}` });
+    } finally {
+      setReminderSaving(false);
+    }
+  }
+
   const doImport = async () => {
     if (!importFile) return;
     setImportLoading(true);
@@ -306,6 +345,9 @@ export function ProjectParticipants() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => setNotifyDialog(true)} data-testid="button-notify-all">
             <Bell className="h-3.5 w-3.5 ml-1" />{isAr ? "إشعار الكل" : "Notify All"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={openReminderSettings} data-testid="button-reminder-settings">
+            <Settings2 className="h-3.5 w-3.5 ml-1" />{isAr ? "إعدادات التذكير" : "Reminder Settings"}
           </Button>
           <Button size="sm" onClick={() => setAddDialog(true)} data-testid="button-add-participant">
             <Plus className="h-3.5 w-3.5 ml-1" />{isAr ? "إضافة مشارك" : "Add Participant"}
@@ -819,6 +861,119 @@ export function ProjectParticipants() {
             <Button variant="outline" onClick={() => setDeleteBulk(false)}>{isAr ? "إلغاء" : "Cancel"}</Button>
             <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={() => bulkDeleteMut.mutate()} data-testid="button-bulk-delete-confirm">
               {isAr ? "حذف الكل" : "Delete All"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Reminder Settings Dialog ─── */}
+      <Dialog open={reminderDialog} onOpenChange={setReminderDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-primary" />
+              {isAr ? "إعدادات التذكير التلقائي" : "Automatic Reminder Settings"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5 py-2">
+            {/* Confirmation email toggle */}
+            <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+              <div>
+                <p className="font-medium text-sm">{isAr ? "بريد تأكيد التسجيل" : "Registration Confirmation Email"}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {isAr
+                    ? "إرسال بريد تلقائي للمشارك عند إتمام تسجيله (يشترط نوع المعرف: بريد)"
+                    : "Send automatic email to participant after registration (requires email identifier)"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmationEmailEnabled(!confirmationEmailEnabled)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${confirmationEmailEnabled ? "bg-green-500" : "bg-slate-200 dark:bg-slate-700"}`}
+                data-testid="toggle-confirmation-email"
+              >
+                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${confirmationEmailEnabled ? (isAr ? "-translate-x-5" : "translate-x-5") : "translate-x-0"}`} />
+              </button>
+            </div>
+
+            {/* Reminder enabled toggle */}
+            <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+              <div>
+                <p className="font-medium text-sm">{isAr ? "تذكيرات تلقائية" : "Automatic Reminders"}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {isAr
+                    ? "إرسال تذكيرات دورية للمشاركين الذين لم يُكملوا التسجيل"
+                    : "Send periodic reminders to participants who haven't registered"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReminderEnabled(!reminderEnabled)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${reminderEnabled ? "bg-primary" : "bg-slate-200 dark:bg-slate-700"}`}
+                data-testid="toggle-reminder-enabled"
+              >
+                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${reminderEnabled ? (isAr ? "-translate-x-5" : "translate-x-5") : "translate-x-0"}`} />
+              </button>
+            </div>
+
+            {/* Reminder interval + max count — shown only when enabled */}
+            {reminderEnabled && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">
+                    {isAr ? "فترة التذكير (أيام)" : "Reminder Interval (days)"}
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={reminderIntervalDays}
+                    onChange={e => setReminderIntervalDays(Number(e.target.value))}
+                    className="text-sm"
+                    data-testid="input-reminder-interval"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {isAr ? "كل كم يوم يُرسل التذكير" : "Days between reminders"}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">
+                    {isAr ? "الحد الأقصى للتذكيرات" : "Max Reminders per Person"}
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={reminderMaxCount}
+                    onChange={e => setReminderMaxCount(Number(e.target.value))}
+                    className="text-sm"
+                    data-testid="input-reminder-max"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {isAr ? "أقصى عدد تذكيرات للمشارك الواحد" : "Maximum reminders per participant"}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Info box */}
+            <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3">
+              <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+                {isAr
+                  ? "📬 التذكيرات تُرسل عبر: تيليغرام (إذا ربط المشارك البوت) أو بريد إلكتروني (إذا كان نوع المعرف بريداً). يعمل الجدولي تلقائياً كل 30 دقيقة."
+                  : "📬 Reminders are sent via: Telegram (if linked) or Email (if identifier type is email). Scheduler runs automatically every 30 minutes."}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setReminderDialog(false)}>
+              {isAr ? "إلغاء" : "Cancel"}
+            </Button>
+            <Button onClick={saveReminderSettings} disabled={reminderSaving} data-testid="button-save-reminder-settings">
+              {reminderSaving ? <RefreshCw className="h-3.5 w-3.5 ml-1 animate-spin" /> : <Save className="h-3.5 w-3.5 ml-1" />}
+              {isAr ? "حفظ الإعدادات" : "Save Settings"}
             </Button>
           </DialogFooter>
         </DialogContent>

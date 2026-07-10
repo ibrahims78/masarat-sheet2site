@@ -91,6 +91,11 @@ export const projects = pgTable("projects", {
   participantNameField: text("participant_name_field"),
   participantEditHours: integer("participant_edit_hours").default(48),
   participantAllowOpen: boolean("participant_allow_open").default(false),
+  // ── Automated Reminders ───────────────────────────────────
+  reminderEnabled: boolean("reminder_enabled").default(false),
+  reminderIntervalDays: integer("reminder_interval_days").default(2),
+  reminderMaxCount: integer("reminder_max_count").default(3),
+  confirmationEmailEnabled: boolean("confirmation_email_enabled").default(true),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -303,6 +308,11 @@ export const updateProjectSchema = z.object({
   participantNameField: z.string().nullish(),
   participantEditHours: z.coerce.number().int().min(1).max(8760).optional(),
   participantAllowOpen: z.boolean().optional(),
+  // Automated reminders
+  reminderEnabled: z.boolean().optional(),
+  reminderIntervalDays: z.coerce.number().int().min(1).max(30).optional(),
+  reminderMaxCount: z.coerce.number().int().min(1).max(20).optional(),
+  confirmationEmailEnabled: z.boolean().optional(),
 });
 
 export const updateUserRoleSchema = z.object({

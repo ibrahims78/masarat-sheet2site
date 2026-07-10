@@ -14,6 +14,7 @@ import projectsRoutes from "./routes/projects.js";
 import pformRoutes from "./routes/pform.js";
 import driveOAuthRoutes from "./routes/driveOAuth.js";
 import participantsRoutes from "./routes/participants.js";
+import { startScheduler } from "./services/scheduler.js";
 import { uploadsDir } from "./middleware/upload.js";
 import { requireAuth, requirePasswordNotExpired } from "./middleware/auth.js";
 import { db } from "./db.js";
@@ -380,6 +381,11 @@ async function initDB() {
       ALTER TABLE projects ADD COLUMN IF NOT EXISTS participant_name_field TEXT;
       ALTER TABLE projects ADD COLUMN IF NOT EXISTS participant_edit_hours INTEGER DEFAULT 48;
       ALTER TABLE projects ADD COLUMN IF NOT EXISTS participant_allow_open BOOLEAN NOT NULL DEFAULT false;
+      -- Automated reminder columns
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS reminder_enabled BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS reminder_interval_days INTEGER DEFAULT 2;
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS reminder_max_count INTEGER DEFAULT 3;
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS confirmation_email_enabled BOOLEAN NOT NULL DEFAULT true;
     `);
 
     // Project participants table
@@ -430,6 +436,7 @@ async function initDB() {
 }
 
 initDB().then(() => {
+  startScheduler();
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
