@@ -18,6 +18,7 @@ import { useLang } from "@/context/LanguageContext";
 import { FileField } from "@/components/FileField";
 import { isFieldVisible as checkFieldVisible } from "@/lib/fieldVisibility";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 function FieldInput({ f, register, errors, watch, setValue, projectId, uploadFolder }: {
   f: ProjectField;

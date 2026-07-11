@@ -201,6 +201,34 @@ app.get("/uploads/*", async (req, res) => {
   } catch {
     return res.status(404).json({ error: "الملف غير موجود" });
   }
+  // Derive a safe, explicit Content-Type from the extension.
+  // Never let the browser sniff — nosniff header + explicit type together
+  // prevent polyglot files (e.g. an HTML-disguised image) from being executed.
+  const ext = path.extname(filename).toLowerCase();
+  const SAFE_MIME: Record<string, string> = {
+    ".pdf":  "application/pdf",
+    ".png":  "image/png",
+    ".jpg":  "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif":  "image/gif",
+    ".webp": "image/webp",
+    ".svg":  "image/svg+xml",
+    ".mp4":  "video/mp4",
+    ".webm": "video/webm",
+    ".mp3":  "audio/mpeg",
+    ".wav":  "audio/wav",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls":  "application/vnd.ms-excel",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".doc":  "application/msword",
+    ".txt":  "text/plain; charset=utf-8",
+    ".csv":  "text/plain; charset=utf-8",
+  };
+  const contentType = SAFE_MIME[ext] ?? "application/octet-stream";
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  // Strict CSP for served files: prevent any inline execution
+  res.setHeader("Content-Security-Policy", "default-src 'none'");
   res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
   createReadStream(filePath).pipe(res);
 });
