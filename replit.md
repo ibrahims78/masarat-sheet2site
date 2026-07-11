@@ -77,6 +77,12 @@ The following was done to get the project running on Replit (re-verified after a
 
 Three major shared components were extracted as part of the unification plan (docs/unification-plan.md). Any new field type, validation rule, or form rendering logic should be added to these shared files — they automatically propagate to all pages.
 
+### 4. `client/src/components/forms/FormStepper.tsx`
+شريط تقدّم موحّد (دوائر + خط رابط + شريط نسبة مئوية) يُستخدم في ProjectRegister وProjectParticipantForm. يدعم نقر الخطوات المنتهية (onStepClick) وأيقونات مخصصة لكل خطوة.
+
+### 5. `client/src/components/forms/FormSubmitted.tsx`
+شاشة ما بعد الإرسال الموحّدة: حالة النجاح (مع/بدون رابط تعديل) وحالة القفل. تحلّ محل الشاشات المتفرقة في كلا النموذجين.
+
 ### 1. `client/src/components/fields/FieldEditor.tsx`
 Unified single-field editor used in **ProjectSettings** (tab "fields") and **CreateProject** (wizard step 1). Covers: field type, label, key, step, placeholder, required/visible toggles, conditions, validation (min/max/regex/message), access control (visibleTo, isReadOnly), full-width, file settings, select/radio options.
 

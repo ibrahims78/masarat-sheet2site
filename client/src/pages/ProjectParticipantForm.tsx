@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 import { useLang } from "@/context/LanguageContext";
 import type { ProjectField } from "@shared/schema";
 import { useProjectFormEngine } from "@/hooks/useProjectFormEngine";
+import { FormStepper } from "@/components/forms/FormStepper";
+import { FormSubmitted } from "@/components/forms/FormSubmitted";
 import { DynamicFieldRenderer } from "@/components/forms/DynamicFieldRenderer";
 
 const STEP_ICONS = [User, Briefcase, Building2, MapPin, ClipboardCheck, FileText];
@@ -190,36 +192,32 @@ export function ProjectParticipantForm() {
 
   // ── Locked (submitted + past edit window) ──
   if (locked || (submitted && !canEdit)) return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="p-8 max-w-sm text-center">
-        <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-        <h2 className="text-xl font-bold mb-2">{isAr ? "شكراً لك! 🎉" : "Thank You! 🎉"}</h2>
-        {participant && <p className="text-sm text-muted-foreground">{isAr ? `تم تسجيل بياناتك ${participant.name ? `يا ${participant.name}` : ""} بنجاح.` : `Your registration, ${participant.name || ""}, was submitted successfully.`}</p>}
-        {locked && !submitted && <p className="text-xs text-muted-foreground mt-2">{isAr ? "انتهت فترة التعديل." : "The editing period has ended."}</p>}
-        <DesignerCredit />
-      </Card>
-    </div>
+    <FormSubmitted
+      isAr={isAr}
+      type="locked"
+      message={
+        participant
+          ? (isAr
+              ? `تم تسجيل بياناتك${participant.name ? ` يا ${participant.name}` : ""} بنجاح.${locked && !submitted ? " انتهت فترة التعديل." : ""}`
+              : `Your registration${participant.name ? `, ${participant.name}` : ""}, was submitted successfully.${locked && !submitted ? " The editing period has ended." : ""}`)
+          : undefined
+      }
+    />
   );
 
   // ── After submission ──
   if (submitted) return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="p-8 max-w-sm text-center">
-        <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-        <h2 className="text-xl font-bold mb-2">{isAr ? "تم بنجاح! 🎉" : "Done! 🎉"}</h2>
-        <p className="text-sm text-muted-foreground">
-          {canEdit
-            ? (isAr ? "تم تحديث بياناتك بنجاح." : "Your data has been updated successfully.")
-            : (isAr ? "تم إرسال بياناتك بنجاح." : "Your data has been submitted successfully.")}
-        </p>
-        {canEdit && editDeadline && (
-          <p className="text-xs text-muted-foreground mt-2">
-            {isAr ? `يمكنك التعديل حتى: ${editDeadline.toLocaleString("ar")}` : `Editable until: ${editDeadline.toLocaleString()}`}
-          </p>
-        )}
-        <DesignerCredit />
-      </Card>
-    </div>
+    <FormSubmitted
+      isAr={isAr}
+      type="success"
+      title={isAr ? "تم بنجاح! 🎉" : "Done! 🎉"}
+      message={
+        canEdit
+          ? (isAr ? "تم تحديث بياناتك بنجاح." : "Your data has been updated successfully.")
+          : (isAr ? "تم إرسال بياناتك بنجاح." : "Your data has been submitted successfully.")
+      }
+      editDeadline={canEdit ? editDeadline : null}
+    />
   );
 
   const errMsg = submitMut.error?.message || editMut.error?.message;
@@ -266,36 +264,17 @@ export function ProjectParticipantForm() {
               )}
             </div>
 
-            {/* Step indicator */}
+            {/* Step indicator — unified FormStepper */}
             {totalSteps > 1 && (
-              <div className="flex items-center justify-center gap-1.5 mt-3 overflow-x-auto pb-0.5">
-                {formSteps.map((stepLabel, i) => {
-                  const Icon = STEP_ICONS[i] || User;
-                  const done = step > i;
-                  const cur = step === i;
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => { if (done || cur) goToStep(i); }}
-                      className={cn(
-                        "flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all",
-                        cur ? "bg-primary text-white shadow-md" :
-                          done ? "bg-primary/10 text-primary cursor-pointer" :
-                            "bg-slate-100 dark:bg-slate-800 text-slate-400",
-                      )}
-                    >
-                      <Icon className="h-2.5 w-2.5" />
-                      <span className="hidden sm:inline">{stepLabel}</span>
-                      <span className="sm:hidden">{i + 1}</span>
-                    </button>
-                  );
-                })}
-                <div className={cn("flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all",
-                  step === reviewStep ? "bg-primary text-white shadow-md" : "bg-slate-100 dark:bg-slate-800 text-slate-400")}>
-                  <ClipboardCheck className="h-2.5 w-2.5" />
-                  <span className="hidden sm:inline">{isAr ? "مراجعة" : "Review"}</span>
-                  <span className="sm:hidden">{formSteps.length + 1}</span>
-                </div>
+              <div className="mt-3">
+                <FormStepper
+                  steps={formSteps}
+                  currentStep={step}
+                  isAr={isAr}
+                  stepIcons={formSteps.map((_, i) => STEP_ICONS[i] || User)}
+                  reviewLabel={isAr ? "مراجعة" : "Review"}
+                  onStepClick={goToStep}
+                />
               </div>
             )}
           </div>

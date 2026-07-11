@@ -29,6 +29,19 @@ Any new field type, property, or validation rule must be added to ONE place only
 - `showReadOnly=true` → renders isReadOnly fields as static display (used by ProjectEditForm)
 - `labelClassName` override for per-form typography differences
 
+### 4. FormStepper (`client/src/components/forms/FormStepper.tsx`)
+- Used by: `ProjectRegister.tsx` and `ProjectParticipantForm.tsx`
+- Props: steps (string[], without review), currentStep (0-indexed), isAr, progressPercent?, stepIcons?, reviewLabel?, onStepClick?
+- Design: circle icons + connecting line + percentage bar below — the richer ProjectRegister style adopted as the standard
+- `onStepClick` makes completed steps clickable (used by participant form to navigate back)
+- `reviewLabel` auto-appended as the last step
+
+### 5. FormSubmitted (`client/src/components/forms/FormSubmitted.tsx`)
+- Used by: `ProjectRegister.tsx` (success with edit link) and `ProjectParticipantForm.tsx` (success + locked)
+- Props: isAr, type ("success"|"locked"), title?, message?, editLink?, tokenHours?, editDeadline?, copied?, onCopyLink?, children
+- The `children` slot allows per-form extra content (e.g., Telegram activation note) without coupling
+- Functional differences stay outside this component (Telegram banner stays in participant form header)
+
 ## ParsedColumn (CreateProject) Interface Change
 
 `ParsedColumn` in `CreateProject.tsx` now extends `FieldEditorField`. This means the wizard can configure:

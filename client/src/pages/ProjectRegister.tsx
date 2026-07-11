@@ -10,12 +10,14 @@ import { DesignerCredit } from "@/components/DesignerCredit";
 import {
   Loader2, CheckCircle, ChevronLeft, ChevronRight, Shield,
   User, Briefcase, MapPin, ClipboardCheck, ClipboardList,
-  FileText, Building2, Copy, Printer,
+  FileText, Building2, Printer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLang } from "@/context/LanguageContext";
 import type { ProjectField } from "@shared/schema";
 import { useProjectFormEngine } from "@/hooks/useProjectFormEngine";
+import { FormStepper } from "@/components/forms/FormStepper";
+import { FormSubmitted } from "@/components/forms/FormSubmitted";
 import { DynamicFieldRenderer } from "@/components/forms/DynamicFieldRenderer";
 
 const STEP_ICONS = [Shield, User, Briefcase, Building2, MapPin, ClipboardCheck, FileText];
@@ -512,28 +514,15 @@ export function ProjectRegister() {
 
   /* ─── Submitted ─── */
   if (submitted) return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 p-4" dir={isAr ? "rtl" : "ltr"}>
-      <Card className="p-8 max-w-sm w-full text-center space-y-5">
-        <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
-          <CheckCircle className="h-12 w-12 text-green-500" />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">{isAr ? "تم التسجيل بنجاح!" : "Registration Successful!"}</h2>
-          <p className="text-sm text-muted-foreground mt-1">{isAr ? "شكراً لك على تعبئة النموذج" : "Thank you for filling out the form"}</p>
-        </div>
-        <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-2">
-          <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">{isAr ? "رابط التعديل الخاص بك" : "Your personal edit link"}</p>
-          <p className="text-[11px] font-mono break-all text-slate-500 dark:text-slate-400 text-left leading-relaxed">
-            {`${window.location.origin}/p/${projectId}/edit/${editToken}`}
-          </p>
-          <p className="text-[11px] text-muted-foreground">{isAr ? `صالح لمدة ${tokenHours} ساعة` : `Valid for ${tokenHours} hours`}</p>
-        </div>
-        <Button onClick={copyLink} className="w-full gap-2" variant={copied ? "secondary" : "default"} data-testid="button-copy-link">
-          {copied ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-          {copied ? (isAr ? "تم النسخ!" : "Copied!") : (isAr ? "نسخ رابط التعديل" : "Copy edit link")}
-        </Button>
-      </Card>
-    </div>
+    <FormSubmitted
+      isAr={isAr}
+      type="success"
+      title={isAr ? "تم التسجيل بنجاح!" : "Registration Successful!"}
+      editLink={editToken ? `${window.location.origin}/p/${projectId}/edit/${editToken}` : undefined}
+      tokenHours={tokenHours ?? undefined}
+      copied={copied}
+      onCopyLink={copyLink}
+    />
   );
 
   /* ─── Invitation code screen ─── */
@@ -608,60 +597,13 @@ export function ProjectRegister() {
         {/* Steps + Progress */}
         <div className="bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 px-4 pt-4 pb-3">
           <div className="max-w-3xl mx-auto">
-
-            {/* Step circles */}
-            <div className="relative flex items-start justify-between">
-              {/* Background line */}
-              <div className="absolute top-[18px] right-5 left-5 h-0.5 bg-slate-200 dark:bg-slate-700" />
-              {/* Progress line */}
-              <div
-                className="absolute top-[18px] right-5 h-0.5 bg-primary transition-all duration-500"
-                style={{
-                  width: totalSteps > 1 ? `calc(${(step / (totalSteps - 1)) * 100}% * (100% - 40px) / 100%)` : "0%",
-                  [isAr ? "right" : "left"]: "20px",
-                  [isAr ? "left" : "right"]: "auto"
-                }}
-              />
-              {steps.map((s, i) => {
-                const Icon = STEP_ICONS[i % STEP_ICONS.length];
-                const done = i < step;
-                const active = i === step;
-                return (
-                  <div key={i} className="flex flex-col items-center gap-1.5 z-10" style={{ minWidth: 0, flex: 1 }}>
-                    <div className={cn(
-                      "w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all duration-300 bg-white dark:bg-slate-800",
-                      done ? "border-primary bg-primary" :
-                      active ? "border-primary shadow-[0_0_0_4px_rgba(var(--primary)/0.15)]" :
-                      "border-slate-300 dark:border-slate-600"
-                    )}>
-                      {done
-                        ? <CheckCircle className="h-5 w-5 text-white" />
-                        : <Icon className={cn("h-4 w-4", active ? "text-primary" : "text-slate-400 dark:text-slate-500")} />
-                      }
-                    </div>
-                    <span className={cn(
-                      "text-[10px] font-semibold text-center leading-tight px-1 truncate w-full",
-                      active ? "text-primary" : done ? "text-slate-500" : "text-slate-400 dark:text-slate-500"
-                    )}>
-                      {s}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Progress bar + percentage */}
-            <div className="flex items-center gap-3 mt-3">
-              <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className={cn("h-full bg-gradient-to-l from-primary to-primary/70 rounded-full transition-all duration-500", !isAr && "bg-gradient-to-r")}
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <span className="text-[11px] text-muted-foreground font-semibold whitespace-nowrap">
-                {isAr ? `الخطوة ${step + 1} من ${totalSteps} — ${progressPercent}% مكتمل` : `Step ${step + 1} of ${totalSteps} — ${progressPercent}% complete`}
-              </span>
-            </div>
+            <FormStepper
+              steps={steps}
+              currentStep={step}
+              isAr={isAr}
+              progressPercent={progressPercent}
+              stepIcons={steps.map((_, i) => STEP_ICONS[i % STEP_ICONS.length])}
+            />
           </div>
         </div>
       </div>
