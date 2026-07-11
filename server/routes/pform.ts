@@ -46,6 +46,10 @@ export function getTelegramWebhookSecret(): string {
 const submitLimiter = rateLimit({ windowMs: 60 * 1000, max: 10 });
 const verifyLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { error: "محاولات كثيرة — حاول بعد 15 دقيقة" } });
 const uploadLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, message: { error: "محاولات كثيرة — حاول لاحقاً" } });
+// Draft autosave: generous window (autosave fires every ~2s) but capped to block floods
+const draftLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: { error: "محاولات كثيرة — حاول لاحقاً" } });
+// Telegram webhook: one extra layer in case the secret token is ever leaked
+const webhookLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
 
 // POST upload a file for a public registration form field
 router.post("/:projectId/upload", uploadLimiter, async (req: Request, res: Response) => {
@@ -423,7 +427,7 @@ router.patch("/:projectId/edit/:token", async (req: Request, res: Response) => {
 });
 
 // GET a saved draft (server-backed autosave)
-router.get("/:projectId/draft/:draftId", async (req: Request, res: Response) => {
+router.get("/:projectId/draft/:draftId", draftLimiter, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.projectId);
     const draftId = String(req.params.draftId);
@@ -443,7 +447,7 @@ router.get("/:projectId/draft/:draftId", async (req: Request, res: Response) => 
 });
 
 // PUT upsert a draft (server-backed autosave)
-router.put("/:projectId/draft/:draftId", async (req: Request, res: Response) => {
+router.put("/:projectId/draft/:draftId", draftLimiter, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.projectId);
     const draftId = String(req.params.draftId);
@@ -474,7 +478,7 @@ router.put("/:projectId/draft/:draftId", async (req: Request, res: Response) => 
 });
 
 // DELETE a draft (after successful submission)
-router.delete("/:projectId/draft/:draftId", async (req: Request, res: Response) => {
+router.delete("/:projectId/draft/:draftId", draftLimiter, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.projectId);
     const draftId = String(req.params.draftId);
@@ -785,7 +789,7 @@ router.patch("/:projectId/p/:token/edit", submitLimiter, async (req: Request, re
 const PARTICIPANT_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // same TTL as the public form's draft
 
 // GET a participant's saved draft
-router.get("/:projectId/p/:token/draft", async (req: Request, res: Response) => {
+router.get("/:projectId/p/:token/draft", draftLimiter, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.projectId);
     const token = String(req.params.token);
@@ -809,7 +813,7 @@ router.get("/:projectId/p/:token/draft", async (req: Request, res: Response) => 
 });
 
 // PUT upsert a participant's draft
-router.put("/:projectId/p/:token/draft", async (req: Request, res: Response) => {
+router.put("/:projectId/p/:token/draft", draftLimiter, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.projectId);
     const token = String(req.params.token);
@@ -836,7 +840,7 @@ router.put("/:projectId/p/:token/draft", async (req: Request, res: Response) => 
 });
 
 // DELETE a participant's draft (after successful submission)
-router.delete("/:projectId/p/:token/draft", async (req: Request, res: Response) => {
+router.delete("/:projectId/p/:token/draft", draftLimiter, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.projectId);
     const token = String(req.params.token);
@@ -851,7 +855,7 @@ router.delete("/:projectId/p/:token/draft", async (req: Request, res: Response) 
 });
 
 // POST Telegram webhook — links participant token to chat_id via /start {token}
-router.post("/telegram-webhook", async (req: Request, res: Response) => {
+router.post("/telegram-webhook", webhookLimiter, async (req: Request, res: Response) => {
   try {
     // إصلاح أمني: التحقق من هوية الطلب عبر X-Telegram-Bot-Api-Secret-Token
     // يمنع أي جهة خارجية من إرسال تحديثات مزيفة وربط chat_id بمشاركين آخرين

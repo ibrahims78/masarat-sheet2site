@@ -2,7 +2,7 @@ import { google } from "googleapis";
 import { db } from "../db.js";
 import { projects, projectFields, projectRecords as prTable } from "../../shared/schema.js";
 import { decrypt } from "./crypto.js";
-import { eq, asc, and, notInArray } from "drizzle-orm";
+import { eq, asc, and, notInArray, sql } from "drizzle-orm";
 
 // ── Auth client ───────────────────────────────────────────────
 
@@ -516,9 +516,10 @@ export async function importFromProjectSheet(
     }
 
     // syncDeleted: remove DB records whose seqNum is not present in the Sheet at all.
-    // Safety guard: only delete when we found ≥1 valid rows in the Sheet. If the Sheet
-    // is empty or all rows lack seq numbers, we treat it as "sheet not ready" and skip
-    // deletion to avoid accidentally wiping the entire DB.
+    // Safety guards:
+    //   1. Only delete when we found ≥1 valid rows in the Sheet (sheet-not-ready guard).
+    //   2. Never delete more than 30% of DB records in a single sync (partial-response guard).
+    //      If the Sheet API returned a truncated result, we must not wipe valid records.
     if (syncDeleted && sheetSeqNums.length > 0) {
       const toDelete = await db.select({ id: prTable.id, sequentialNumber: prTable.sequentialNumber })
         .from(prTable)
@@ -526,6 +527,21 @@ export async function importFromProjectSheet(
           eq(prTable.projectId, projectId),
           notInArray(prTable.sequentialNumber, sheetSeqNums)
         ));
+
+      const [{ dbCount }] = await db
+        .select({ dbCount: sql<number>`count(*)::int` })
+        .from(prTable)
+        .where(eq(prTable.projectId, projectId));
+
+      const maxSafeDelete = Math.ceil((dbCount || 0) * 0.3);
+      if (!dryRun && toDelete.length > maxSafeDelete) {
+        return {
+          ok: false,
+          message: `❌ أُوقف الحذف: سيُحذف ${toDelete.length} سجل من أصل ${dbCount} (أكثر من 30%). تحقق من بيانات الجدول وأعد المحاولة يدوياً.`,
+          added, updated, skipped, deleted: 0,
+        };
+      }
+
       if (dryRun) {
         deleted = toDelete.length;
         for (const rec of toDelete.slice(0, 50 - preview.length)) {

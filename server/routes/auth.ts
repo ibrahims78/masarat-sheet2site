@@ -63,7 +63,8 @@ router.post("/setup", setupLimiter, async (req: Request, res: Response) => {
     if ((result?.count || 0) > 0) {
       return res.status(400).json({ error: "تم إعداد النظام مسبقاً" });
     }
-    const { fullName, email, password } = req.body;
+    const { fullName, password } = req.body;
+    const email = typeof req.body.email === "string" ? req.body.email.toLowerCase().trim() : "";
     if (!fullName || !email || !password || password.length < 8) {
       return res.status(400).json({ error: "بيانات غير مكتملة أو كلمة المرور أقصر من 8 أحرف" });
     }
@@ -92,7 +93,8 @@ router.post("/setup", setupLimiter, async (req: Request, res: Response) => {
 // ── Login ─────────────────────────────────────────────────────
 router.post("/login", loginLimiter, async (req: Request, res: Response) => {
   try {
-    const { email, password, rememberMe } = req.body;
+    const { password, rememberMe } = req.body;
+    const email = typeof req.body.email === "string" ? req.body.email.toLowerCase().trim() : "";
     const [user] = await db.select().from(users).where(eq(users.email, email));
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       return res.status(401).json({ error: "بريد إلكتروني أو كلمة مرور خاطئة" });

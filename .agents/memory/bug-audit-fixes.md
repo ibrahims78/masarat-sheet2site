@@ -27,3 +27,20 @@ description: Key bugs found and fixed during full-platform audit; decisions futu
 **Rule:** `deleteMut` and `bulkDeleteMut` in `ProjectRecords.tsx`, and `deleteMut` in `Projects.tsx` had no `onError` handler — silent failures.
 **Fixed:** Added `onError` with `useToast` showing a destructive toast in AR/EN.
 **How to apply:** Every useMutation that performs a destructive or write operation must have an `onError` handler with a toast.
+
+---
+## Second-pass audit fixes (same session)
+
+## Rate limiting on draft and webhook routes (pform.ts)
+**Rule:** Public draft endpoints (GET/PUT/DELETE `/:projectId/draft/:draftId` and `/:projectId/p/:token/draft`) and Telegram webhook had no rate limiting — DoS / storage-flood risk.
+**Fixed:** Added `draftLimiter` (60 req/min) on all 6 draft routes, `webhookLimiter` (30 req/min) on `/telegram-webhook`.
+
+## Email normalization on login and setup (auth.ts)
+**Rule:** Login and setup routes accepted mixed-case emails — `User@Example.com` would not match stored `user@example.com`.
+**Fixed:** Both routes now apply `.toLowerCase().trim()` before DB lookup / insert.
+**How to apply:** Any new auth route accepting an email must normalize it the same way before any DB operation.
+
+## syncDeleted 30% safety threshold (projectSheets.ts)
+**Rule:** `importFromProjectSheet` syncDeleted could delete all DB records if Google Sheets API returned a partial/truncated result.
+**Fixed:** Added a 30% guard: if pending deletes > 30% of total DB records, the operation is aborted with a clear Arabic error message instead of wiping data.
+**Why:** Partial API responses are indistinguishable from user deletions at the data level — the threshold prevents catastrophic wipes.
