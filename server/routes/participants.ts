@@ -523,6 +523,7 @@ router.post("/bulk-delete", requireAuth, requireParticipantEditAccess, async (re
     const pid = String(req.params.id);
     const { ids, force } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "لم يتم تحديد مشاركين" });
+    if (ids.length > 500) return res.status(400).json({ error: "لا يمكن حذف أكثر من 500 مشارك في طلب واحد" });
 
     const targets = await db.select({ id: projectParticipants.id, recordId: projectParticipants.recordId, name: projectParticipants.name })
       .from(projectParticipants)
@@ -577,16 +578,22 @@ router.post("/notify-all", requireAuth, requireParticipantEditAccess, async (req
         sql`${projectParticipants.submittedAt} IS NULL`,
       ));
 
+    if (!message || !String(message).trim()) return res.status(400).json({ error: "الرسالة مطلوبة" });
+    if (String(message).length > 4096) return res.status(400).json({ error: "الرسالة طويلة جداً (الحد 4096 حرفاً)" });
+
     let sent = 0, failed = 0;
     for (let i = 0; i < targets.length; i++) {
       const p = targets[i];
       const result = await notifyParticipant(botToken, p.telegramChatId!, String(message));
       if (result.ok) {
         sent++;
-        await db.update(projectParticipants).set({
-          lastNotifiedAt: new Date(),
-          notifyCount: (p.notifyCount ?? 0) + 1,
-        }).where(eq(projectParticipants.id, p.id));
+        // Atomic increment — avoids lost-update under concurrent notify-all calls
+        await db.execute(sql`
+          UPDATE project_participants
+          SET last_notified_at = NOW(),
+              notify_count = COALESCE(notify_count, 0) + 1
+          WHERE id = ${p.id}
+        `);
       } else { failed++; }
       if (i < targets.length - 1) await sleep(BATCH_SEND_DELAY_MS);
     }
@@ -609,7 +616,9 @@ router.post("/notify-batch", requireAuth, requireParticipantEditAccess, async (r
 
     const { ids, message } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "لم يتم تحديد مشاركين" });
+    if (ids.length > 500) return res.status(400).json({ error: "لا يمكن إرسال إشعار لأكثر من 500 مشارك في طلب واحد" });
     if (!message || !String(message).trim()) return res.status(400).json({ error: "الرسالة مطلوبة" });
+    if (String(message).length > 4096) return res.status(400).json({ error: "الرسالة طويلة جداً (الحد 4096 حرفاً)" });
 
     const targets = await db.select().from(projectParticipants)
       .where(and(eq(projectParticipants.projectId, pid), inArray(projectParticipants.id, ids)));
@@ -621,10 +630,13 @@ router.post("/notify-batch", requireAuth, requireParticipantEditAccess, async (r
       const result = await notifyParticipant(botToken, p.telegramChatId, String(message));
       if (result.ok) {
         sent++;
-        await db.update(projectParticipants).set({
-          lastNotifiedAt: new Date(),
-          notifyCount: (p.notifyCount ?? 0) + 1,
-        }).where(eq(projectParticipants.id, p.id));
+        // Atomic increment — prevents lost-update under concurrent batch requests
+        await db.execute(sql`
+          UPDATE project_participants
+          SET last_notified_at = NOW(),
+              notify_count = COALESCE(notify_count, 0) + 1
+          WHERE id = ${p.id}
+        `);
       } else { failed++; }
       if (i < targets.length - 1) await sleep(BATCH_SEND_DELAY_MS);
     }
@@ -740,6 +752,7 @@ router.post("/send-invite-email-batch", requireAuth, requireParticipantEditAcces
     const projectId = String(req.params.id);
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "لم يتم تحديد مشاركين" });
+    if (ids.length > 500) return res.status(400).json({ error: "لا يمكن إرسال دعوة لأكثر من 500 مشارك في طلب واحد" });
 
     const [proj] = await db.select({ name: projects.name })
       .from(projects).where(eq(projects.id, projectId));
@@ -854,10 +867,13 @@ router.post("/:pid/notify", requireAuth, requireParticipantEditAccess, async (re
 
     const result = await notifyParticipant(botToken, p.telegramChatId, String(message));
     if (result.ok) {
-      await db.update(projectParticipants).set({
-        lastNotifiedAt: new Date(),
-        notifyCount: (p.notifyCount ?? 0) + 1,
-      }).where(eq(projectParticipants.id, p.id));
+      // Atomic increment — safe for single-participant too (consistent pattern)
+      await db.execute(sql`
+        UPDATE project_participants
+        SET last_notified_at = NOW(),
+            notify_count = COALESCE(notify_count, 0) + 1
+        WHERE id = ${p.id}
+      `);
     }
 
     res.json(result);

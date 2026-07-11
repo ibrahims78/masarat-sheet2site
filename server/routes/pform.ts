@@ -885,9 +885,11 @@ router.post("/telegram-webhook", webhookLimiter, async (req: Request, res: Respo
     // إصلاح أمني: التحقق من هوية الطلب عبر X-Telegram-Bot-Api-Secret-Token
     // يمنع أي جهة خارجية من إرسال تحديثات مزيفة وربط chat_id بمشاركين آخرين
     const expectedSecret = getTelegramWebhookSecret();
-    const receivedSecret = req.headers["x-telegram-bot-api-secret-token"];
-    if (receivedSecret !== expectedSecret) {
-      // نُرجع 200 دائماً حتى لا يُكشف للمهاجم أن الطلب رُفض
+    const receivedSecret = String(req.headers["x-telegram-bot-api-secret-token"] ?? "");
+    // Timing-safe comparison — prevents an attacker from inferring the secret
+    // character-by-character via response-time measurement.
+    if (!timingSafeCompare(receivedSecret, expectedSecret)) {
+      // Always return 200 so Telegram doesn't keep retrying a rejected webhook.
       return res.json({ ok: true });
     }
 

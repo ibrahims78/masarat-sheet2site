@@ -267,130 +267,149 @@ export type InsertProjectParticipant = typeof projectParticipants.$inferInsert;
 // ZOD SCHEMAS
 // ============================================================
 export const insertUserSchema = z.object({
-  fullName: z.string().min(2, "الاسم يجب أن يكون حرفين على الأقل"),
-  email: z.string().email("بريد إلكتروني غير صالح"),
+  fullName: z.string().min(2, "الاسم يجب أن يكون حرفين على الأقل").max(200, "الاسم طويل جداً"),
+  email: z.string().email("بريد إلكتروني غير صالح").max(320, "البريد الإلكتروني طويل جداً"),
   role: z.enum(["admin", "editor", "viewer"]).default("viewer"),
 });
 
 export const createUserSchema = insertUserSchema.extend({
-  password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
+  password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل").max(200, "كلمة المرور طويلة جداً"),
 });
 
+// Cap at 500 IDs — prevents inArray() from generating multi-MB SQL queries
 export const bulkDeleteSchema = z.object({
-  ids: z.array(z.string().uuid("معرف غير صالح")).min(1, "يجب تحديد سجل واحد على الأقل"),
+  ids: z.array(z.string().uuid("معرف غير صالح"))
+    .min(1, "يجب تحديد سجل واحد على الأقل")
+    .max(500, "لا يمكن حذف أكثر من 500 سجل في طلب واحد"),
 });
 
 export const projectFieldSchema = z.object({
-  key: z.string().min(1),
-  label: z.string().min(1),
+  key:   z.string().min(1).max(100,  "مفتاح الحقل طويل جداً"),
+  label: z.string().min(1).max(200,  "اسم الحقل طويل جداً"),
   fieldType: z.enum(["text", "number", "date", "select", "radio", "textarea", "phone", "email", "checkbox", "autoincrement", "file", "heading"]).default("text"),
   isRequired: z.boolean().default(false),
-  isVisible: z.boolean().default(true),
-  options: z.array(z.string()).nullish(),
-  stepNumber: z.number().int().min(1).default(1),
-  orderIndex: z.number().int().default(0),
-  placeholder: z.string().nullish(),
-  validationMin: z.number().nullish(),
-  validationMax: z.number().nullish(),
-  validationRegex: z.string().nullish(),
-  validationMessage: z.string().nullish(),
+  isVisible:  z.boolean().default(true),
+  // Cap options count and each option length
+  options: z.array(z.string().max(200, "الخيار طويل جداً")).max(200, "عدد الخيارات كبير جداً").nullish(),
+  stepNumber:  z.number().int().min(1).max(20).default(1),
+  orderIndex:  z.number().int().min(0).max(1000).default(0),
+  placeholder:       z.string().max(300).nullish(),
+  validationMin:     z.number().nullish(),
+  validationMax:     z.number().nullish(),
+  // Regex cap: keep sane, prevents ReDoS-adjacent patterns being stored
+  validationRegex:   z.string().max(500, "التعبير النمطي طويل جداً").nullish(),
+  validationMessage: z.string().max(300, "رسالة التحقق طويلة جداً").nullish(),
   conditions: z.array(z.object({
-    field: z.string().min(1),
-    value: z.string().nullable().optional(),
+    field: z.string().min(1).max(100),
+    value: z.string().max(500).nullable().optional(),
     negate: z.boolean().optional(),
-  })).nullable().optional(),
+  })).max(20, "عدد الشروط كبير جداً").nullable().optional(),
   conditionOperator: z.enum(["AND", "OR"]).default("AND"),
-  visibleTo: z.enum(["all", "admin", "editor"]).default("all"),
-  isReadOnly: z.boolean().default(false),
+  visibleTo:   z.enum(["all", "admin", "editor"]).default("all"),
+  isReadOnly:  z.boolean().default(false),
   isFullWidth: z.boolean().default(false),
 });
 
 export const createProjectSchema = z.object({
-  name: z.string().min(1, "اسم المشروع مطلوب"),
-  description: z.string().optional(),
-  formTitle: z.string().optional(),
-  formSubtitle: z.string().optional(),
-  invitationCode: z.string().optional(),
-  steps: z.array(z.string()).optional(),
+  name:           z.string().min(1, "اسم المشروع مطلوب").max(200, "الاسم طويل جداً"),
+  description:    z.string().max(2000, "الوصف طويل جداً").optional(),
+  formTitle:      z.string().max(200,  "عنوان النموذج طويل جداً").optional(),
+  formSubtitle:   z.string().max(500,  "العنوان الفرعي طويل جداً").optional(),
+  invitationCode: z.string().max(100,  "رمز الدعوة طويل جداً").optional(),
+  steps: z.array(z.string().max(100, "اسم الخطوة طويل جداً")).max(10, "لا يمكن تجاوز 10 خطوات").optional(),
 });
 
 export const updateProjectSchema = z.object({
-  name: z.string().min(1).optional(),
-  description: z.string().nullish(),
-  formTitle: z.string().nullish(),
-  formSubtitle: z.string().nullish(),
-  invitationCode: z.string().nullish(),
-  editTokenHours: z.coerce.number().int().min(1).max(8760).optional(),
-  formEnabled: z.boolean().optional(),
-  formDisabledMessage: z.string().nullish(),
-  steps: z.array(z.string()).optional(),
-  googleSheetId: z.string().nullish(),
-  importSheetId: z.string().nullish(),
-  googleSheetName: z.string().nullish(),
-  googleServiceAccountEmail: z.string().email().optional().or(z.literal("")).or(z.null()),
-  googleServiceAccountKey: z.string().nullish(),
-  googleDriveFolderId: z.string().nullish(),
-  driveRootFolderId: z.string().nullish(),
-  telegramChatId: z.string().nullish(),
-  telegramBotToken: z.string().nullish(),
-  driveOAuthClientId: z.string().nullish(),
-  driveOAuthClientSecret: z.string().nullish(),
+  name:                z.string().min(1).max(200).optional(),
+  description:         z.string().max(2000).nullish(),
+  formTitle:           z.string().max(200).nullish(),
+  formSubtitle:        z.string().max(500).nullish(),
+  invitationCode:      z.string().max(100).nullish(),
+  editTokenHours:      z.coerce.number().int().min(1).max(8760).optional(),
+  formEnabled:         z.boolean().optional(),
+  formDisabledMessage: z.string().max(500).nullish(),
+  steps: z.array(z.string().max(100)).max(10).optional(),
+  googleSheetId:               z.string().max(200).nullish(),
+  importSheetId:               z.string().max(200).nullish(),
+  googleSheetName:             z.string().max(200).nullish(),
+  googleServiceAccountEmail:   z.string().email().max(320).optional().or(z.literal("")).or(z.null()),
+  googleServiceAccountKey:     z.string().max(8000).nullish(),   // SA JSON key is ~2–4 KB
+  googleDriveFolderId:         z.string().max(200).nullish(),
+  driveRootFolderId:           z.string().max(200).nullish(),
+  telegramChatId:              z.string().max(100).nullish(),
+  telegramBotToken:            z.string().max(200).nullish(),
+  driveOAuthClientId:          z.string().max(200).nullish(),
+  driveOAuthClientSecret:      z.string().max(200).nullish(),
   // Participant tracking
-  participantsEnabled: z.boolean().optional(),
-  participantNameField: z.string().nullish(),
-  participantEditHours: z.coerce.number().int().min(1).max(8760).optional(),
-  participantAllowOpen: z.boolean().optional(),
+  participantsEnabled:   z.boolean().optional(),
+  participantNameField:  z.string().max(100).nullish(),
+  participantEditHours:  z.coerce.number().int().min(1).max(8760).optional(),
+  participantAllowOpen:  z.boolean().optional(),
   // Automated reminders
-  reminderEnabled: z.boolean().optional(),
-  reminderIntervalDays: z.coerce.number().int().min(1).max(30).optional(),
-  reminderMaxCount: z.coerce.number().int().min(1).max(20).optional(),
-  confirmationEmailEnabled: z.boolean().optional(),
+  reminderEnabled:        z.boolean().optional(),
+  reminderIntervalDays:   z.coerce.number().int().min(1).max(30).optional(),
+  reminderMaxCount:       z.coerce.number().int().min(1).max(20).optional(),
+  confirmationEmailEnabled:        z.boolean().optional(),
   // Public form (general registration) email flow
   publicConfirmationEmailEnabled: z.boolean().optional(),
-  publicReminderEnabled: z.boolean().optional(),
+  publicReminderEnabled:          z.boolean().optional(),
+  // Drive sync toggle (was missing from plainFields — now validated here too)
+  driveSyncEnabled: z.boolean().optional(),
 });
 
 export const updateUserRoleSchema = z.object({
-  role: z.enum(["admin", "editor", "viewer"]),
-  fullName: z.string().min(2).optional(),
-  email: z.string().email().optional(),
+  role:     z.enum(["admin", "editor", "viewer"]),
+  fullName: z.string().min(2).max(200).optional(),
+  email:    z.string().email().max(320).optional(),
 });
 
 export const globalSettingsSchema = z.object({
-  appName: z.string().min(1).optional(),
-  appLogoUrl: z.string().optional(),
-  defaultLanguage: z.enum(["ar", "en"]).optional(),
-  timezone: z.string().optional(),
+  appName:               z.string().min(1).max(100).optional(),
+  appLogoUrl:            z.string().max(500).optional(),
+  defaultLanguage:       z.enum(["ar", "en"]).optional(),
+  timezone:              z.string().max(100).optional(),
   invitationExpiryHours: z.number().int().min(1).max(8760).optional(),
-  smtpHost: z.string().optional(),
-  smtpPort: z.number().int().min(1).max(65535).optional(),
-  smtpUser: z.string().optional(),
-  smtpPass: z.string().optional(),
-  smtpFromName: z.string().optional(),
+  smtpHost:              z.string().max(253).optional(),   // max DNS hostname length
+  smtpPort:              z.number().int().min(1).max(65535).optional(),
+  smtpUser:              z.string().max(320).optional(),
+  smtpPass:              z.string().max(200).optional(),
+  smtpFromName:          z.string().max(100).optional(),
 });
 
 export const verifyCodeSchema = z.object({
   code: z.string().min(1, "رمز الدعوة مطلوب").max(200, "الرمز طويل جداً"),
 });
 
+// Public form submission: open key/value map.
+// Caps: ≤100 fields, each string value ≤ 10 000 chars — guards against
+// both mass-field injection and oversized individual values.
 export const submitFormSchema = z.object({}).catchall(
-  z.union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()])
-    .transform(v => (v === undefined ? null : v))
-);
+  z.union([
+    z.string().max(10_000, "قيمة الحقل طويلة جداً"),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.undefined(),
+  ]).transform(v => (v === undefined ? null : v))
+).superRefine((data, ctx) => {
+  if (Object.keys(data).length > 100) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "عدد الحقول كبير جداً" });
+  }
+});
 
 export const insertParticipantSchema = z.object({
-  name: z.string().min(1, "الاسم مطلوب"),
-  identifier: z.string().optional(),
+  name:           z.string().min(1, "الاسم مطلوب").max(200, "الاسم طويل جداً"),
+  identifier:     z.string().max(320).optional(),
   identifierType: z.enum(["email", "phone", "national_id", "custom"]).default("email"),
-  prefillData: z.record(z.any()).optional(),
-  notes: z.string().optional(),
+  prefillData:    z.record(z.any()).optional(),
+  notes:          z.string().max(2000).optional(),
 });
 
 export const updateParticipantSchema = z.object({
-  name: z.string().min(1).optional(),
-  identifier: z.string().nullish(),
+  name:           z.string().min(1).max(200).optional(),
+  identifier:     z.string().max(320).nullish(),
   identifierType: z.enum(["email", "phone", "national_id", "custom"]).optional(),
-  prefillData: z.record(z.any()).optional(),
-  notes: z.string().nullish(),
-  telegramChatId: z.string().nullish(),
+  prefillData:    z.record(z.any()).optional(),
+  notes:          z.string().max(2000).nullish(),
+  telegramChatId: z.string().max(100).nullish(),
 });

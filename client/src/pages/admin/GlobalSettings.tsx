@@ -45,6 +45,9 @@ export function GlobalSettings() {
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const [deleteUserName, setDeleteUserName] = useState("");
 
+  // Role change confirm dialog — prevents accidental privilege escalation/removal
+  const [pendingRoleChange, setPendingRoleChange] = useState<{ userId: string; name: string; newRole: string } | null>(null);
+
   const { data: settings } = useQuery<any>({
     queryKey: ["/api/projects/global-settings"],
     queryFn: () => fetchJson("/api/projects/global-settings"),
@@ -135,7 +138,10 @@ export function GlobalSettings() {
   const changeRoleMut = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: string }) =>
       apiRequest("PATCH", `/api/projects/users/${userId}`, { role }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/projects/users-list"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/projects/users-list"] });
+      setPendingRoleChange(null);
+    },
   });
 
   const testSmtp = async () => {
@@ -415,7 +421,7 @@ export function GlobalSettings() {
                           <td className="px-4 py-2.5">
                             <select
                               defaultValue={u.role}
-                              onChange={e => changeRoleMut.mutate({ userId: u.id, role: e.target.value })}
+                              onChange={e => setPendingRoleChange({ userId: u.id, name: u.fullName, newRole: e.target.value })}
                               className="h-7 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 text-xs font-medium"
                               data-testid={`select-role-${u.id}`}
                             >
@@ -621,6 +627,30 @@ export function GlobalSettings() {
             >
               {resetLoading ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <KeyRound className="h-4 w-4 ml-1" />}
               {ar ? "تغيير كلمة المرور" : "Change Password"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Role Change Confirm Dialog ─── */}
+      <Dialog open={!!pendingRoleChange} onOpenChange={o => !o && setPendingRoleChange(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{ar ? "تأكيد تغيير الصلاحية" : "Confirm Role Change"}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {ar
+              ? `هل تريد تغيير صلاحية "${pendingRoleChange?.name}" إلى "${pendingRoleChange?.newRole === "admin" ? "مدير" : pendingRoleChange?.newRole === "editor" ? "محرر" : "مشاهد"}"؟`
+              : `Change "${pendingRoleChange?.name}" role to "${pendingRoleChange?.newRole}"?`}
+          </p>
+          <DialogFooter className="gap-2 pt-4">
+            <Button variant="outline" onClick={() => setPendingRoleChange(null)}>{ar ? "إلغاء" : "Cancel"}</Button>
+            <Button
+              onClick={() => pendingRoleChange && changeRoleMut.mutate({ userId: pendingRoleChange.userId, role: pendingRoleChange.newRole })}
+              disabled={changeRoleMut.isPending}
+            >
+              {changeRoleMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {ar ? "تأكيد" : "Confirm"}
             </Button>
           </DialogFooter>
         </DialogContent>

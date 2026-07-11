@@ -17,3 +17,5 @@
 - [Unification shared components](unification-shared-components.md) — FieldEditor, useProjectFormEngine, DynamicFieldRenderer: add new field types/validation here only, propagates everywhere
 - [Public-form draft reminders](public-form-draft-reminders.md) — separate toggles from participant reminders; resume link uses `?resume=<draftId>` via wouter useSearch()
 - [Comprehensive bug audit fixes](bug-audit-fixes.md) — file-access ILIKE→JSON-string match, driveOAuth error leakage, DB indexes, audit-log cascade→set null, client mutation onError toasts
+- [Deep audit round 2 fixes](deep-audit-2.md) — race condition in /setup (advisory lock tx), limit/page caps in GET /records, invalid date validation, global rate limiter, draftId UUID validation, timing-safe invite code compare
+- [Deep audit round 3 fixes](deep-audit-3.md) — Zod .max() caps on all schemas, batch ID array caps (500), atomic notifyCount SQL, audit log restricted to editors

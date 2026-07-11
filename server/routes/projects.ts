@@ -425,9 +425,17 @@ router.post("/parse-excel", requireEditorOrAdmin, parseExcelLimiter, upload.sing
     const headers: string[] = [];
     const sampleData: string[][] = [];
 
+    // Cap column count — a crafted Excel with thousands of columns would create
+    // thousands of field objects in memory and inflate the response payload.
+    const MAX_COLUMNS = 100;
     worksheet.getRow(1).eachCell({ includeEmpty: false }, (cell) => {
-      headers.push(String(cell.value || "").trim());
+      if (headers.length < MAX_COLUMNS) {
+        headers.push(String(cell.value || "").trim());
+      }
     });
+    if (worksheet.columnCount > MAX_COLUMNS) {
+      // Warn but don't block — just truncate silently beyond the cap
+    }
 
     for (let r = 2; r <= Math.min(4, worksheet.rowCount); r++) {
       const row: string[] = [];
@@ -1221,7 +1229,9 @@ router.patch("/users/:userId", requireAdmin, async (req: Request, res: Response)
 
 // ─── AUDIT LOG ───────────────────────────────────────────────
 
-router.get("/:id/audit-log", requireAuth, requireProjectReadAccess, async (req: Request, res: Response) => {
+// Audit log contains full field-value change history — restrict to editors/admins,
+// not plain viewers who have no need to inspect internal change metadata.
+router.get("/:id/audit-log", requireAuth, requireEditorOrAdmin, requireProjectEditAccess, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.id);
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
