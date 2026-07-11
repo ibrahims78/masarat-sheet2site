@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { db } from "../db.js";
+import { db, pool } from "../db.js";
 import { projects, projectFields, projectRecords, projectAuditLog, users, userInvitations, systemSettings, projectCollaborators, projectFieldSchema, createProjectSchema, updateProjectSchema, updateUserRoleSchema, globalSettingsSchema, createUserSchema, bulkDeleteSchema } from "../../shared/schema.js";
 import { eq, desc, count, gte, and, ilike, or, gt, sql, inArray } from "drizzle-orm";
 import { requireAuth, requireAdmin, requireEditorOrAdmin } from "../middleware/auth.js";
@@ -1203,8 +1203,12 @@ router.post("/reset-password/:userId", requireAdmin, resetPwdLimiter, async (req
   try {
     const bcrypt = await import("bcryptjs");
     const { password } = req.body;
+    const targetId = String(req.params.userId);
     const hash = await bcrypt.default.hash(password, 12);
-    await db.update(users).set({ passwordHash: hash, mustChangePassword: true }).where(eq(users.id, String(req.params.userId)));
+    await db.update(users).set({ passwordHash: hash, mustChangePassword: true }).where(eq(users.id, targetId));
+    // D5: Invalidate all active sessions for the target user so the new password
+    // takes effect immediately — they cannot continue browsing with the old session.
+    await pool.query(`DELETE FROM session WHERE sess->>'userId' = $1`, [targetId]);
     res.json({ ok: true });
   } catch (err: any) {
     handleError(res, err);
@@ -1216,10 +1220,30 @@ router.patch("/users/:userId", requireAdmin, async (req: Request, res: Response)
     const parsed = updateUserRoleSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const { fullName, email, role } = parsed.data;
-    const upd: any = { role };
+    const uid = String(req.params.userId);
+
+    // D1: Prevent demoting the last admin — would lock every user out of the system.
+    // Must check BEFORE applying the update.
+    if (role && role !== "admin") {
+      const [target] = await db.select({ role: users.role }).from(users).where(eq(users.id, uid));
+      if (target?.role === "admin") {
+        const [{ count: adminCount }] = await db
+          .select({ count: count() })
+          .from(users)
+          .where(eq(users.role, "admin"));
+        if (Number(adminCount) <= 1) {
+          return res.status(400).json({
+            error: "لا يمكن تغيير دور آخر مدير — سيُغلق النظام على جميع المستخدمين",
+          });
+        }
+      }
+    }
+
+    const upd: any = {};
+    if (role !== undefined) upd.role = role;
     if (fullName) upd.fullName = fullName;
     if (email) upd.email = email;
-    await db.update(users).set(upd).where(eq(users.id, String(req.params.userId)));
+    await db.update(users).set(upd).where(eq(users.id, uid));
     res.json({ ok: true });
   } catch (err: any) {
     if (err.code === "23505") return res.status(409).json({ error: "البريد الإلكتروني مستخدم بالفعل" });

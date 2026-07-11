@@ -517,6 +517,13 @@ async function initDB() {
       CREATE UNIQUE INDEX IF NOT EXISTS project_participants_token_idx ON project_participants(token);
       CREATE INDEX IF NOT EXISTS project_participants_project_id_idx ON project_participants(project_id);
       CREATE INDEX IF NOT EXISTS project_participants_submitted_at_idx ON project_participants(submitted_at);
+
+      -- D3: Enforce unique field key per project — prevents frontend mapping collisions
+      CREATE UNIQUE INDEX IF NOT EXISTS project_fields_project_key_idx ON project_fields(project_id, key);
+
+      -- D4: Enforce unique sequential number per project at DB level
+      -- Partial index (WHERE NOT NULL) so NULL values (pre-sequenced rows) are not constrained
+      CREATE UNIQUE INDEX IF NOT EXISTS project_records_project_seq_idx ON project_records(project_id, sequential_number) WHERE sequential_number IS NOT NULL;
     `);
     console.log("✅ Database tables initialized");
   } catch (err) {

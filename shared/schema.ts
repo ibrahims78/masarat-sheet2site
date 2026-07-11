@@ -134,7 +134,9 @@ export const projectFields = pgTable("project_fields", {
   allowedFileTypes: jsonb("allowed_file_types").$type<string[] | null>().default(null),
   maxFileSizeMb: integer("max_file_size_mb"),
 }, (t) => ({
-  projectIdIdx: index("project_fields_project_id_idx").on(t.projectId),
+  projectIdIdx:  index("project_fields_project_id_idx").on(t.projectId),
+  // Unique (projectId, key) — prevents duplicate field keys that cause frontend mapping collisions
+  projectKeyUniq: uniqueIndex("project_fields_project_key_idx").on(t.projectId, t.key),
 }));
 
 // ============================================================
@@ -176,8 +178,10 @@ export const projectRecords = pgTable("project_records", {
   driveFolderId: text("drive_folder_id"),
   syncStatus: text("sync_status").default("local"),
 }, (t) => ({
-  projectIdIdx: index("project_records_project_id_idx").on(t.projectId),
+  projectIdIdx:   index("project_records_project_id_idx").on(t.projectId),
   submittedAtIdx: index("project_records_submitted_at_idx").on(t.submittedAt),
+  // Unique (projectId, sequentialNumber) — enforces sequential number uniqueness at DB level
+  projectSeqUniq: uniqueIndex("project_records_project_seq_idx").on(t.projectId, t.sequentialNumber),
 }));
 
 // ============================================================

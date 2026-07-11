@@ -44,8 +44,13 @@ async function getTransporter(): Promise<{ transporter: nodemailer.Transporter; 
   });
   return {
     transporter,
-    fromName: settings.smtpFromName || "منصة مسارات",
-    fromUser: settings.smtpUser,
+    // D7: Strip CR/LF to prevent email header injection via admin-supplied SMTP display name.
+    // Also strip bare double-quotes to prevent breaking the RFC 2822 quoted-string.
+    fromName: (settings.smtpFromName || "منصة مسارات")
+      .replace(/[\r\n]+/g, " ")
+      .replace(/"/g, "'")
+      .trim(),
+    fromUser: settings.smtpUser.replace(/[\r\n]+/g, "").trim(),
   };
 }
 

@@ -54,6 +54,8 @@ async function runReminderCycle() {
 
       // ── Telegram-eligible: linked + under max + overdue ──────────────
       if (botToken) {
+        // D6: Limit candidate batch size — prevents OOM on projects with tens of thousands
+        // of overdue participants. Remaining participants are picked up in the next cycle.
         const telegramCandidates = await db
           .select({ id: projectParticipants.id, name: projectParticipants.name, telegramChatId: projectParticipants.telegramChatId, token: projectParticipants.token })
           .from(projectParticipants)
@@ -68,7 +70,8 @@ async function runReminderCycle() {
                 lt(projectParticipants.lastNotifiedAt, cutoff),
               ),
             )
-          );
+          )
+          .limit(500);
 
         for (const p of telegramCandidates) {
           // ── Atomic claim: update only if state hasn't changed since query ──
@@ -137,7 +140,8 @@ async function runReminderCycle() {
               lt(projectParticipants.lastEmailedAt, cutoff),
             ),
           )
-        );
+        )
+        .limit(500); // D6: cap batch per cycle
 
       for (const p of emailCandidates) {
         if (!p.identifier) continue;
@@ -227,7 +231,8 @@ async function runPublicDraftReminderCycle() {
             // to sit untouched — avoids reminding someone still actively filling it in.
             lt(projectFormDrafts.updatedAt, cutoff),
           )
-        );
+        )
+        .limit(500); // D6: cap batch per cycle
 
       for (const c of candidates) {
         if (!c.email) continue;

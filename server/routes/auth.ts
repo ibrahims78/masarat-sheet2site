@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { createHash, timingSafeEqual } from "crypto";
-import { db } from "../db.js";
+import { db, pool } from "../db.js";
 import { users, userInvitations, systemSettings } from "../../shared/schema.js";
 import { eq, count, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
@@ -37,6 +37,14 @@ const inviteLimiter = rateLimit({
 });
 
 // I-01: Rate limit the setup-required probe — prevents reconnaissance scanning
+const changePasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: "محاولات كثيرة — حاول بعد 15 دقيقة" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const setupRequiredLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
@@ -177,42 +185,62 @@ router.get("/me", requireAuth, async (req: Request, res: Response) => {
 router.post("/register-invite", inviteLimiter, async (req: Request, res: Response) => {
   try {
     const { token, fullName, password } = req.body;
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({ error: "رمز الدعوة مطلوب" });
+    }
     if (!fullName || !password || password.length < 8) {
       return res.status(400).json({ error: "الاسم مطلوب وكلمة المرور يجب أن تكون 8 أحرف على الأقل" });
     }
-    const [inv] = await db
-      .select()
-      .from(userInvitations)
-      .where(eq(userInvitations.inviteToken, token));
-    if (!inv || inv.usedAt || inv.expiresAt < new Date()) {
-      return res.status(400).json({ error: "رمز الدعوة غير صالح أو منتهي الصلاحية" });
-    }
+
+    // Hash BEFORE the transaction — bcrypt is slow (~100 ms) and we must not hold
+    // the advisory lock or a DB transaction open while it runs.
     const hash = await bcrypt.hash(password, 12);
-    const [user] = await db
-      .insert(users)
-      .values({ fullName, email: inv.email, passwordHash: hash, role: inv.role })
-      .returning();
-    await db.update(userInvitations).set({ usedAt: new Date() }).where(eq(userInvitations.id, inv.id));
+
+    // D2: Atomic token consumption via transaction + advisory lock.
+    // Both concurrent requests grab the same lock; the second re-reads usedAt = now()
+    // and is rejected, preventing two accounts being created with one token.
+    let createdUser: any;
+    try {
+      createdUser = await db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${token}))`);
+        const [inv] = await tx.select().from(userInvitations).where(eq(userInvitations.inviteToken, token));
+        if (!inv || inv.usedAt || inv.expiresAt < new Date()) {
+          const e: any = new Error("INVITE_INVALID"); e.inviteInvalid = true; throw e;
+        }
+        const [u] = await tx
+          .insert(users)
+          .values({ fullName, email: inv.email, passwordHash: hash, role: inv.role })
+          .returning();
+        await tx.update(userInvitations).set({ usedAt: new Date() }).where(eq(userInvitations.id, inv.id));
+        return u;
+      });
+    } catch (txErr: any) {
+      if (txErr.inviteInvalid) {
+        return res.status(400).json({ error: "رمز الدعوة غير صالح أو منتهي الصلاحية" });
+      }
+      if (txErr.code === "23505") {
+        return res.status(409).json({ error: "يوجد حساب بهذا البريد الإلكتروني بالفعل" });
+      }
+      throw txErr;
+    }
 
     // H-01: Regenerate session ID after authentication
     req.session.regenerate((err) => {
       if (err) return res.status(500).json({ error: "خطأ في الجلسة" });
-      (req.session as any).userId = user.id;
-      (req.session as any).role = user.role;
-      (req.session as any).fullName = user.fullName;
+      (req.session as any).userId = createdUser.id;
+      (req.session as any).role = createdUser.role;
+      (req.session as any).fullName = createdUser.fullName;
       req.session.save(() => res.json({ ok: true }));
     });
   } catch (err: any) {
-    if (err.code === "23505") {
-      return res.status(409).json({ error: "يوجد حساب بهذا البريد الإلكتروني بالفعل" });
-    }
     console.error("[ERROR] POST /api/auth/register-invite:", err);
     res.status(500).json({ error: "خطأ داخلي في الخادم" });
   }
 });
 
 // ── Change password ───────────────────────────────────────────
-router.post("/change-password", requireAuth, async (req: Request, res: Response) => {
+// D8: Rate limited — prevents brute-forcing the old password to learn it
+router.post("/change-password", requireAuth, changePasswordLimiter, async (req: Request, res: Response) => {
   try {
     const userId = (req.session as any).userId;
     const { currentPassword, newPassword } = req.body;
@@ -234,6 +262,14 @@ router.post("/change-password", requireAuth, async (req: Request, res: Response)
       .update(users)
       .set({ passwordHash: newHash, mustChangePassword: false })
       .where(eq(users.id, userId));
+
+    // D5: Invalidate all OTHER active sessions for this user — a session hijacker who
+    // obtained an old session cookie can no longer use it after a password change.
+    // The current session (req.sessionID) is deliberately kept so the UI stays logged in.
+    await pool.query(
+      `DELETE FROM session WHERE sess->>'userId' = $1 AND sid != $2`,
+      [userId, req.sessionID]
+    );
 
     res.json({ ok: true });
   } catch (err: any) {
