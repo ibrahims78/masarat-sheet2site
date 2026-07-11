@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { createHmac } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { db } from "../db.js";
 import { projects, projectFields, projectRecords, projectAuditLog, projectFormDrafts, projectParticipants, verifyCodeSchema, submitFormSchema } from "../../shared/schema.js";
 import { eq, and, sql } from "drizzle-orm";
@@ -30,6 +30,28 @@ import { validateAndSanitizeSubmission } from "../services/fieldValidation.js";
 import { getTrustedBaseUrl } from "../utils/baseUrl.js";
 
 const router = Router();
+
+// UUID v4 pattern — draftIds are always generated client-side as crypto UUIDs
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Constant-time string comparison to prevent timing-attack leakage on secret values
+ * (invitation codes, webhook secrets, etc.).
+ * Buffers of different byte-lengths are handled by comparing the shorter one twice
+ * so execution time remains fixed regardless of which byte first differs.
+ */
+function timingSafeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a,  "utf8");
+  const bufB = Buffer.from(b,  "utf8");
+  // Length mismatch → definitely unequal; run a dummy equal-length compare so the
+  // branch is not visible in timing profiles.
+  if (bufA.length !== bufB.length) {
+    timingSafeEqual(bufA.length > 0 ? bufA.slice(0, 1) : Buffer.alloc(1),
+                    bufA.length > 0 ? bufA.slice(0, 1) : Buffer.alloc(1));
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
+}
 
 /**
  * Derives a stable Telegram webhook secret from SESSION_SECRET.
@@ -177,7 +199,7 @@ router.post("/:projectId/verify-code", verifyLimiter, async (req: Request, res: 
 
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
     if (!proj.formEnabled) return res.status(403).json({ error: proj.formDisabledMessage || "النموذج متوقف مؤقتاً" });
-    if (proj.invitationCode?.trim() && code?.trim() !== proj.invitationCode) {
+    if (proj.invitationCode?.trim() && !timingSafeCompare(code?.trim() ?? "", proj.invitationCode)) {
       return res.status(401).json({ error: "رمز الدعوة غير صحيح" });
     }
 
@@ -431,6 +453,7 @@ router.get("/:projectId/draft/:draftId", draftLimiter, async (req: Request, res:
   try {
     const pid = String(req.params.projectId);
     const draftId = String(req.params.draftId);
+    if (!UUID_RE.test(draftId)) return res.status(400).json({ error: "معرف المسودة غير صالح" });
     const [draft] = await db.select().from(projectFormDrafts)
       .where(and(eq(projectFormDrafts.projectId, pid), eq(projectFormDrafts.draftId, draftId)));
     if (!draft) return res.json({ draft: null });
@@ -451,6 +474,7 @@ router.put("/:projectId/draft/:draftId", draftLimiter, async (req: Request, res:
   try {
     const pid = String(req.params.projectId);
     const draftId = String(req.params.draftId);
+    if (!UUID_RE.test(draftId)) return res.status(400).json({ error: "معرف المسودة غير صالح" });
     const { data, step } = req.body || {};
     const [proj] = await db.select({ id: projects.id }).from(projects).where(eq(projects.id, pid));
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
@@ -482,6 +506,7 @@ router.delete("/:projectId/draft/:draftId", draftLimiter, async (req: Request, r
   try {
     const pid = String(req.params.projectId);
     const draftId = String(req.params.draftId);
+    if (!UUID_RE.test(draftId)) return res.status(400).json({ error: "معرف المسودة غير صالح" });
     await db.delete(projectFormDrafts)
       .where(and(eq(projectFormDrafts.projectId, pid), eq(projectFormDrafts.draftId, draftId)));
     res.json({ ok: true });

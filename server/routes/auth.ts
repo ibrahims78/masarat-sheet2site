@@ -1,9 +1,9 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
-import { createHash } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 import { db } from "../db.js";
 import { users, userInvitations, systemSettings } from "../../shared/schema.js";
-import { eq, count } from "drizzle-orm";
+import { eq, count, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { v4 as uuidv4 } from "uuid";
 import rateLimit from "express-rate-limit";
@@ -63,22 +63,40 @@ router.get("/setup-required", setupRequiredLimiter, async (_req, res) => {
 // H-02: setupLimiter applied
 router.post("/setup", setupLimiter, async (req: Request, res: Response) => {
   try {
-    const [result] = await db.select({ count: count() }).from(users);
-    if ((result?.count || 0) > 0) {
-      return res.status(400).json({ error: "تم إعداد النظام مسبقاً" });
-    }
     const { fullName, password } = req.body;
     const email = typeof req.body.email === "string" ? req.body.email.toLowerCase().trim() : "";
     if (!fullName || !email || !password || password.length < 8) {
       return res.status(400).json({ error: "بيانات غير مكتملة أو كلمة المرور أقصر من 8 أحرف" });
     }
+    // Hash outside the transaction to avoid holding the lock during slow bcrypt
     const hash = await bcrypt.hash(password, 12);
-    const [user] = await db
-      .insert(users)
-      .values({ fullName, email, passwordHash: hash, role: "admin" })
-      .returning();
 
-    await db.insert(systemSettings).values({ id: "singleton" }).onConflictDoNothing();
+    // Race-condition fix: advisory lock + re-check inside a transaction guarantees
+    // only one admin account is ever created, even under concurrent requests.
+    let user: any;
+    try {
+      user = await db.transaction(async (tx) => {
+        // pg_advisory_xact_lock is released automatically when the transaction ends
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('masarat_initial_setup'))`);
+        const [result] = await tx.select({ count: count() }).from(users);
+        if ((result?.count ?? 0) > 0) {
+          const err: any = new Error("already_setup");
+          err.alreadySetup = true;
+          throw err;
+        }
+        const [u] = await tx
+          .insert(users)
+          .values({ fullName, email, passwordHash: hash, role: "admin" })
+          .returning();
+        await tx.insert(systemSettings).values({ id: "singleton" }).onConflictDoNothing();
+        return u;
+      });
+    } catch (txErr: any) {
+      if (txErr.alreadySetup) {
+        return res.status(400).json({ error: "تم إعداد النظام مسبقاً" });
+      }
+      throw txErr;
+    }
 
     // H-01: Regenerate session ID after authentication to prevent session fixation
     req.session.regenerate((err) => {

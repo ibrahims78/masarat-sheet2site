@@ -560,8 +560,9 @@ router.post("/:id/fields", requireEditorOrAdmin, requireProjectEditAccess, async
 
 router.get("/:id/records", requireAuth, requireProjectReadAccess, async (req: Request, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    // Cap page and limit to prevent memory exhaustion from huge in-memory slices
+    const page  = Math.min(Math.max(parseInt(req.query.page  as string) || 1, 1), 10_000);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 500);
     const offset = (page - 1) * limit;
     const search = (req.query.search as string) || "";
 
@@ -589,15 +590,17 @@ router.get("/:id/records", requireAuth, requireProjectReadAccess, async (req: Re
       });
     }
 
-    // Date range filter on submittedAt
+    // Date range filter on submittedAt — validate before use to prevent silent filter skip
     const dateFrom = req.query.dateFrom as string;
-    const dateTo = req.query.dateTo as string;
+    const dateTo   = req.query.dateTo   as string;
     if (dateFrom) {
       const from = new Date(dateFrom);
+      if (isNaN(from.getTime())) return res.status(400).json({ error: "تنسيق تاريخ البداية غير صالح" });
       allRecords = allRecords.filter(r => r.submittedAt && r.submittedAt >= from);
     }
     if (dateTo) {
       const to = new Date(dateTo);
+      if (isNaN(to.getTime())) return res.status(400).json({ error: "تنسيق تاريخ النهاية غير صالح" });
       to.setHours(23, 59, 59, 999);
       allRecords = allRecords.filter(r => r.submittedAt && r.submittedAt <= to);
     }

@@ -3,6 +3,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import cors from "cors";
 import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -232,6 +233,17 @@ app.get("/uploads/*", async (req, res) => {
   res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
   createReadStream(filePath).pipe(res);
 });
+
+// Global API rate limiter — 500 req / 15 min per IP covers normal usage while
+// blocking floods on endpoints that don't have their own tighter limiters.
+const globalApiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "محاولات كثيرة — حاول بعد قليل" },
+});
+app.use("/api/", globalApiLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api", driveOAuthRoutes);
