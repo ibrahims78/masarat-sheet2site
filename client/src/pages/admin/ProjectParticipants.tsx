@@ -112,6 +112,10 @@ export function ProjectParticipants() {
   const [reminderIntervalDays, setReminderIntervalDays] = useState(2);
   const [reminderMaxCount, setReminderMaxCount] = useState(3);
   const [confirmationEmailEnabled, setConfirmationEmailEnabled] = useState(true);
+  // Public form (general/open registration) email flow — separate toggles from the
+  // participant-scoped ones above, since a project can run both entry paths at once.
+  const [publicConfirmationEmailEnabled, setPublicConfirmationEmailEnabled] = useState(false);
+  const [publicReminderEnabled, setPublicReminderEnabled] = useState(false);
   const [reminderSaving, setReminderSaving] = useState(false);
 
   // Import
@@ -299,6 +303,8 @@ export function ProjectParticipants() {
       setReminderIntervalDays(project.reminderIntervalDays ?? 2);
       setReminderMaxCount(project.reminderMaxCount ?? 3);
       setConfirmationEmailEnabled(project.confirmationEmailEnabled ?? true);
+      setPublicConfirmationEmailEnabled((project as any).publicConfirmationEmailEnabled ?? false);
+      setPublicReminderEnabled((project as any).publicReminderEnabled ?? false);
     }
     setReminderDialog(true);
   }
@@ -311,6 +317,8 @@ export function ProjectParticipants() {
         reminderIntervalDays,
         reminderMaxCount,
         confirmationEmailEnabled,
+        publicConfirmationEmailEnabled,
+        publicReminderEnabled,
       });
       qc.invalidateQueries({ queryKey: ["/api/projects", id] });
       setReminderDialog(false);
@@ -1086,6 +1094,52 @@ export function ProjectParticipants() {
                   ? "📬 التذكيرات تُرسل عبر: تيليغرام (إذا ربط المشارك البوت) أو بريد إلكتروني (إذا كان نوع المعرف بريداً). يعمل الجدولي تلقائياً كل 30 دقيقة."
                   : "📬 Reminders are sent via: Telegram (if linked) or Email (if identifier type is email). Scheduler runs automatically every 30 minutes."}
               </p>
+            </div>
+
+            <div className="pt-2 border-t">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-3">
+                {isAr ? "النموذج العام (تسجيل مفتوح)" : "Public Form (open registration)"}
+              </p>
+
+              {/* Public confirmation email toggle */}
+              <div className="flex items-center justify-between gap-4 rounded-lg border p-4 mb-3">
+                <div>
+                  <p className="font-medium text-sm">{isAr ? "بريد تأكيد للتسجيل العام" : "Public Registration Confirmation Email"}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {isAr
+                      ? "يرسل عند إتمام التسجيل عبر النموذج العام (يشترط وجود حقل بريد إلكتروني بالنموذج)"
+                      : "Sent when someone submits the public form (requires an email field on the form)"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPublicConfirmationEmailEnabled(!publicConfirmationEmailEnabled)}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${publicConfirmationEmailEnabled ? "bg-green-500" : "bg-slate-200 dark:bg-slate-700"}`}
+                  data-testid="toggle-public-confirmation-email"
+                >
+                  <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${publicConfirmationEmailEnabled ? (isAr ? "-translate-x-5" : "translate-x-5") : "translate-x-0"}`} />
+                </button>
+              </div>
+
+              {/* Public reminder toggle */}
+              <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                <div>
+                  <p className="font-medium text-sm">{isAr ? "تذكير بالمسودات المتروكة" : "Abandoned Draft Reminders"}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {isAr
+                      ? "يرسل تذكيراً لمن بدأ تعبئة النموذج العام ولم يكمل التسجيل (يستخدم نفس فترة وحد التذكير أعلاه)"
+                      : "Reminds people who started the public form but never submitted (uses the same interval/max above)"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPublicReminderEnabled(!publicReminderEnabled)}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${publicReminderEnabled ? "bg-primary" : "bg-slate-200 dark:bg-slate-700"}`}
+                  data-testid="toggle-public-reminder-enabled"
+                >
+                  <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${publicReminderEnabled ? (isAr ? "-translate-x-5" : "translate-x-5") : "translate-x-0"}`} />
+                </button>
+              </div>
             </div>
           </div>
 

@@ -98,6 +98,13 @@ Shared form logic hook used by **ProjectRegister**, **ProjectEditForm**, and **P
 ### 3. `client/src/components/forms/DynamicFieldRenderer.tsx`
 Renders a single form field (all types) inside public-facing forms. Used by all three form pages. Each page keeps its own unique context (upload URL, auth token, draft logic, etc.) outside this component.
 
+## Draft Autosave & Public-Form Email (Phases 5–6, added 2026-07-11)
+
+- **Participant draft autosave:** `ProjectParticipantForm.tsx` now autosaves (debounced) to dedicated `GET/PUT/DELETE /api/pform/:projectId/p/:token/draft` routes. The draft key is derived server-side from the participant's own id — never trusts a client-supplied id — so one participant's draft can never be read via another's token.
+- **Public-form confirmation/reminder email:** two new independent toggles, `publicConfirmationEmailEnabled` and `publicReminderEnabled` (project settings → participants dialog → "النموذج العام" section), separate from the participant-invite toggles. They reuse the existing participant email templates but operate on `projectFormDrafts.email` (extracted server-side from the project's first `email`-type field) rather than a participant record.
+- **Cross-device resume:** reminder emails link to `/p/:projectId/register?resume=<draftId>`; `ProjectRegister.tsx` reads `?resume=` via wouter's `useSearch()` and adopts that draftId so the draft can be continued on any device.
+- **Scheduler:** `server/services/scheduler.ts` runs a second independent cycle (`runPublicDraftReminderCycle`) every 30 minutes alongside the participant cycle, using the same atomic-claim / non-reset-on-failure pattern.
+
 ## User Preferences
 
 - Keep bilingual support (Arabic/English) intact across all changes

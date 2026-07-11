@@ -413,6 +413,12 @@ async function initDB() {
       -- Add email tracking columns to existing tables (idempotent)
       ALTER TABLE project_participants ADD COLUMN IF NOT EXISTS last_emailed_at TIMESTAMP;
       ALTER TABLE project_participants ADD COLUMN IF NOT EXISTS email_count INTEGER DEFAULT 0;
+      -- Public form (general registration) email flow — separate from participant-scoped flags
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS public_confirmation_email_enabled BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS public_reminder_enabled BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE project_form_drafts ADD COLUMN IF NOT EXISTS email TEXT;
+      ALTER TABLE project_form_drafts ADD COLUMN IF NOT EXISTS reminders_sent INTEGER DEFAULT 0;
+      ALTER TABLE project_form_drafts ADD COLUMN IF NOT EXISTS last_reminder_at TIMESTAMP;
     `);
     // Migrate legacy single-condition columns (if present) into the new conditions[] array, then drop them
     const legacyColCheck = await pool.query(`

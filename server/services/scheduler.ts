@@ -12,7 +12,7 @@
  *     so that two racing instances can't both pick the same row.
  */
 import { db, pool } from "../db.js";
-import { projects, projectParticipants } from "../../shared/schema.js";
+import { projects, projectParticipants, projectFormDrafts } from "../../shared/schema.js";
 import { eq, and, isNull, or, lt, sql } from "drizzle-orm";
 import { decrypt } from "./crypto.js";
 import { sendParticipantReminderEmail } from "./email.js";
@@ -20,6 +20,8 @@ import { getTrustedBaseUrl } from "../utils/baseUrl.js";
 
 /** Per-process overlap guard — prevents a slow cycle from spawning a second. */
 let isRunning = false;
+/** Separate lock for the public-draft cycle so a slow participant cycle never blocks it (and vice versa). */
+let isRunningPublicDrafts = false;
 
 async function runReminderCycle() {
   if (isRunning) return;
@@ -180,6 +182,95 @@ async function runReminderCycle() {
   }
 }
 
+/**
+ * Reminder cycle for abandoned PUBLIC-form drafts (general registration, not
+ * participant invites). Mirrors the participant reminder cycle's atomic-claim
+ * and non-reset-on-failure patterns, but the "candidate" is a projectFormDrafts
+ * row with a captured email, and the resumable link carries the draftId so the
+ * recipient can continue on any device (see ProjectRegister's ?resume= handling).
+ */
+async function runPublicDraftReminderCycle() {
+  if (isRunningPublicDrafts) return;
+  isRunningPublicDrafts = true;
+  try {
+    const baseUrl = getTrustedBaseUrl();
+    if (!baseUrl) return;
+
+    const activeProjects = await db
+      .select({
+        id: projects.id,
+        name: projects.name,
+        reminderIntervalDays: projects.reminderIntervalDays,
+        reminderMaxCount: projects.reminderMaxCount,
+      })
+      .from(projects)
+      .where(eq(projects.publicReminderEnabled, true));
+
+    for (const proj of activeProjects) {
+      const intervalDays = proj.reminderIntervalDays ?? 2;
+      const maxCount = proj.reminderMaxCount ?? 3;
+      const cutoff = new Date(Date.now() - intervalDays * 24 * 60 * 60 * 1000);
+
+      const candidates = await db
+        .select({ id: projectFormDrafts.id, draftId: projectFormDrafts.draftId, email: projectFormDrafts.email })
+        .from(projectFormDrafts)
+        .where(
+          and(
+            eq(projectFormDrafts.projectId, proj.id),
+            sql`${projectFormDrafts.email} IS NOT NULL`,
+            sql`COALESCE(${projectFormDrafts.remindersSent}, 0) < ${maxCount}`,
+            or(
+              isNull(projectFormDrafts.lastReminderAt),
+              lt(projectFormDrafts.lastReminderAt, cutoff),
+            ),
+            // A draft only counts as "abandoned" once it's had at least one interval
+            // to sit untouched — avoids reminding someone still actively filling it in.
+            lt(projectFormDrafts.updatedAt, cutoff),
+          )
+        );
+
+      for (const c of candidates) {
+        if (!c.email) continue;
+
+        // ── Atomic claim ──────────────────────────────────────────────
+        const now = new Date();
+        const claimed = await pool.query(
+          `UPDATE project_form_drafts
+           SET last_reminder_at = $1,
+               reminders_sent = COALESCE(reminders_sent, 0) + 1
+           WHERE id = $2
+             AND COALESCE(reminders_sent, 0) < $3
+             AND (last_reminder_at IS NULL OR last_reminder_at < $4)`,
+          [now, c.id, maxCount, cutoff]
+        );
+        if (!claimed.rowCount || claimed.rowCount < 1) continue;
+
+        try {
+          const resumeLink = `${baseUrl}/p/${proj.id}/register?resume=${encodeURIComponent(c.draftId)}`;
+          const result = await sendParticipantReminderEmail({
+            to: c.email,
+            participantName: c.email.split("@")[0],
+            projectName: proj.name,
+            inviteLink: resumeLink,
+          });
+
+          if (!result.ok) {
+            // Same non-reset-on-failure logic as the participant cycle — keep the
+            // counter consumed and respect the full interval before retrying.
+            console.error(`[scheduler] Public-draft reminder email failed for draft ${c.id} — will retry after next interval, not immediately: ${result.error || ""}`);
+          }
+        } catch (err) {
+          console.error(`[scheduler] Public-draft reminder failed for draft ${c.id}:`, err);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[scheduler] Public-draft reminder cycle error:", err);
+  } finally {
+    isRunningPublicDrafts = false;
+  }
+}
+
 const INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 export function startScheduler() {
@@ -187,6 +278,8 @@ export function startScheduler() {
   // Initial run after 1 minute (give DB time to fully initialize)
   setTimeout(() => {
     runReminderCycle();
+    runPublicDraftReminderCycle();
     setInterval(runReminderCycle, INTERVAL_MS);
+    setInterval(runPublicDraftReminderCycle, INTERVAL_MS);
   }, 60 * 1000);
 }

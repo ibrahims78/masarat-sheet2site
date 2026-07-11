@@ -150,7 +150,7 @@ export function ProjectExport() {
   const { data: preview, isLoading: previewLoading } = useQuery<PreviewData>({
     queryKey: ["/api/projects", id, "export-preview", filterParams],
     queryFn: () =>
-      fetch(`/api/projects/${id}/records?page=1&limit=1&${filterParams}`, { credentials: "include" })
+      fetchJson(`/api/projects/${id}/records?page=1&limit=1&${filterParams}`)
         .then(d => ({ total: d.total ?? 0 })),
     staleTime: 30_000,
   });

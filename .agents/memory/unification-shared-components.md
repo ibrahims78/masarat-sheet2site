@@ -17,17 +17,18 @@ Any new field type, property, or validation rule must be added to ONE place only
 - Props: field, index, allFields, isAr, onUpdate, onRemove, onMoveUp/Down, showIncludeCheckbox, expanded, onToggleExpand, fieldTypeSet, outerTestId
 
 ### 2. useProjectFormEngine (`client/src/hooks/useProjectFormEngine.ts`)
-- Used by: `ProjectRegister.tsx`, `ProjectEditForm.tsx`, `ProjectParticipantForm.tsx`
+- Used by: `ProjectRegister.tsx`, `ProjectEditForm.tsx`, `ProjectParticipantForm.tsx` — **all three now actually migrated** (as of 11 Jul 2026; a prior note here claiming ProjectEditForm was done was wrong — verify against the file, not this note, if in doubt)
 - Returns: `{ isFieldVisible(f), fieldValidationRules(f) }`
 - Internally runs the "clear hidden fields" useEffect — remove this effect from any page that adopts the hook
 - `fieldValidationRules` now provides full validation (required + email pattern + admin-configured regex/min/max) across ALL three forms — previously only ProjectParticipantForm had this
 
 ### 3. DynamicFieldRenderer (`client/src/components/forms/DynamicFieldRenderer.tsx`)
-- Used by: all three public form pages
+- Used by: all three public form pages, including `ProjectEditForm.tsx` (with `showReadOnly` + `uploadConfig.authSuffix`)
 - Props: field, register, errors, formValues, setValue, isAr, validationRules, uploadConfig, showReadOnly, labelClassName
 - `uploadConfig: { url, folder, authSuffix? }` — each page passes its own auth context
 - `showReadOnly=true` → renders isReadOnly fields as static display (used by ProjectEditForm)
 - `labelClassName` override for per-form typography differences
+- `ProjectEditForm` deliberately does NOT use `FormStepper` — it renders all step groups on one page (no step navigation), so a stepper would be misleading
 
 ### 4. FormStepper (`client/src/components/forms/FormStepper.tsx`)
 - Used by: `ProjectRegister.tsx` and `ProjectParticipantForm.tsx`

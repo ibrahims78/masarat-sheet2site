@@ -211,6 +211,8 @@ const PROJECT_SAFE_COLUMNS = {
   reminderIntervalDays: projects.reminderIntervalDays,
   reminderMaxCount: projects.reminderMaxCount,
   confirmationEmailEnabled: projects.confirmationEmailEnabled,
+  publicConfirmationEmailEnabled: projects.publicConfirmationEmailEnabled,
+  publicReminderEnabled: projects.publicReminderEnabled,
 };
 
 router.get("/:id", requireAuth, requireProjectReadAccess, async (req: Request, res: Response) => {
@@ -309,7 +311,8 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
       "googleDriveFolderId", "driveRootFolderId", "telegramChatId",
       "driveOAuthClientId",
       "participantsEnabled", "participantNameField", "participantEditHours", "participantAllowOpen",
-      "reminderEnabled", "reminderIntervalDays", "reminderMaxCount", "confirmationEmailEnabled"];
+      "reminderEnabled", "reminderIntervalDays", "reminderMaxCount", "confirmationEmailEnabled",
+      "publicConfirmationEmailEnabled", "publicReminderEnabled"];
 
     for (const field of plainFields) {
       if (field in body) update[field] = body[field];

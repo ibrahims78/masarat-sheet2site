@@ -15,3 +15,4 @@
 - [Automated reminder scheduler](scheduler-design.md) — setInterval 30min; per-process isRunning lock; atomic DB claim before send; Telegram-first channel, email as fallback (not both); rollback counter on failed send
 - [Participants hardening follow-up](participants-hardening-followup.md) — server allowlist validation, bulk-delete 409+force safety, shared base-URL helper, batch-send throttling, hidden-field clearing pattern
 - [Unification shared components](unification-shared-components.md) — FieldEditor, useProjectFormEngine, DynamicFieldRenderer: add new field types/validation here only, propagates everywhere
+- [Public-form draft reminders](public-form-draft-reminders.md) — separate toggles from participant reminders; resume link uses `?resume=<draftId>` via wouter useSearch()

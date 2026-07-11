@@ -1,5 +1,5 @@
-import { useParams } from "wouter";
-import { fetchJson } from "@/lib/queryClient";
+import { useParams, useSearch } from "wouter";
+import { fetchJson, apiRequest } from "@/lib/queryClient";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -42,6 +42,7 @@ interface FormInfo {
 
 export function ProjectRegister() {
   const { projectId } = useParams<{ projectId: string }>();
+  const urlSearch = useSearch();
   const { lang } = useLang();
   const isAr = lang === "ar";
   const [step, setStep] = useState(0);
@@ -77,8 +78,16 @@ export function ProjectRegister() {
   const draftIdKey = `pform_draft_id_${projectId}`;
   const draftRestoredRef = useRef(false);
   const [draftRestored, setDraftRestored] = useState(false);
+  // Cross-device resume: a reminder email link can carry ?resume=<draftId> so this
+  // browser adopts the server-supplied draftId instead of generating its own,
+  // letting the restore-on-load effect below pull that draft down from the server.
+  const resumeDraftId = useMemo(() => new URLSearchParams(urlSearch).get("resume") || "", [urlSearch]);
   const [draftId] = useState(() => {
     try {
+      if (resumeDraftId) {
+        localStorage.setItem(draftIdKey, resumeDraftId);
+        return resumeDraftId;
+      }
       let id = localStorage.getItem(draftIdKey);
       if (!id) {
         id = crypto.randomUUID();
@@ -86,7 +95,7 @@ export function ProjectRegister() {
       }
       return id;
     } catch {
-      return "anon";
+      return resumeDraftId || "anon";
     }
   });
 
@@ -112,8 +121,7 @@ export function ProjectRegister() {
       setDraftRestored(true);
     };
 
-    fetch(`/api/pform/${projectId}/draft/${draftId}`)
-      
+    fetchJson(`/api/pform/${projectId}/draft/${draftId}`)
       .then(res => {
         if (res?.draft?.data && Object.keys(res.draft.data).length > 0) {
           applyDraft(res.draft.data, res.draft.step);
@@ -235,10 +243,7 @@ export function ProjectRegister() {
   };
 
   const submitMut = useMutation({
-    mutationFn: (formData: Record<string, any>) => fetch(`/api/pform/${projectId}/submit`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-      body: JSON.stringify(formData),
-    }),
+    mutationFn: (formData: Record<string, any>) => apiRequest("POST", `/api/pform/${projectId}/submit`, formData),
     onSuccess: (data) => {
       if (data.ok) { setSubmitted(true); setEditToken(data.editToken); setTokenHours(data.tokenHours); clearDraft(); }
     },

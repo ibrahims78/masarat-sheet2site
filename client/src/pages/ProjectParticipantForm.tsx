@@ -1,4 +1,5 @@
 import { useParams } from "wouter";
+import { fetchJson, apiRequest } from "@/lib/queryClient";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -46,6 +47,8 @@ export function ProjectParticipantForm() {
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(160);
   const [botWarningDismissed, setBotWarningDismissed] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const draftRestoredRef = useRef(false);
   const uploadFolder = useMemo(() => crypto.randomUUID(), []);
 
   const { data: formData, isLoading, error, refetch } = useQuery<ParticipantFormData>({
@@ -81,6 +84,45 @@ export function ProjectParticipantForm() {
     }
   }, [formData?.prefillData]);
 
+  // ── Draft autosave (Phase 5) ──────────────────────────────────────────────
+  // Restore a saved-but-unsubmitted draft once, scoped server-side by the
+  // participant's own token — never touches another participant's data.
+  useEffect(() => {
+    if (draftRestoredRef.current) return;
+    if (!projectId || !token || !canSubmit || locked) return;
+    // Only restore before the participant has any prefill data worth keeping —
+    // avoids clobbering admin-provided prefillData with an older draft.
+    draftRestoredRef.current = true;
+    fetchJson(`/api/pform/${projectId}/p/${token}/draft`)
+      .then((res: any) => {
+        if (res?.draft?.data && Object.keys(res.draft.data).length > 0 && !isDirty) {
+          Object.entries(res.draft.data).forEach(([key, val]) => setValue(key, val as any));
+          if (typeof res.draft.step === "number" && res.draft.step >= 0 && res.draft.step <= reviewStep) {
+            setStep(res.draft.step);
+          }
+          setDraftRestored(true);
+        }
+      })
+      .catch(() => { /* best-effort — ignore */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, token, canSubmit, locked]);
+
+  // Autosave form values + step to the server while the participant hasn't submitted yet
+  useEffect(() => {
+    if (!projectId || !token || !canSubmit || locked || submitted) return;
+    const t = setTimeout(() => {
+      apiRequest("PUT", `/api/pform/${projectId}/p/${token}/draft`, { data: formValues, step }).catch(() => { /* best-effort */ });
+    }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(formValues), step, projectId, token, canSubmit, locked, submitted]);
+
+  const clearParticipantDraft = () => {
+    if (projectId && token) {
+      apiRequest("DELETE", `/api/pform/${projectId}/p/${token}/draft`).catch(() => { /* ignore */ });
+    }
+  };
+
   // useProjectFormEngine handles: clear-hidden-fields effect + isFieldVisible + fieldValidationRules
   const { isFieldVisible, fieldValidationRules } = useProjectFormEngine({
     fields, formValues, setValue, isAr,
@@ -108,25 +150,13 @@ export function ProjectParticipantForm() {
   }, []);
 
   const submitMut = useMutation({
-    mutationFn: (data: any) =>
-      fetch(`/api/pform/${projectId}/p/${token}/submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
-      }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || "خطأ"); return d; }),
-    onSuccess: () => setSubmitted(true),
+    mutationFn: (data: any) => apiRequest("POST", `/api/pform/${projectId}/p/${token}/submit`, data),
+    onSuccess: () => { setSubmitted(true); clearParticipantDraft(); },
   });
 
   const editMut = useMutation({
-    mutationFn: (data: any) =>
-      fetch(`/api/pform/${projectId}/p/${token}/edit`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
-      }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || "خطأ"); return d; }),
-    onSuccess: () => setSubmitted(true),
+    mutationFn: (data: any) => apiRequest("PATCH", `/api/pform/${projectId}/p/${token}/edit`, data),
+    onSuccess: () => { setSubmitted(true); clearParticipantDraft(); },
   });
 
   const isPending = submitMut.isPending || editMut.isPending;
@@ -260,6 +290,11 @@ export function ProjectParticipantForm() {
                 <p className="text-xs text-primary mt-1 font-medium">
                   {isAr ? `مرحباً ${participant.name}` : `Welcome, ${participant.name}`}
                   {canEdit && <span className="mr-2 text-amber-600 dark:text-amber-400">✏️ {isAr ? "وضع التعديل" : "Edit Mode"}</span>}
+                </p>
+              )}
+              {draftRestored && (
+                <p className="text-[10px] text-green-600 dark:text-green-400 font-medium mt-0.5" data-testid="text-draft-restored">
+                  {isAr ? "تم استرجاع بياناتك المحفوظة" : "Your saved draft was restored"}
                 </p>
               )}
             </div>

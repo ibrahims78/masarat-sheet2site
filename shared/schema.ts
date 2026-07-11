@@ -96,6 +96,9 @@ export const projects = pgTable("projects", {
   reminderIntervalDays: integer("reminder_interval_days").default(2),
   reminderMaxCount: integer("reminder_max_count").default(3),
   confirmationEmailEnabled: boolean("confirmation_email_enabled").default(true),
+  // ── Public form (general registration, no participant pre-invite) email flow ──
+  publicConfirmationEmailEnabled: boolean("public_confirmation_email_enabled").default(false),
+  publicReminderEnabled: boolean("public_reminder_enabled").default(false),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -141,6 +144,11 @@ export const projectFormDrafts = pgTable("project_form_drafts", {
   draftId: text("draft_id").notNull(),
   data: jsonb("data").notNull().default({}),
   step: integer("step").default(0),
+  // Extracted from the draft's own data (the project's first email-type field, if any) —
+  // lets the abandoned-draft reminder cycle find candidates without re-parsing field defs.
+  email: text("email"),
+  remindersSent: integer("reminders_sent").default(0),
+  lastReminderAt: timestamp("last_reminder_at"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -313,6 +321,9 @@ export const updateProjectSchema = z.object({
   reminderIntervalDays: z.coerce.number().int().min(1).max(30).optional(),
   reminderMaxCount: z.coerce.number().int().min(1).max(20).optional(),
   confirmationEmailEnabled: z.boolean().optional(),
+  // Public form (general registration) email flow
+  publicConfirmationEmailEnabled: z.boolean().optional(),
+  publicReminderEnabled: z.boolean().optional(),
 });
 
 export const updateUserRoleSchema = z.object({

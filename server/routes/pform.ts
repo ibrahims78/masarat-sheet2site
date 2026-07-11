@@ -7,6 +7,21 @@ import { appendRecordToSheet, updateRecordRow } from "../services/projectSheets.
 import { insertRecordAtomic } from "../services/recordInsert.js";
 import { decrypt } from "../services/crypto.js";
 import { sendParticipantConfirmationEmail } from "../services/email.js";
+
+/**
+ * Finds the value of the project's first email-type field within submitted/draft
+ * data. Reused by both the public submit route (confirmation email) and the
+ * public draft PUT route (so `projectFormDrafts.email` stays populated for the
+ * abandoned-draft reminder cycle to scan cheaply, without re-parsing field defs).
+ */
+async function extractEmailFromData(pid: string, data: Record<string, any> | null | undefined): Promise<string | null> {
+  if (!data) return null;
+  const [emailField] = await db.select({ key: projectFields.key }).from(projectFields)
+    .where(and(eq(projectFields.projectId, pid), eq(projectFields.fieldType, "email")));
+  if (!emailField) return null;
+  const val = data[emailField.key];
+  return typeof val === "string" && val.trim() ? val.trim() : null;
+}
 import rateLimit from "express-rate-limit";
 import { fileUpload, publicFileUrl, validateMimeType, validateFieldRestrictions, organizeUploadedFile } from "../middleware/upload.js";
 import { handleError } from "../utils/errorHandler.js";
@@ -207,6 +222,7 @@ router.post("/:projectId/submit", submitLimiter, async (req: Request, res: Respo
       name: projects.name,
       telegramBotTokenEnc: projects.telegramBotTokenEnc,
       telegramChatId: projects.telegramChatId,
+      publicConfirmationEmailEnabled: projects.publicConfirmationEmailEnabled,
     }).from(projects).where(eq(projects.id, pid));
     if (!proj) return res.status(404).json({ error: "المشروع غير موجود" });
 
@@ -291,6 +307,34 @@ router.post("/:projectId/submit", submitLimiter, async (req: Request, res: Respo
         });
       };
       sendTelegram().catch(console.error);
+    }
+
+    // Confirmation email (non-blocking) — public-form flow, gated on its own toggle
+    // (separate from the participant-scoped confirmationEmailEnabled) since a project
+    // may run open registration and invited participants at the same time.
+    if (proj.publicConfirmationEmailEnabled) {
+      extractEmailFromData(pid, finalData as any).then(email => {
+        if (!email) return;
+        const baseUrl = getTrustedBaseUrl(req);
+        const editLink = baseUrl ? `${baseUrl}/p/${pid}/edit/${record.edit_token}` : "";
+        if (!editLink) return;
+        sendParticipantConfirmationEmail({
+          to: email,
+          participantName: (finalData as any)?.name || "مستخدم النموذج",
+          projectName: proj.name,
+          editLink,
+          editDeadlineIso: tokenExpiresAt.toISOString(),
+        }).catch(console.error);
+      }).catch(console.error);
+    }
+
+    // Clear the abandoned-draft record on successful submit — a draftId sent by
+    // the client is optional here (public submit doesn't require one), so this
+    // only cleans up if the caller happens to include it.
+    if (req.body?.draftId) {
+      db.delete(projectFormDrafts)
+        .where(and(eq(projectFormDrafts.projectId, pid), eq(projectFormDrafts.draftId, String(req.body.draftId))))
+        .catch(console.error);
     }
 
     (req.session as any)[`code_${pid}`] = false;
@@ -410,13 +454,17 @@ router.put("/:projectId/draft/:draftId", async (req: Request, res: Response) => 
     const [existing] = await db.select({ id: projectFormDrafts.id }).from(projectFormDrafts)
       .where(and(eq(projectFormDrafts.projectId, pid), eq(projectFormDrafts.draftId, draftId)));
 
+    // Populate `email` from the project's email-type field (if any) so the
+    // abandoned-draft reminder cycle can find candidates cheaply.
+    const email = await extractEmailFromData(pid, data);
+
     if (existing) {
       await db.update(projectFormDrafts)
-        .set({ data: data || {}, step: step ?? 0, updatedAt: new Date() })
+        .set({ data: data || {}, step: step ?? 0, email, updatedAt: new Date() })
         .where(eq(projectFormDrafts.id, existing.id));
     } else {
       await db.insert(projectFormDrafts).values({
-        projectId: pid, draftId, data: data || {}, step: step ?? 0,
+        projectId: pid, draftId, data: data || {}, step: step ?? 0, email,
       });
     }
     res.json({ ok: true });
@@ -724,6 +772,80 @@ router.patch("/:projectId/p/:token/edit", submitLimiter, async (req: Request, re
       }).catch(console.error);
     }
 
+    res.json({ ok: true });
+  } catch (err: any) { handleError(res, err); }
+});
+
+// ── Participant draft autosave (server-backed) ───────────────────────────────
+// Scoped by the participant's own token (already the participant's private
+// credential — same trust boundary as every other /p/:token route), and keyed
+// server-side by participant.id (never by a client-supplied draftId), so one
+// participant can never read or overwrite another participant's draft even if
+// they guessed a draftId string.
+const PARTICIPANT_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // same TTL as the public form's draft
+
+// GET a participant's saved draft
+router.get("/:projectId/p/:token/draft", async (req: Request, res: Response) => {
+  try {
+    const pid = String(req.params.projectId);
+    const token = String(req.params.token);
+    const [participant] = await db.select({ id: projectParticipants.id, submittedAt: projectParticipants.submittedAt })
+      .from(projectParticipants)
+      .where(and(eq(projectParticipants.token, token as any), eq(projectParticipants.projectId, pid)));
+    if (!participant) return res.status(404).json({ error: "رابط غير صالح" });
+    if (participant.submittedAt) return res.json({ draft: null }); // already submitted — use the record data, not a draft
+
+    const draftId = `participant:${participant.id}`;
+    const [draft] = await db.select().from(projectFormDrafts)
+      .where(and(eq(projectFormDrafts.projectId, pid), eq(projectFormDrafts.draftId, draftId)));
+    if (!draft) return res.json({ draft: null });
+    const ageMs = Date.now() - new Date(draft.updatedAt as any).getTime();
+    if (ageMs > PARTICIPANT_DRAFT_TTL_MS) {
+      await db.delete(projectFormDrafts).where(eq(projectFormDrafts.id, draft.id));
+      return res.json({ draft: null });
+    }
+    res.json({ draft: { data: draft.data, step: draft.step } });
+  } catch (err: any) { handleError(res, err); }
+});
+
+// PUT upsert a participant's draft
+router.put("/:projectId/p/:token/draft", async (req: Request, res: Response) => {
+  try {
+    const pid = String(req.params.projectId);
+    const token = String(req.params.token);
+    const [participant] = await db.select({ id: projectParticipants.id, submittedAt: projectParticipants.submittedAt })
+      .from(projectParticipants)
+      .where(and(eq(projectParticipants.token, token as any), eq(projectParticipants.projectId, pid)));
+    if (!participant) return res.status(404).json({ error: "رابط غير صالح" });
+    if (participant.submittedAt) return res.json({ ok: true }); // no-op — already submitted, nothing to autosave
+
+    const draftId = `participant:${participant.id}`;
+    const { data, step } = req.body || {};
+    const [existing] = await db.select({ id: projectFormDrafts.id }).from(projectFormDrafts)
+      .where(and(eq(projectFormDrafts.projectId, pid), eq(projectFormDrafts.draftId, draftId)));
+
+    if (existing) {
+      await db.update(projectFormDrafts)
+        .set({ data: data || {}, step: step ?? 0, updatedAt: new Date() })
+        .where(eq(projectFormDrafts.id, existing.id));
+    } else {
+      await db.insert(projectFormDrafts).values({ projectId: pid, draftId, data: data || {}, step: step ?? 0 });
+    }
+    res.json({ ok: true });
+  } catch (err: any) { handleError(res, err); }
+});
+
+// DELETE a participant's draft (after successful submission)
+router.delete("/:projectId/p/:token/draft", async (req: Request, res: Response) => {
+  try {
+    const pid = String(req.params.projectId);
+    const token = String(req.params.token);
+    const [participant] = await db.select({ id: projectParticipants.id })
+      .from(projectParticipants)
+      .where(and(eq(projectParticipants.token, token as any), eq(projectParticipants.projectId, pid)));
+    if (!participant) return res.status(404).json({ error: "رابط غير صالح" });
+    const draftId = `participant:${participant.id}`;
+    await db.delete(projectFormDrafts).where(and(eq(projectFormDrafts.projectId, pid), eq(projectFormDrafts.draftId, draftId)));
     res.json({ ok: true });
   } catch (err: any) { handleError(res, err); }
 });
