@@ -290,8 +290,13 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // Hold interval IDs so we can clear them on graceful shutdown.
 let reminderIntervalId: ReturnType<typeof setInterval> | null = null;
 let draftReminderIntervalId: ReturnType<typeof setInterval> | null = null;
+// Guard against calling startScheduler() more than once (e.g. hot-reload),
+// which would stack up duplicate SIGTERM handlers and double-schedule cycles.
+let schedulerStarted = false;
 
 export function startScheduler() {
+  if (schedulerStarted) return;
+  schedulerStarted = true;
   console.log("⏰ Reminder scheduler started — runs every 30 minutes");
   // Initial run after 1 minute (give DB time to fully initialize)
   setTimeout(() => {
@@ -305,6 +310,7 @@ export function startScheduler() {
   const stop = () => {
     if (reminderIntervalId) clearInterval(reminderIntervalId);
     if (draftReminderIntervalId) clearInterval(draftReminderIntervalId);
+    schedulerStarted = false;
   };
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);

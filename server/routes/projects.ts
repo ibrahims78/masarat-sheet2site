@@ -845,7 +845,7 @@ router.patch("/:id/records/:recordId", requireEditorOrAdmin, requireProjectEditA
 
     const [updated] = await db.update(projectRecords)
       .set({ data: safeBody, updatedAt: new Date() })
-      .where(eq(projectRecords.id, String(req.params.recordId)))
+      .where(and(eq(projectRecords.id, String(req.params.recordId)), eq(projectRecords.projectId, pid)))
       .returning();
 
     await db.insert(projectAuditLog).values({

@@ -267,6 +267,7 @@ export async function deleteFileFromDrive(projectId: string, fileId: string): Pr
     await drive.files.delete({ fileId, supportsAllDrives: true });
   } catch (err: any) {
     if (err?.code === 404 || err?.status === 404) return;
+    if (isOAuthError(err)) await setDriveOAuthError(projectId, "انتهت صلاحية تفويض Google Drive — أعد ربط حساب Google من إعدادات المشروع");
     throw err;
   }
 }
@@ -280,6 +281,7 @@ export async function deleteFolderFromDrive(projectId: string, folderId: string)
     await drive.files.delete({ fileId: folderId, supportsAllDrives: true });
   } catch (err: any) {
     if (err?.code === 404 || err?.status === 404) return;
+    if (isOAuthError(err)) await setDriveOAuthError(projectId, "انتهت صلاحية تفويض Google Drive — أعد ربط حساب Google من إعدادات المشروع");
     throw err;
   }
 }

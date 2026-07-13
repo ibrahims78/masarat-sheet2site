@@ -352,10 +352,13 @@ export async function sendParticipantReminderEmail(opts: {
     const safeApp     = escapeHtml(appName);
     const safeLink    = encodeURI(inviteLink);
 
+    // Strip CRLF from `to` and `subject` to prevent header injection attacks.
+    const safeToReminder = to.replace(/[\r\n]+/g, "");
+    const safeSubjectReminder = `🔔 تذكير: لم تُكمل تسجيلك في ${escapeHtml(projectName)}`.replace(/[\r\n]+/g, " ");
     await transporter.sendMail({
       from: `"${fromName}" <${fromUser}>`,
-      to,
-      subject: `🔔 تذكير: لم تُكمل تسجيلك في ${escapeHtml(projectName)}`,
+      to: safeToReminder,
+      subject: safeSubjectReminder,
       html: `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>

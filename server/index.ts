@@ -272,6 +272,20 @@ if (existsSync(clientDist)) {
   });
 }
 
+// Global error handler — catches any unhandled errors thrown from middleware or routes.
+// Must be registered AFTER all routes and static serving.
+// Never exposes stack traces in production.
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error("[UNHANDLED]", err);
+  const showDetail = process.env.SHOW_ERROR_DETAIL === "1";
+  if (!res.headersSent) {
+    res.status(err?.status ?? 500).json({
+      error: "خطأ داخلي في الخادم",
+      ...(showDetail && { detail: err?.message }),
+    });
+  }
+});
+
 async function initDB() {
   try {
     await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);

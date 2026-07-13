@@ -193,7 +193,8 @@ router.get("/me", requireAuth, async (req: Request, res: Response) => {
 // H-02: inviteLimiter applied
 router.post("/register-invite", inviteLimiter, async (req: Request, res: Response) => {
   try {
-    const { token, fullName, password } = req.body;
+    const { token, password } = req.body;
+    const fullName = typeof req.body.fullName === "string" ? req.body.fullName.trim() : "";
     if (!token || typeof token !== "string") {
       return res.status(400).json({ error: "رمز الدعوة مطلوب" });
     }
