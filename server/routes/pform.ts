@@ -286,19 +286,21 @@ router.post("/:projectId/submit", submitLimiter, async (req: Request, res: Respo
         const token = decrypt(proj.telegramBotTokenEnc!);
         if (!token) return;
 
-        // Fetch field labels for human-readable output
+        // Fetch field labels + types for human-readable output
         const fieldDefs = await db
-          .select({ key: projectFields.key, label: projectFields.label })
+          .select({ key: projectFields.key, label: projectFields.label, fieldType: projectFields.fieldType })
           .from(projectFields)
           .where(eq(projectFields.projectId, pid));
         const labelMap = Object.fromEntries(fieldDefs.map(f => [f.key, f.label]));
+        // Keys of file-upload fields — excluded from Telegram messages (paths are not readable)
+        const fileKeys = new Set(fieldDefs.filter(f => f.fieldType === "file").map(f => f.key));
 
         const data = finalData as Record<string, any>;
         const escape = (s: string) =>
           String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
         const rows = Object.entries(data)
-          .filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== "")
+          .filter(([k, v]) => !fileKeys.has(k) && v !== null && v !== undefined && String(v).trim() !== "")
           .map(([k, v]) => {
             const label = escape(labelMap[k] || k);
             const val   = escape(String(v));
@@ -725,11 +727,12 @@ router.post("/:projectId/p/:token/submit", submitLimiter, async (req: Request, r
       const sendTelegram = async () => {
         const tok = decrypt(proj.telegramBotTokenEnc!);
         if (!tok) return;
-        const fieldDefs = await db.select({ key: projectFields.key, label: projectFields.label }).from(projectFields).where(eq(projectFields.projectId, pid));
+        const fieldDefs = await db.select({ key: projectFields.key, label: projectFields.label, fieldType: projectFields.fieldType }).from(projectFields).where(eq(projectFields.projectId, pid));
         const labelMap = Object.fromEntries(fieldDefs.map(f => [f.key, f.label]));
+        const fileKeys = new Set(fieldDefs.filter(f => f.fieldType === "file").map(f => f.key));
         const data = finalData as Record<string, any>;
         const escape = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const rows = Object.entries(data).filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== "").map(([k, v]) => `<b>${escape(labelMap[k] || k)}:</b> ${escape(String(v))}`).join("\n");
+        const rows = Object.entries(data).filter(([k, v]) => !fileKeys.has(k) && v !== null && v !== undefined && String(v).trim() !== "").map(([k, v]) => `<b>${escape(labelMap[k] || k)}:</b> ${escape(String(v))}`).join("\n");
         const now = new Date().toLocaleString("ar-SY", { timeZone: "Asia/Damascus", dateStyle: "full", timeStyle: "medium" });
         const lines = [`🔔 <b>تسجيل جديد</b>`, `📁 المشروع: <b>${escape(proj.name)}</b>`, `👤 المشارك: <b>${escape(participant.name)}</b>`];
         if (seqNum) lines.push(`🔢 رقم السجل: <b>${seqNum}</b>`);

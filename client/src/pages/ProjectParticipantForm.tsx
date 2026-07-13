@@ -144,7 +144,10 @@ export function ProjectParticipantForm() {
   useEffect(() => {
     const el = headerRef.current;
     if (!el) return;
-    const obs = new ResizeObserver(entries => setHeaderH(entries[0].contentRect.height));
+    // Use offsetHeight (includes borders) for accurate sticky-header offset
+    const measure = () => setHeaderH(el.offsetHeight);
+    measure(); // immediate measurement on mount
+    const obs = new ResizeObserver(measure);
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
@@ -253,7 +256,7 @@ export function ProjectParticipantForm() {
   const errMsg = submitMut.error?.message || editMut.error?.message;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950" dir={isAr ? "rtl" : "ltr"}>
       {/* ─── Sticky header ─── */}
       <div ref={headerRef} className="fixed top-0 inset-x-0 z-30">
         {/* Bot activation warning */}
@@ -379,25 +382,25 @@ export function ProjectParticipantForm() {
               variant="outline"
               onClick={goPrev}
               disabled={step === 0}
-              className={cn("gap-1", isAr ? "flex-row-reverse" : "")}
+              className="gap-2 h-10 px-4"
               data-testid="button-prev-step"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className={cn("h-4 w-4", !isAr && "rotate-180")} />
               {isAr ? "السابق" : "Previous"}
             </Button>
 
             {step < reviewStep - 1 ? (
-              <Button type="button" onClick={goNext} className="gap-1" data-testid="button-next-step">
+              <Button type="button" onClick={goNext} className="gap-2 h-10 px-5" data-testid="button-next-step">
                 {isAr ? "التالي" : "Next"}
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className={cn("h-4 w-4", !isAr && "rotate-180")} />
               </Button>
             ) : step === reviewStep - 1 ? (
-              <Button type="submit" className="gap-1" data-testid="button-go-review">
+              <Button type="button" onClick={goNext} className="gap-2 h-10 px-5" data-testid="button-go-review">
                 {isAr ? "مراجعة" : "Review"}
                 <ClipboardCheck className="h-4 w-4" />
               </Button>
             ) : (
-              <Button type="submit" disabled={isPending} className="gap-1 bg-primary" data-testid="button-submit">
+              <Button type="submit" disabled={isPending} className="gap-2 h-10 px-5 bg-primary" data-testid="button-submit">
                 {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : canEdit ? <Send className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
                 {canEdit ? (isAr ? "تحديث البيانات" : "Update Data") : (isAr ? "إرسال التسجيل" : "Submit Registration")}
               </Button>

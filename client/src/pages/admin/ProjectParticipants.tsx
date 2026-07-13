@@ -395,6 +395,18 @@ export function ProjectParticipants() {
           <Button variant="outline" size="sm" onClick={doExport} data-testid="button-export-participants">
             <Download className="h-3.5 w-3.5 ml-1" />{isAr ? "تصدير" : "Export"}
           </Button>
+          <Button
+            variant="outline" size="sm"
+            className="border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/20"
+            disabled={templateLoading}
+            onClick={downloadTemplate}
+            data-testid="button-download-template"
+          >
+            {templateLoading
+              ? <RefreshCw className="h-3.5 w-3.5 ml-1 animate-spin" />
+              : <Download className="h-3.5 w-3.5 ml-1" />}
+            {isAr ? "نموذج Excel فارغ" : "Blank Template"}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setImportDialog(true)} data-testid="button-import-participants">
             <Upload className="h-3.5 w-3.5 ml-1" />{isAr ? "استيراد Excel" : "Import Excel"}
           </Button>
