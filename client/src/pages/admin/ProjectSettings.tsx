@@ -17,8 +17,9 @@ import {
   ChevronDown, ChevronUp,
   Upload, TableProperties, Wrench, RefreshCw, BotMessageSquare, ArrowUpToLine,
   History, User, Clock, FolderSync, HardDrive, AlertTriangle, CheckCircle2, XCircle,
-  UserPlus, Users2, ShieldCheck,
+  UserPlus, Users2, ShieldCheck, Copy,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
 import type { Project, ProjectField } from "@shared/schema";
@@ -59,6 +60,11 @@ export function ProjectSettings() {
   const [botInfo, setBotInfo] = useState<{ username: string; firstName: string } | null>(null);
   const [botInfoLoading, setBotInfoLoading] = useState(false);
   const [chatIdGuide, setChatIdGuide] = useState(false);
+
+  // Copy-integrations dialog state
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copySourceId, setCopySourceId] = useState<string>("");
+  const [copySelections, setCopySelections] = useState<string[]>(["sheets", "telegram", "drive"]);
 
   // Drive-specific state
   const [driveModal, setDriveModal] = useState(false);
@@ -102,6 +108,14 @@ export function ProjectSettings() {
     queryFn: () => fetchJson("/api/projects/users-list"),
     enabled: tab === "collaborators" && isAdmin,
   });
+  // All projects for the copy-integrations source dropdown
+  const { data: allProjects = [] } = useQuery<any[]>({
+    queryKey: ["/api/projects"],
+    queryFn: () => fetchJson("/api/projects"),
+    enabled: copyOpen,
+  });
+  const otherProjects = (allProjects as any[]).filter((p: any) => p.id !== id);
+
   // Editors not yet collaborators and not the project owner
   const availableEditors = allUsers.filter(
     (u: any) =>
@@ -141,6 +155,29 @@ export function ProjectSettings() {
     },
     onError: () => toast({ variant: "destructive", description: isAr ? "فشل إلغاء الوصول" : "Failed to revoke access" }),
   });
+
+  const copyIntegMut = useMutation({
+    mutationFn: ({ sourceId, integrations }: { sourceId: string; integrations: string[] }) =>
+      apiRequest("POST", `/api/projects/${id}/copy-integrations-from/${sourceId}`, { integrations }),
+    onSuccess: (data: any) => {
+      const NAMES: Record<string, string> = {
+        sheets: "Google Sheets",
+        telegram: "Telegram",
+        drive: "Drive OAuth",
+      };
+      const copied = (data.copied as string[] || []).map(k => NAMES[k] || k).join("، ");
+      qc.invalidateQueries({ queryKey: ["/api/projects", id] });
+      setCopyOpen(false);
+      setCopySourceId("");
+      toast({ description: isAr ? `✅ تم نسخ إعدادات: ${copied}` : `✅ Copied settings: ${copied}` });
+    },
+    onError: (err: any) => toast({ variant: "destructive", description: `❌ ${err.message}` }),
+  });
+
+  const toggleCopySelection = (key: string) =>
+    setCopySelections(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
 
   const { data: syncStats, refetch: refetchStats } = useQuery<{
     local: number; synced: number; failed: number; syncing: number; total: number; hasFileFields: boolean;
@@ -445,6 +482,29 @@ export function ProjectSettings() {
             </button>
           ))}
         </div>
+
+        {/* ══ COPY INTEGRATIONS BANNER — shown on integration tabs ══ */}
+        {(tab === "sheets" || tab === "telegram" || tab === "drive") && (
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-dashed border-primary/40 bg-primary/5">
+            <div className="flex items-center gap-2">
+              <Copy className="h-4 w-4 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-primary">
+                  {isAr ? "استيراد الإعدادات من مشروع آخر" : "Import settings from another project"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {isAr
+                    ? "انسخ إعدادات Google Sheets أو Telegram أو Drive من أي مشروع لديك"
+                    : "Copy Google Sheets, Telegram, or Drive settings from any of your projects"}
+                </p>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" className="shrink-0" onClick={() => { setCopyOpen(true); setCopySelections(["sheets", "telegram", "drive"]); }}>
+              <Copy className="h-3.5 w-3.5 ml-1" />
+              {isAr ? "استيراد" : "Import"}
+            </Button>
+          </div>
+        )}
 
         {/* ══ FORM TAB ══ */}
         {tab === "form" && (
@@ -1371,6 +1431,118 @@ export function ProjectSettings() {
           </div>
         )}
       </div>
+
+      {/* ══ COPY INTEGRATIONS DIALOG ══ */}
+      <Dialog open={copyOpen} onOpenChange={open => { setCopyOpen(open); if (!open) setCopySourceId(""); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Copy className="h-4 w-4 text-primary" />
+              {isAr ? "استيراد إعدادات التكاملات" : "Import Integration Settings"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5 py-1">
+
+            {/* Source project picker */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                {isAr ? "المشروع المصدر" : "Source Project"}
+              </label>
+              <Select value={copySourceId} onValueChange={setCopySourceId}>
+                <SelectTrigger data-testid="select-copy-source">
+                  <SelectValue placeholder={isAr ? "اختر مشروعاً..." : "Select a project..."} />
+                </SelectTrigger>
+                <SelectContent>
+                  {otherProjects.length === 0 ? (
+                    <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                      {isAr ? "لا توجد مشاريع أخرى" : "No other projects found"}
+                    </div>
+                  ) : (
+                    otherProjects.map((p: any) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Integration checkboxes */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                {isAr ? "اختر التكاملات للنسخ" : "Select integrations to copy"}
+              </label>
+              <div className="space-y-2 mt-1">
+                {[
+                  { key: "sheets", icon: "📊", label: "Google Sheets", desc: isAr ? "Sheet ID، بريد الحساب، مفتاح JSON" : "Sheet ID, service account email & key" },
+                  { key: "telegram", icon: "✈️", label: "Telegram", desc: isAr ? "Bot Token، Chat ID" : "Bot Token, Chat ID" },
+                  { key: "drive", icon: "💾", label: "Drive OAuth", desc: isAr ? "Client ID/Secret، Refresh Token، مجلد Drive" : "Client ID/Secret, Refresh Token, Drive folder" },
+                ].map(({ key, icon, label, desc }) => {
+                  const checked = copySelections.includes(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleCopySelection(key)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-right transition-colors ${
+                        checked
+                          ? "border-primary bg-primary/5 text-foreground"
+                          : "border-slate-200 dark:border-slate-700 text-muted-foreground hover:border-slate-300 dark:hover:border-slate-600"
+                      }`}
+                      data-testid={`copy-sel-${key}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        readOnly
+                        className="rounded shrink-0 accent-primary pointer-events-none"
+                      />
+                      <span className="text-base shrink-0">{icon}</span>
+                      <div className="flex-1 min-w-0 text-right">
+                        <p className="text-sm font-semibold leading-none">{label}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Warning */}
+            {copySourceId && copySelections.length > 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  {isAr
+                    ? "سيتم استبدال الإعدادات الحالية لهذا المشروع بإعدادات المشروع المصدر. لا يمكن التراجع عن هذه العملية."
+                    : "Current settings for this project will be overwritten with the source project's settings. This action cannot be undone."}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setCopyOpen(false)} disabled={copyIntegMut.isPending}>
+              {isAr ? "إلغاء" : "Cancel"}
+            </Button>
+            <Button
+              onClick={() => {
+                if (!copySourceId) return toast({ variant: "destructive", description: isAr ? "اختر مشروعاً مصدراً" : "Please select a source project" });
+                if (copySelections.length === 0) return toast({ variant: "destructive", description: isAr ? "اختر تكاملاً واحداً على الأقل" : "Select at least one integration" });
+                copyIntegMut.mutate({ sourceId: copySourceId, integrations: copySelections });
+              }}
+              disabled={copyIntegMut.isPending || !copySourceId || copySelections.length === 0}
+              data-testid="button-confirm-copy"
+            >
+              {copyIntegMut.isPending ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Copy className="h-4 w-4 ml-1" />}
+              {isAr ? "نسخ الإعدادات" : "Copy Settings"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </Layout>
   );
 }

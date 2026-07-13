@@ -366,6 +366,96 @@ router.patch("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: 
   }
 });
 
+// ─── COPY INTEGRATIONS ───────────────────────────────────────────────────────
+// Copies Google Sheets / Telegram / Drive OAuth settings (including encrypted
+// credentials) from a source project to this project at the DB level — no
+// decryption/re-encryption needed, so plaintext secrets never touch Node.js memory.
+// Requires: ownership of destination + at least read access to source.
+router.post("/:id/copy-integrations-from/:sourceId", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
+  try {
+    const destId   = String(req.params.id);
+    const sourceId = String(req.params.sourceId);
+
+    if (destId === sourceId) {
+      return res.status(400).json({ error: "المشروع المصدر والوجهة متطابقان" });
+    }
+
+    // Validate requested integrations list
+    const VALID = ["sheets", "telegram", "drive"] as const;
+    type IntegKey = typeof VALID[number];
+    const raw: unknown = req.body.integrations;
+    if (!Array.isArray(raw) || raw.length === 0) {
+      return res.status(400).json({ error: "حدد تكاملاً واحداً على الأقل" });
+    }
+    const selected = (raw as string[]).filter((i): i is IntegKey =>
+      (VALID as readonly string[]).includes(i)
+    );
+    if (selected.length === 0) {
+      return res.status(400).json({ error: "قيم التكامل غير صالحة" });
+    }
+
+    // Verify the caller has at least read access to the source project
+    const role   = (req.session as any)?.role;
+    const userId = (req.session as any)?.userId;
+    if (role !== "admin" && role !== "viewer") {
+      const [srcCheck] = await db.select({ createdBy: projects.createdBy })
+        .from(projects).where(eq(projects.id, sourceId));
+      if (!srcCheck) return res.status(404).json({ error: "المشروع المصدر غير موجود" });
+      if (srcCheck.createdBy !== userId) {
+        const [collab] = await db.select({ id: projectCollaborators.id })
+          .from(projectCollaborators)
+          .where(and(eq(projectCollaborators.projectId, sourceId), eq(projectCollaborators.userId, userId)));
+        if (!collab) return res.status(403).json({ error: "لا تملك صلاحية الوصول للمشروع المصدر" });
+      }
+    }
+
+    // Fetch all columns from source (encrypted fields included — never decrypted here)
+    const [src] = await db.select().from(projects).where(eq(projects.id, sourceId));
+    if (!src) return res.status(404).json({ error: "المشروع المصدر غير موجود" });
+
+    // Build update payload for the selected integration groups
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+
+    if (selected.includes("sheets")) {
+      update.googleSheetId              = src.googleSheetId;
+      update.importSheetId              = src.importSheetId;
+      update.googleSheetName            = src.googleSheetName;
+      update.googleServiceAccountEmail  = src.googleServiceAccountEmail;
+      update.googleServiceAccountKeyEnc = src.googleServiceAccountKeyEnc;
+      update.googleDriveFolderId        = src.googleDriveFolderId;
+    }
+
+    if (selected.includes("telegram")) {
+      update.telegramBotTokenEnc = src.telegramBotTokenEnc;
+      update.telegramChatId      = src.telegramChatId;
+      update.telegramKnownChats  = src.telegramKnownChats;
+    }
+
+    if (selected.includes("drive")) {
+      update.driveOAuthClientId        = src.driveOAuthClientId;
+      update.driveOAuthClientSecretEnc = src.driveOAuthClientSecretEnc;
+      update.driveOAuthRefreshTokenEnc = src.driveOAuthRefreshTokenEnc;
+      update.driveRootFolderId         = src.driveRootFolderId;
+      update.driveSyncEnabled          = src.driveSyncEnabled;
+    }
+
+    await db.update(projects).set(update).where(eq(projects.id, destId));
+
+    // Re-register the Telegram webhook for the destination project's new token
+    if (selected.includes("telegram") && src.telegramBotTokenEnc) {
+      try {
+        const token = decrypt(src.telegramBotTokenEnc);
+        const webhookUrl = `${getAppBaseUrl(req)}/api/pform/telegram-webhook`;
+        setWebhook(token, webhookUrl, getTelegramWebhookSecret()).catch(console.error);
+      } catch { /* non-fatal — webhook registration failure doesn't block the response */ }
+    }
+
+    res.json({ ok: true, copied: selected });
+  } catch (err: any) {
+    handleError(res, err);
+  }
+});
+
 router.delete("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.id);
