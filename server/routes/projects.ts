@@ -1157,9 +1157,14 @@ router.post("/:id/telegram-updates", requireEditorOrAdmin, requireProjectEditAcc
     const result = await getTelegramUpdates(botToken, webhookUrl, getTelegramWebhookSecret());
 
     if (!result.ok || !result.chats?.length) {
+      // result.message carries a real error (❌ prefix); empty means no messages yet → guidance
+      const isRealError = result.message && result.message.startsWith("❌");
       return res.json({
         ok: false,
-        message: "أرسل أي رسالة للبوت على تيليغرام ثم اضغط «جلب Chat ID» مرة أخرى",
+        needsAction: !isRealError,
+        message: isRealError
+          ? result.message
+          : "أرسل أي رسالة للبوت على تيليغرام ثم اضغط «جلب Chat ID» مرة أخرى",
       });
     }
 

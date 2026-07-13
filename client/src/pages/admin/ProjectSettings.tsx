@@ -306,7 +306,11 @@ export function ProjectSettings() {
     if (res.ok && res.chats) {
       setChatIdChats(res.chats);
     } else {
-      toast({ variant: "destructive", description: res.message || (isAr ? "❌ تعذّر جلب Chat ID" : "❌ Could not fetch Chat ID") });
+      // needsAction = informational guidance, not a real error — show plain toast
+      toast({
+        variant: res.needsAction ? undefined : "destructive",
+        description: res.message || (isAr ? "❌ تعذّر جلب Chat ID" : "❌ Could not fetch Chat ID"),
+      });
     }
     setChatIdLoading(false);
   };
