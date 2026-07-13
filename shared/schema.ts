@@ -399,6 +399,7 @@ export const verifyCodeSchema = z.object({
 export const submitFormSchema = z.object({}).catchall(
   z.union([
     z.string().max(10_000, "قيمة الحقل طويلة جداً"),
+    z.array(z.string().max(10_000, "قيمة الملف طويلة جداً")).max(50, "عدد الملفات كبير جداً"),
     z.number(),
     z.boolean(),
     z.null(),
