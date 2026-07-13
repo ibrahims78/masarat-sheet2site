@@ -132,6 +132,7 @@ function FieldInput({ f, register, errors, watch, setValue, projectId, uploadFol
           uploadFolder={uploadFolder}
           allowedTypes={(f as any).allowedFileTypes}
           maxSizeMb={(f as any).maxFileSizeMb}
+          maxFiles={(f as any).maxFiles}
         />
       </>
     );

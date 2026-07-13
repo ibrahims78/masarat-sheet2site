@@ -39,6 +39,27 @@ const createUserLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, message
 const resetPwdLimiter   = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { error: "محاولات كثيرة — حاول بعد 15 دقيقة" } });
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+// ─── MULTI-FILE FIELD HELPERS ─────────────────────────────────────────────────
+/** True if a field value (string or string[]) contains any local /uploads/ path. */
+function hasLocalUploads(val: unknown): boolean {
+  if (!val) return false;
+  if (Array.isArray(val)) return (val as any[]).some((u: any) => typeof u === "string" && u.startsWith("/uploads/"));
+  return typeof val === "string" && val.startsWith("/uploads/");
+}
+/** Returns all local /uploads/ paths from a field value (string or string[]). */
+function getLocalUploadUrls(val: unknown): string[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return (val as any[]).filter((u: any) => typeof u === "string" && u.startsWith("/uploads/"));
+  if (typeof val === "string" && val.startsWith("/uploads/")) return [val];
+  return [];
+}
+/** Returns all Drive fileIds from a driveFiles[fieldKey] entry (single object or array of objects). */
+function getDriveFileIds(entry: unknown): string[] {
+  if (!entry) return [];
+  if (Array.isArray(entry)) return (entry as any[]).filter((e: any) => e?.fileId).map((e: any) => e.fileId as string);
+  return (entry as any)?.fileId ? [(entry as any).fileId as string] : [];
+}
+
 // ─── PROJECT ACCESS GUARDS ────────────────────────────────────
 
 /** STRICT — admin, project owner, or collaborator with permission="full".
@@ -488,8 +509,8 @@ router.delete("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req:
       }
       if (rec.syncStatus === "synced" && rec.driveFiles && typeof rec.driveFiles === "object") {
         const df = rec.driveFiles as Record<string, any>;
-        Object.values(df).filter(f => f?.fileId)
-          .forEach((f: any) => driveStorage.deleteFileFromDrive(pid, f.fileId).catch(console.error));
+        Object.values(df).flatMap(entry => getDriveFileIds(entry))
+          .forEach(fileId => driveStorage.deleteFileFromDrive(pid, fileId).catch(console.error));
         if (rec.driveFolderId) {
           driveStorage.deleteFolderFromDrive(pid, rec.driveFolderId).catch(console.error);
         }
@@ -882,9 +903,7 @@ router.delete("/:id/records/:recordId", requireEditorOrAdmin, requireProjectEdit
     // Clean up Drive files/folder (best-effort, non-blocking)
     if (rec.syncStatus === "synced" && rec.driveFiles && typeof rec.driveFiles === "object") {
       const driveFiles = rec.driveFiles as Record<string, any>;
-      const fileIds = Object.values(driveFiles)
-        .filter(f => f && f.fileId)
-        .map((f: any) => f.fileId as string);
+      const fileIds = Object.values(driveFiles).flatMap(entry => getDriveFileIds(entry));
       fileIds.forEach(fileId => driveStorage.deleteFileFromDrive(pid, fileId).catch(console.error));
       if (rec.driveFolderId) {
         driveStorage.deleteFolderFromDrive(pid, rec.driveFolderId).catch(console.error);
@@ -952,8 +971,8 @@ router.post("/:id/records/bulk-delete", requireEditorOrAdmin, requireProjectEdit
       }
       if (rec.syncStatus === "synced" && rec.driveFiles && typeof rec.driveFiles === "object") {
         const df = rec.driveFiles as Record<string, any>;
-        Object.values(df).filter(f => f?.fileId)
-          .forEach((f: any) => driveStorage.deleteFileFromDrive(pid, f.fileId).catch(console.error));
+        Object.values(df).flatMap(entry => getDriveFileIds(entry))
+          .forEach(fileId => driveStorage.deleteFileFromDrive(pid, fileId).catch(console.error));
         if (rec.driveFolderId) {
           driveStorage.deleteFolderFromDrive(pid, rec.driveFolderId).catch(console.error);
         }
@@ -1504,7 +1523,7 @@ router.get("/:id/sync-stats", requireEditorOrAdmin, requireProjectEditAccess, as
     const recordsWithFiles = hasFileFields
       ? allRecords.filter(r => {
           const d = r.data as Record<string, any>;
-          return fileKeys.some(k => d[k] && String(d[k]).startsWith("/uploads/"));
+          return fileKeys.some(k => hasLocalUploads(d[k]));
         })
       : [];
 
@@ -1562,7 +1581,7 @@ router.post("/:id/sync-drive", requireEditorOrAdmin, requireProjectEditAccess, a
       const s = r.syncStatus || "local";
       if (!statusFilter.includes(s)) return false;
       const d = r.data as Record<string, any>;
-      return fileKeys.some(k => d[k] && String(d[k]).startsWith("/uploads/"));
+      return fileKeys.some(k => hasLocalUploads(d[k]));
     });
 
     if (toSync.length === 0) {
@@ -1604,27 +1623,33 @@ router.post("/:id/sync-drive", requireEditorOrAdmin, requireProjectEditAccess, a
         const localFilesToDelete: string[] = []; // relative paths from uploadsDir root
 
         for (const fieldKey of fileKeys) {
-          const fileUrl = recordData[fieldKey];
-          if (!fileUrl || !String(fileUrl).startsWith("/uploads/")) continue;
+          const localUrls = getLocalUploadUrls(recordData[fieldKey]);
+          if (localUrls.length === 0) continue;
 
-          // displayName uses the leaf filename; localRelPath is the full relative path for reading
-          const localFilename = path.basename(String(fileUrl));
-          const localRelPath = String(fileUrl).slice("/uploads/".length);
-          const mimeType = driveStorage.guessMimeType(localFilename);
+          const isMultiField = Array.isArray(recordData[fieldKey]);
+          const driveEntries: any[] = [];
+          const driveUrls: string[] = [];
 
-          const { fileId, driveUrl } = await driveStorage.uploadLocalFileToDrive(pid, {
-            localFilename: localRelPath, // full relative path so the service finds nested files
-            displayName: localFilename,  // basename shown in Drive
-            mimeType,
-            folderId: recordFolderId,
-          });
+          for (const fileUrl of localUrls) {
+            const localFilename = path.basename(fileUrl);
+            const localRelPath = fileUrl.slice("/uploads/".length);
+            const mimeType = driveStorage.guessMimeType(localFilename);
 
-          updatedDriveFiles[fieldKey] = { fileId, driveUrl, originalName: localFilename, syncedAt: new Date().toISOString() };
-          updatedData[fieldKey] = driveUrl;
+            const { fileId, driveUrl } = await driveStorage.uploadLocalFileToDrive(pid, {
+              localFilename: localRelPath,
+              displayName: localFilename,
+              mimeType,
+              folderId: recordFolderId,
+            });
 
-          if (mode === "delete_local") {
-            localFilesToDelete.push(localRelPath);
+            driveEntries.push({ fileId, driveUrl, originalName: localFilename, syncedAt: new Date().toISOString() });
+            driveUrls.push(driveUrl);
+            if (mode === "delete_local") localFilesToDelete.push(localRelPath);
           }
+
+          // Multi-file fields: store arrays; single-file: keep flat object (backward compat)
+          updatedDriveFiles[fieldKey] = isMultiField ? driveEntries : driveEntries[0];
+          updatedData[fieldKey] = isMultiField ? driveUrls : driveUrls[0];
         }
 
         // Persist sync results to DB
@@ -1703,7 +1728,7 @@ router.post("/:id/records/:recordId/sync-drive", requireEditorOrAdmin, requirePr
     const fileKeys = fileFields.map(f => f.key);
     const recordData = record.data as Record<string, any>;
 
-    const filesToSync = fileKeys.filter(k => recordData[k] && String(recordData[k]).startsWith("/uploads/"));
+    const filesToSync = fileKeys.filter(k => hasLocalUploads(recordData[k]));
     if (filesToSync.length === 0) {
       return res.json({ ok: true, synced: 0, message: "لا يوجد ملفات محلية في هذا السجل" });
     }
@@ -1720,19 +1745,28 @@ router.post("/:id/records/:recordId/sync-drive", requireEditorOrAdmin, requirePr
     const localFilesToDelete: string[] = [];
 
     for (const fieldKey of filesToSync) {
-      const fileUrl = String(recordData[fieldKey]);
-      const localFilename = path.basename(fileUrl);          // basename for display name in Drive
-      const localRelPath  = fileUrl.slice("/uploads/".length); // full relative path for reading
-      const mimeType = driveStorage.guessMimeType(localFilename);
-      const { fileId, driveUrl } = await driveStorage.uploadLocalFileToDrive(pid, {
-        localFilename: localRelPath, // full relative path so the service finds nested files
-        displayName: localFilename,  // basename shown in Drive
-        mimeType,
-        folderId: recordFolderId,
-      });
-      updatedDriveFiles[fieldKey] = { fileId, driveUrl, originalName: localFilename, syncedAt: new Date().toISOString() };
-      updatedData[fieldKey] = driveUrl;
-      if (mode === "delete_local") localFilesToDelete.push(localRelPath); // full path for unlink
+      const localUrls = getLocalUploadUrls(recordData[fieldKey]);
+      const isMultiField = Array.isArray(recordData[fieldKey]);
+      const driveEntries: any[] = [];
+      const driveUrls: string[] = [];
+
+      for (const fileUrl of localUrls) {
+        const localFilename = path.basename(fileUrl);
+        const localRelPath  = fileUrl.slice("/uploads/".length);
+        const mimeType = driveStorage.guessMimeType(localFilename);
+        const { fileId, driveUrl } = await driveStorage.uploadLocalFileToDrive(pid, {
+          localFilename: localRelPath,
+          displayName: localFilename,
+          mimeType,
+          folderId: recordFolderId,
+        });
+        driveEntries.push({ fileId, driveUrl, originalName: localFilename, syncedAt: new Date().toISOString() });
+        driveUrls.push(driveUrl);
+        if (mode === "delete_local") localFilesToDelete.push(localRelPath);
+      }
+
+      updatedDriveFiles[fieldKey] = isMultiField ? driveEntries : driveEntries[0];
+      updatedData[fieldKey] = isMultiField ? driveUrls : driveUrls[0];
     }
 
     const updatePayload: Record<string, any> = {

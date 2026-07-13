@@ -88,16 +88,30 @@ function sanitizeSheetTabName(name: string): string {
 }
 
 /**
- * Resolve a file URL for Google Sheets cells.
- * - If the value is already a Drive URL or any external URL → return as-is.
- * - If the value is a local /uploads/ path → prepend APP_BASE_URL (if set) to make it absolute.
- *   Returns an empty string if no base URL is configured (local paths are not clickable externally).
+ * Resolve a single file URL for Google Sheets cells.
+ * - Drive URL or external URL → return as-is.
+ * - Local /uploads/ path → prepend APP_BASE_URL (if set) to make it absolute.
  */
 function resolveFileUrlForSheet(value: string): string {
   if (!value) return "";
-  if (!value.startsWith("/uploads/")) return value; // Drive URL or other — leave as-is
+  if (!value.startsWith("/uploads/")) return value;
   const base = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
-  return base ? base + value : ""; // empty = not clickable yet; blank is cleaner than a broken path
+  return base ? base + value : "";
+}
+
+/**
+ * Resolve a file field value (string or string[]) for a Google Sheets cell.
+ * Multiple files are joined with "\n" so each URL appears on its own line in the cell.
+ */
+function resolveFileValuesForSheet(value: unknown): string {
+  if (!value) return "";
+  if (Array.isArray(value)) {
+    return (value as any[])
+      .map(v => resolveFileUrlForSheet(String(v)))
+      .filter(Boolean)
+      .join("\n");
+  }
+  return resolveFileUrlForSheet(String(value));
 }
 
 /** Wrap sheet name in single quotes so spaces/special chars work in range notation */
@@ -180,8 +194,9 @@ export async function appendRecordToSheet(
     await ensureHeaders(sheets, proj.googleSheetId, sheetName, fields);
 
     const row = [String(seqNum), ...fields.map(f => {
-      const val = String(recordData[f.key] ?? "");
-      return f.fieldType === "file" ? resolveFileUrlForSheet(val) : val;
+      if (f.fieldType === "file") return resolveFileValuesForSheet(recordData[f.key]);
+      const val = recordData[f.key];
+      return Array.isArray(val) ? val.join(", ") : String(val ?? "");
     })];
 
     const res = await sheets.spreadsheets.values.append({
@@ -215,8 +230,9 @@ export async function updateRecordRow(
     const desiredName = sanitizeSheetTabName(proj.googleSheetName || proj.name || "بيانات");
     const sheetName = await resolveSheetTab(sheets, proj.googleSheetId, desiredName);
     const row = [String(seqNum), ...fields.map(f => {
-      const val = String(recordData[f.key] ?? "");
-      return f.fieldType === "file" ? resolveFileUrlForSheet(val) : val;
+      if (f.fieldType === "file") return resolveFileValuesForSheet(recordData[f.key]);
+      const val = recordData[f.key];
+      return Array.isArray(val) ? val.join(", ") : String(val ?? "");
     })];
 
     await sheets.spreadsheets.values.update({

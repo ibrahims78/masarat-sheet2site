@@ -93,7 +93,11 @@ export function ProjectRecordDetails() {
 
   const steps: string[] = Array.isArray((project as any)?.steps) ? (project as any).steps : [];
   const fileFields = fields.filter(f => f.fieldType === "file" && rdata[f.key]);
-  const hasLocalFiles = fileFields.some(f => String(rdata[f.key] || "").startsWith("/uploads/"));
+  const hasLocalFiles = fileFields.some(f => {
+    const v = rdata[f.key];
+    if (Array.isArray(v)) return (v as any[]).some((u: any) => typeof u === "string" && u.startsWith("/uploads/"));
+    return typeof v === "string" && v.startsWith("/uploads/");
+  });
 
   const grouped = fields.reduce<Record<number, ProjectField[]>>((acc, f) => {
     const s = f.stepNumber || 1;
@@ -182,16 +186,23 @@ export function ProjectRecordDetails() {
                           <div key={f.id} className="space-y-0.5">
                             <p className="text-[11px] text-muted-foreground font-medium">{f.label}</p>
                             {f.fieldType === "file" && !isEmpty ? (
-                              <a
-                                href={safeHref(String(val))}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm font-medium text-primary hover:underline flex items-center gap-1.5"
-                                data-testid={`link-file-${f.key}`}
-                              >
-                                <FileText className="h-3.5 w-3.5 shrink-0" />
-                                {isAr ? "عرض الملف" : "View File"}
-                              </a>
+                              <div className="space-y-1">
+                                {(Array.isArray(val) ? val as string[] : [String(val)]).filter(Boolean).map((fileUrl, fi, arr) => (
+                                  <a
+                                    key={fi}
+                                    href={safeHref(fileUrl)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sm font-medium text-primary hover:underline flex items-center gap-1.5"
+                                    data-testid={`link-file-${f.key}-${fi}`}
+                                  >
+                                    <FileText className="h-3.5 w-3.5 shrink-0" />
+                                    {arr.length === 1
+                                      ? (isAr ? "عرض الملف" : "View File")
+                                      : (isAr ? `ملف ${fi + 1}` : `File ${fi + 1}`)}
+                                  </a>
+                                ))}
+                              </div>
                             ) : (
                               <p className={`text-sm font-medium ${isEmpty ? "text-slate-300 dark:text-slate-600" : "text-slate-800 dark:text-slate-100"}`}>
                                 {isEmpty ? "—" : String(val)}
@@ -235,44 +246,72 @@ export function ProjectRecordDetails() {
 
                 <div className="space-y-2">
                   {fileFields.map(f => {
-                    const val = String(rdata[f.key] || "");
-                    const df = driveFiles[f.key] as any;
-                    const isLocal = val.startsWith("/uploads/");
-                    const isDrive = val.startsWith("https://drive.google.com") || df?.driveUrl;
-                    const displayUrl = df?.driveUrl || val;
-                    const originalName = df?.originalName || val.split("/").pop() || f.key;
-                    const syncedAt = df?.syncedAt ? new Date(df.syncedAt).toLocaleString(isAr ? "ar-EG" : "en-US") : null;
+                    // Normalise raw value to an array of URLs (string or string[])
+                    const rawVal = rdata[f.key];
+                    const rawUrls: string[] = Array.isArray(rawVal)
+                      ? (rawVal as any[]).map(String).filter(Boolean)
+                      : rawVal ? [String(rawVal)] : [];
+
+                    // driveFiles[f.key] may be a single object or an array of objects
+                    const dfEntry = driveFiles[f.key];
+                    const dfEntries: any[] = Array.isArray(dfEntry)
+                      ? dfEntry
+                      : dfEntry ? [dfEntry] : [];
+
+                    // Build per-file rows
+                    const fileRows = rawUrls.map((url, idx) => {
+                      const df = dfEntries[idx] || null;
+                      const isLocal = url.startsWith("/uploads/");
+                      const isDrive = !isLocal && (url.startsWith("https://drive.google.com") || !!df?.driveUrl);
+                      const driveUrl = df?.driveUrl || (isDrive ? url : null);
+                      const originalName = df?.originalName || decodeURIComponent(url.split("/").pop() || f.key);
+                      const syncedAt = df?.syncedAt ? new Date(df.syncedAt).toLocaleString(isAr ? "ar-EG" : "en-US") : null;
+                      return { url, isLocal, isDrive, driveUrl, originalName, syncedAt, idx };
+                    });
+
+                    if (fileRows.length === 0) return null;
 
                     return (
-                      <div key={f.key} className="flex items-start gap-3 p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                        <FileText className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-muted-foreground mb-0.5">{f.label}</p>
-                          <p className="text-sm font-medium truncate">{decodeURIComponent(originalName)}</p>
-                          {syncedAt && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              {isAr ? `تمت المزامنة: ${syncedAt}` : `Synced: ${syncedAt}`}
-                            </p>
+                      <div key={f.key} className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 overflow-hidden">
+                        {/* Field label header */}
+                        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/30">
+                          <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <p className="text-xs font-medium text-slate-700 dark:text-slate-200">{f.label}</p>
+                          {fileRows.length > 1 && (
+                            <span className="text-[10px] text-muted-foreground">({fileRows.length} {isAr ? "ملفات" : "files"})</span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {isLocal && (
-                            <a href={safeHref(val)} target="_blank" rel="noopener noreferrer">
-                              <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
-                                <ExternalLink className="h-3 w-3" />
-                                {isAr ? "محلي" : "Local"}
-                              </Button>
-                            </a>
-                          )}
-                          {(isDrive || df?.driveUrl) && (
-                            <a href={safeHref(df?.driveUrl || displayUrl)} target="_blank" rel="noopener noreferrer">
-                              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-600 border-green-300">
-                                <ExternalLink className="h-3 w-3" />
-                                Drive
-                              </Button>
-                            </a>
-                          )}
-                        </div>
+                        {/* One row per file */}
+                        {fileRows.map(({ url, isLocal, isDrive, driveUrl, originalName, syncedAt, idx }) => (
+                          <div key={idx} className="flex items-center gap-3 px-3 py-2 border-b last:border-0 border-slate-100 dark:border-slate-700">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{originalName}</p>
+                              {syncedAt && (
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  {isAr ? `تمت المزامنة: ${syncedAt}` : `Synced: ${syncedAt}`}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {isLocal && (
+                                <a href={safeHref(url)} target="_blank" rel="noopener noreferrer">
+                                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+                                    <ExternalLink className="h-3 w-3" />
+                                    {isAr ? "محلي" : "Local"}
+                                  </Button>
+                                </a>
+                              )}
+                              {driveUrl && (
+                                <a href={safeHref(driveUrl)} target="_blank" rel="noopener noreferrer">
+                                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-600 border-green-300">
+                                    <ExternalLink className="h-3 w-3" />
+                                    Drive
+                                  </Button>
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     );
                   })}
