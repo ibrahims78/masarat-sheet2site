@@ -131,7 +131,15 @@ export async function ensureProjectFolder(
   projectName: string,
   rootFolderId: string
 ): Promise<string> {
-  const { drive, proj } = await getDriveClient(projectId);
+  let drive: ReturnType<typeof google.drive>;
+  let proj: any;
+  try {
+    ({ drive, proj } = await getDriveClient(projectId));
+  } catch (err: any) {
+    if (isOAuthError(err)) await setDriveOAuthError(projectId, "انتهت صلاحية تفويض Google Drive — أعد ربط حساب Google من إعدادات المشروع");
+    throw err;
+  }
+
   const folderName = `مشروع: ${projectName}`;
 
   // ── Step 1: validate the stored ID ─────────────────────────────────────────
@@ -146,20 +154,29 @@ export async function ensureProjectFolder(
         // Folder confirmed alive — return it without touching Drive further.
         return proj.googleDriveFolderId;
       }
-    } catch {
+    } catch (err: any) {
+      if (isOAuthError(err)) {
+        await setDriveOAuthError(projectId, "انتهت صلاحية تفويض Google Drive — أعد ربط حساب Google من إعدادات المشروع");
+        throw err;
+      }
       // 404 or permission error → stored ID is stale; fall through to search/create.
     }
   }
 
-  // ── Step 2 + 3: search by name, then create if absent ──────────────────────
-  const folderId = await findOrCreateFolder(drive, folderName, rootFolderId);
+  try {
+    // ── Step 2 + 3: search by name, then create if absent ──────────────────────
+    const folderId = await findOrCreateFolder(drive, folderName, rootFolderId);
 
-  // Persist the resolved ID so future calls take the fast path (Step 1).
-  await db.update(projects)
-    .set({ googleDriveFolderId: folderId } as any)
-    .where(eq(projects.id, projectId));
+    // Persist the resolved ID so future calls take the fast path (Step 1).
+    await db.update(projects)
+      .set({ googleDriveFolderId: folderId } as any)
+      .where(eq(projects.id, projectId));
 
-  return folderId;
+    return folderId;
+  } catch (err: any) {
+    if (isOAuthError(err)) await setDriveOAuthError(projectId, "انتهت صلاحية تفويض Google Drive — أعد ربط حساب Google من إعدادات المشروع");
+    throw err;
+  }
 }
 
 /**
@@ -172,9 +189,14 @@ export async function ensureRecordFolder(
   label: string,
   recordId: string
 ): Promise<string> {
-  const { drive } = await getDriveClient(projectId);
-  const folderName = `${label} [${recordId.slice(0, 8)}]`;
-  return findOrCreateFolder(drive, folderName, projectFolderId);
+  try {
+    const { drive } = await getDriveClient(projectId);
+    const folderName = `${label} [${recordId.slice(0, 8)}]`;
+    return await findOrCreateFolder(drive, folderName, projectFolderId);
+  } catch (err: any) {
+    if (isOAuthError(err)) await setDriveOAuthError(projectId, "انتهت صلاحية تفويض Google Drive — أعد ربط حساب Google من إعدادات المشروع");
+    throw err;
+  }
 }
 
 /**

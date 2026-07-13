@@ -218,7 +218,7 @@ router.post("/register-invite", inviteLimiter, async (req: Request, res: Respons
         }
         const [u] = await tx
           .insert(users)
-          .values({ fullName, email: inv.email, passwordHash: hash, role: inv.role })
+          .values({ fullName, email: inv.email.toLowerCase().trim(), passwordHash: hash, role: inv.role })
           .returning();
         await tx.update(userInvitations).set({ usedAt: new Date() }).where(eq(userInvitations.id, inv.id));
         return u;

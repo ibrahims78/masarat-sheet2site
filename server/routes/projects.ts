@@ -886,6 +886,15 @@ router.delete("/:id/records/:recordId", requireEditorOrAdmin, requireProjectEdit
     if (!rec) return res.status(404).json({ error: "السجل غير موجود" });
     await db.delete(projectRecords).where(and(eq(projectRecords.id, rid), eq(projectRecords.projectId, pid)));
 
+    // Audit log — record deletions are destructive and must be traceable
+    await db.insert(projectAuditLog).values({
+      projectId: pid,
+      recordId: rid,
+      changedBy: (req.session as any).userId,
+      action: "delete",
+      changesJson: { deleted: true, data: rec.data },
+    }).catch(console.error);
+
     // Clean up local uploaded files (best-effort, non-blocking)
     // Handles both flat paths (/uploads/uuid.ext) and organised paths (/uploads/project/folder/uuid.ext)
     // Values may be a single URL string (single-file field) or an array of URLs (multi-file field).
@@ -953,6 +962,18 @@ router.post("/:id/records/bulk-delete", requireEditorOrAdmin, requireProjectEdit
     // Delete from DB (scoped to project to prevent cross-project IDOR)
     for (const rid of ids) {
       await db.delete(projectRecords).where(and(eq(projectRecords.id, rid), eq(projectRecords.projectId, pid)));
+    }
+
+    // Audit log — bulk deletion (best-effort, non-blocking)
+    if (toDelete.length > 0) {
+      const auditRows = toDelete.map(rec => ({
+        projectId: pid,
+        recordId: rec.id,
+        changedBy: (req.session as any).userId,
+        action: "delete",
+        changesJson: { deleted: true, bulk: true },
+      }));
+      db.insert(projectAuditLog).values(auditRows).catch(console.error);
     }
 
     // Async cleanup of local and Drive files (non-blocking)
@@ -1888,12 +1909,19 @@ router.delete("/users/:userId", requireAdmin, async (req: Request, res: Response
   try {
     const uid = String(req.params.userId);
 
-    // Prevent deleting the last admin
-    const adminUsers = await db.select({ count: count() }).from(users).where(eq(users.role, "admin"));
-    if (Number(adminUsers[0]?.count || 0) <= 1) {
-      const [target] = await db.select().from(users).where(eq(users.id, uid));
-      if (target?.role === "admin") return res.status(400).json({ error: "لا يمكن حذف آخر مدير" });
-    }
+    // Prevent deleting the last admin — check + delete inside a transaction with an
+    // advisory lock so two concurrent requests cannot both pass the count check.
+    const deleteBlocked = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('delete_last_admin'))`);
+      const [target] = await tx.select({ role: users.role }).from(users).where(eq(users.id, uid));
+      if (!target) return false; // user not found — let the delete proceed (will be no-op)
+      if (target.role === "admin") {
+        const [{ count: adminCount }] = await tx.select({ count: count() }).from(users).where(eq(users.role, "admin"));
+        if (Number(adminCount) <= 1) return true; // blocked
+      }
+      return false;
+    });
+    if (deleteBlocked) return res.status(400).json({ error: "لا يمكن حذف آخر مدير" });
 
     // ── Cascade cleanup ──────────────────────────────────────────────────────
     // 1. Load all projects created by this user

@@ -177,6 +177,8 @@ async function runReminderCycle() {
         } catch (err) {
           console.error(`[scheduler] Email reminder failed for participant ${p.id}:`, err);
         }
+        // Throttle between sends to avoid SMTP rate limiting
+        await sleep(EMAIL_THROTTLE_MS);
       }
     }
   } catch (err) {
@@ -267,6 +269,8 @@ async function runPublicDraftReminderCycle() {
         } catch (err) {
           console.error(`[scheduler] Public-draft reminder failed for draft ${c.id}:`, err);
         }
+        // Throttle between sends to avoid SMTP rate limiting
+        await sleep(EMAIL_THROTTLE_MS);
       }
     }
   } catch (err) {
@@ -278,13 +282,30 @@ async function runPublicDraftReminderCycle() {
 
 const INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
+/** Small delay between email sends to avoid hitting SMTP rate limits. */
+const EMAIL_THROTTLE_MS = 150;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Hold interval IDs so we can clear them on graceful shutdown.
+let reminderIntervalId: ReturnType<typeof setInterval> | null = null;
+let draftReminderIntervalId: ReturnType<typeof setInterval> | null = null;
+
 export function startScheduler() {
   console.log("⏰ Reminder scheduler started — runs every 30 minutes");
   // Initial run after 1 minute (give DB time to fully initialize)
   setTimeout(() => {
     runReminderCycle();
     runPublicDraftReminderCycle();
-    setInterval(runReminderCycle, INTERVAL_MS);
-    setInterval(runPublicDraftReminderCycle, INTERVAL_MS);
+    reminderIntervalId = setInterval(runReminderCycle, INTERVAL_MS);
+    draftReminderIntervalId = setInterval(runPublicDraftReminderCycle, INTERVAL_MS);
   }, 60 * 1000);
+
+  // Graceful shutdown — clear intervals so the process can exit cleanly.
+  const stop = () => {
+    if (reminderIntervalId) clearInterval(reminderIntervalId);
+    if (draftReminderIntervalId) clearInterval(draftReminderIntervalId);
+  };
+  process.once("SIGTERM", stop);
+  process.once("SIGINT", stop);
 }

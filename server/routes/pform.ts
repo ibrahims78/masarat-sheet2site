@@ -383,7 +383,9 @@ router.get("/:projectId/edit/:token", async (req: Request, res: Response) => {
     if (record.tokenExpiresAt && record.tokenExpiresAt < new Date()) {
       return res.status(410).json({ error: "انتهت صلاحية رابط التعديل" });
     }
-    res.json(record);
+    // Strip internal/sensitive fields before returning to the public caller.
+    const { editToken: _et, sheetsRowIndex: _sri, driveFiles: _df, driveFolderId: _dfo, syncStatus: _ss, ...publicRecord } = record;
+    res.json(publicRecord);
   } catch (err: any) {
     handleError(res, err);
   }
