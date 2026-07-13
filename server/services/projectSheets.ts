@@ -159,20 +159,92 @@ async function resolveSheetTab(
   return allTabs[0] ?? desiredName;
 }
 
-/** Ensure header row exists and matches field labels; rewrites if different. */
+/**
+ * Convert a 0-based column index to A1 letter notation (0→A, 1→B, 26→AA …).
+ */
+function columnLetter(index: number): string {
+  let result = "";
+  let n = index;
+  do {
+    result = String.fromCharCode(65 + (n % 26)) + result;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return result;
+}
+
+/**
+ * Build a row array from the ACTUAL live header row in the sheet.
+ * Each value is placed at the column that matches the field's label —
+ * not at a positional index — so reordering fields in the project
+ * never misaligns data that is already in the sheet.
+ *
+ * Fields whose label is not found in the header row are silently skipped
+ * (ensureHeaders will have appended them as new columns on the right).
+ */
+function buildRowByHeaders(
+  headerRow: string[],
+  fields: any[],
+  recordData: Record<string, any>,
+  seqNum: number,
+): string[] {
+  const row: string[] = Array(headerRow.length).fill("");
+
+  // "م" column — sequential number
+  const seqIdx = headerRow.indexOf("م");
+  if (seqIdx >= 0) row[seqIdx] = String(seqNum);
+
+  for (const f of fields) {
+    const colIdx = headerRow.indexOf(f.label);
+    if (colIdx < 0) continue; // not in sheet yet; will appear on next ensureHeaders
+    if (f.fieldType === "file") {
+      row[colIdx] = resolveFileValuesForSheet(recordData[f.key]);
+    } else {
+      const val = recordData[f.key];
+      row[colIdx] = Array.isArray(val) ? val.join(", ") : String(val ?? "");
+    }
+  }
+
+  return row;
+}
+
+/**
+ * Ensure the header row is correct.
+ *
+ * Strategy (additive — never reorders existing columns):
+ *   • If the sheet is empty → write the full header row from scratch.
+ *   • Otherwise → only APPEND columns that are missing from the live header.
+ *     Existing columns keep their current position so old data stays aligned.
+ */
 async function ensureHeaders(sheets: any, spreadsheetId: string, sheetName: string, fields: any[]) {
-  const headers = ["م", ...fields.map(f => f.label)];
+  const expectedHeaders = ["م", ...fields.map(f => f.label)];
+
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: sheetRange(sheetName, "1:1"),
   });
-  const existing = res.data.values?.[0] || [];
-  if (existing.join(",") !== headers.join(",")) {
+  const existing: string[] = res.data.values?.[0] || [];
+
+  if (existing.length === 0) {
+    // Fresh sheet — write the complete header row
     await sheets.spreadsheets.values.update({
       spreadsheetId,
       range: sheetRange(sheetName, "1:1"),
       valueInputOption: "RAW",
-      requestBody: { values: [headers] },
+      requestBody: { values: [expectedHeaders] },
+    });
+    return;
+  }
+
+  // Append any columns that are not yet present (preserve existing order)
+  const missing = expectedHeaders.filter(h => !existing.includes(h));
+  if (missing.length > 0) {
+    const startLetter = columnLetter(existing.length);
+    const endLetter   = columnLetter(existing.length + missing.length - 1);
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: sheetRange(sheetName, `${startLetter}1:${endLetter}1`),
+      valueInputOption: "RAW",
+      requestBody: { values: [missing] },
     });
   }
 }
@@ -193,11 +265,14 @@ export async function appendRecordToSheet(
     const sheetName = await resolveSheetTab(sheets, proj.googleSheetId, desiredName, true);
     await ensureHeaders(sheets, proj.googleSheetId, sheetName, fields);
 
-    const row = [String(seqNum), ...fields.map(f => {
-      if (f.fieldType === "file") return resolveFileValuesForSheet(recordData[f.key]);
-      const val = recordData[f.key];
-      return Array.isArray(val) ? val.join(", ") : String(val ?? "");
-    })];
+    // Fetch the live header row so we write each value to the correct column
+    // regardless of the current field order in the project.
+    const headerRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: proj.googleSheetId,
+      range: sheetRange(sheetName, "1:1"),
+    });
+    const headerRow: string[] = headerRes.data.values?.[0] || [];
+    const row = buildRowByHeaders(headerRow, fields, recordData, seqNum);
 
     const res = await sheets.spreadsheets.values.append({
       spreadsheetId: proj.googleSheetId,
@@ -229,11 +304,14 @@ export async function updateRecordRow(
     const fields = await getProjectFields(projectId);
     const desiredName = sanitizeSheetTabName(proj.googleSheetName || proj.name || "بيانات");
     const sheetName = await resolveSheetTab(sheets, proj.googleSheetId, desiredName);
-    const row = [String(seqNum), ...fields.map(f => {
-      if (f.fieldType === "file") return resolveFileValuesForSheet(recordData[f.key]);
-      const val = recordData[f.key];
-      return Array.isArray(val) ? val.join(", ") : String(val ?? "");
-    })];
+
+    // Fetch live header row for label-based column mapping
+    const headerRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: proj.googleSheetId,
+      range: sheetRange(sheetName, "1:1"),
+    });
+    const headerRow: string[] = headerRes.data.values?.[0] || [];
+    const row = buildRowByHeaders(headerRow, fields, recordData, seqNum);
 
     await sheets.spreadsheets.values.update({
       spreadsheetId: proj.googleSheetId,

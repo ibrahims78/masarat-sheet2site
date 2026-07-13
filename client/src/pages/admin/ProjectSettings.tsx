@@ -884,6 +884,26 @@ export function ProjectSettings() {
         {tab === "drive" && (
           <div className="space-y-4">
 
+            {/* ── OAuth Error Banner ── */}
+            {project?.driveOAuthError && (
+              <div className="flex items-start gap-3 rounded-md border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/40 px-4 py-3">
+                <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                    {isAr ? "خطأ في تفويض Google Drive" : "Google Drive Authorization Error"}
+                  </p>
+                  <p className="text-xs text-red-600 dark:text-red-300 mt-0.5">
+                    {project.driveOAuthError}
+                  </p>
+                  <p className="text-xs text-red-500 dark:text-red-400 mt-1">
+                    {isAr
+                      ? 'انقر على "إعادة الربط مع Google" أدناه لاستعادة المزامنة.'
+                      : 'Click "Re-connect with Google" below to restore sync.'}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* ── Step 1: OAuth2 Setup ── */}
             <Card className="p-5 space-y-4">
               <div className="flex items-center justify-between">
@@ -892,7 +912,10 @@ export function ProjectSettings() {
                   <h3 className="text-sm font-semibold">{isAr ? "ربط حساب Google (OAuth2)" : "Connect Google Account (OAuth2)"}</h3>
                 </div>
                 {project?.driveOAuthConnected
-                  ? <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 gap-1"><CheckCircle2 className="h-3 w-3" />{isAr ? "مرتبط" : "Connected"}</Badge>
+                  ? <Badge className={`gap-1 ${project?.driveOAuthError ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"}`}>
+                      {project?.driveOAuthError ? <AlertTriangle className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+                      {project?.driveOAuthError ? (isAr ? "تفويض منتهٍ" : "Auth expired") : (isAr ? "مرتبط" : "Connected")}
+                    </Badge>
                   : <Badge variant="outline" className="text-muted-foreground gap-1"><XCircle className="h-3 w-3" />{isAr ? "غير مرتبط" : "Not connected"}</Badge>
                 }
               </div>

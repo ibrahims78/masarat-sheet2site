@@ -226,6 +226,7 @@ const PROJECT_SAFE_COLUMNS = {
   hasTelegramToken: sql<boolean>`(${projects.telegramBotTokenEnc} is not null)`,
   driveOAuthClientId: projects.driveOAuthClientId,
   driveOAuthConnected: sql<boolean>`(${projects.driveOAuthRefreshTokenEnc} is not null)`,
+  driveOAuthError: projects.driveOAuthError,
   // Participant tracking
   participantsEnabled: projects.participantsEnabled,
   participantNameField: projects.participantNameField,

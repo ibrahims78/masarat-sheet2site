@@ -151,7 +151,7 @@ router.get("/drive-oauth/callback", async (req: Request, res: Response) => {
     }
 
     await db.update(projects)
-      .set({ driveOAuthRefreshTokenEnc: encrypt(tokens.refresh_token) })
+      .set({ driveOAuthRefreshTokenEnc: encrypt(tokens.refresh_token), driveOAuthError: null } as any)
       .where(eq(projects.id, projectId));
 
     return res.redirect(settingsUrl("&oauth=success"));
@@ -165,7 +165,7 @@ router.get("/drive-oauth/callback", async (req: Request, res: Response) => {
 router.delete("/projects/:id/drive-oauth/disconnect", requireEditorOrAdmin, requireDriveProjectAccess, async (req: Request, res: Response) => {
   try {
     const pid = String(req.params.id);
-    await db.update(projects).set({ driveOAuthRefreshTokenEnc: null }).where(eq(projects.id, pid));
+    await db.update(projects).set({ driveOAuthRefreshTokenEnc: null, driveOAuthError: null } as any).where(eq(projects.id, pid));
     res.json({ ok: true });
   } catch (err: any) {
     console.error("[driveOAuth] disconnect error:", err);

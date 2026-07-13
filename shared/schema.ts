@@ -85,6 +85,7 @@ export const projects = pgTable("projects", {
   driveOAuthClientId: text("drive_oauth_client_id"),
   driveOAuthClientSecretEnc: text("drive_oauth_client_secret_enc"),
   driveOAuthRefreshTokenEnc: text("drive_oauth_refresh_token_enc"),
+  driveOAuthError: text("drive_oauth_error"),
   // Telegram
   telegramBotTokenEnc: text("telegram_bot_token_enc"),
   telegramChatId: text("telegram_chat_id"),

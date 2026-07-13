@@ -7,6 +7,31 @@ import { eq } from "drizzle-orm";
 import { decrypt } from "./crypto.js";
 import { uploadsDir } from "../middleware/upload.js";
 
+// ── OAuth error helpers ────────────────────────────────────────────────────────
+
+/** Returns true when a Drive API error is an OAuth token expiry / revocation. */
+function isOAuthError(err: any): boolean {
+  const code = err?.code ?? err?.status ?? err?.response?.status;
+  if (code === 401) return true;
+  const msg = String(
+    err?.response?.data?.error_description ??
+    err?.response?.data?.error ??
+    err?.message ??
+    ""
+  ).toLowerCase();
+  return msg.includes("invalid_grant") || msg.includes("expired") || msg.includes("revoked");
+}
+
+/**
+ * Persist an OAuth error message for a project so the admin dashboard can
+ * surface it as a visible banner. Clears the error when errorMsg is null.
+ */
+export async function setDriveOAuthError(projectId: string, errorMsg: string | null): Promise<void> {
+  await db.update(projects)
+    .set({ driveOAuthError: errorMsg } as any)
+    .where(eq(projects.id, projectId));
+}
+
 // ── Drive client initialisation ────────────────────────────────────────────
 
 /**
@@ -173,32 +198,42 @@ export async function uploadLocalFileToDrive(
     throw new Error(`الملف غير موجود محلياً: ${params.localFilename}`);
   }
 
-  const fileStream = fs.createReadStream(localPath);
-  const created = await drive.files.create({
-    requestBody: {
-      name: params.displayName,
-      parents: [params.folderId],
-    },
-    media: {
-      mimeType: params.mimeType || "application/octet-stream",
-      body: fileStream,
-    },
-    fields: "id",
-    supportsAllDrives: true,
-  });
+  try {
+    const fileStream = fs.createReadStream(localPath);
+    const created = await drive.files.create({
+      requestBody: {
+        name: params.displayName,
+        parents: [params.folderId],
+      },
+      media: {
+        mimeType: params.mimeType || "application/octet-stream",
+        body: fileStream,
+      },
+      fields: "id",
+      supportsAllDrives: true,
+    });
 
-  const fileId = created.data.id!;
+    const fileId = created.data.id!;
 
-  await drive.permissions.create({
-    fileId,
-    requestBody: { role: "reader", type: "anyone" },
-    supportsAllDrives: true,
-  });
+    await drive.permissions.create({
+      fileId,
+      requestBody: { role: "reader", type: "anyone" },
+      supportsAllDrives: true,
+    });
 
-  return {
-    fileId,
-    driveUrl: `https://drive.google.com/file/d/${fileId}/view`,
-  };
+    // Clear any stale OAuth error on success
+    await setDriveOAuthError(projectId, null);
+
+    return {
+      fileId,
+      driveUrl: `https://drive.google.com/file/d/${fileId}/view`,
+    };
+  } catch (err: any) {
+    if (isOAuthError(err)) {
+      await setDriveOAuthError(projectId, "انتهت صلاحية تفويض Google Drive — أعد ربط حساب Google من إعدادات المشروع");
+    }
+    throw err;
+  }
 }
 
 /**
