@@ -425,6 +425,7 @@ async function initDB() {
       ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS allowed_file_types JSONB;
       ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS max_file_size_mb INTEGER;
       ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS is_full_width BOOLEAN DEFAULT FALSE;
+      ALTER TABLE project_fields ADD COLUMN IF NOT EXISTS max_files INTEGER;
       ALTER TABLE projects ADD COLUMN IF NOT EXISTS drive_oauth_client_id TEXT;
       ALTER TABLE projects ADD COLUMN IF NOT EXISTS drive_oauth_client_secret_enc TEXT;
       ALTER TABLE projects ADD COLUMN IF NOT EXISTS drive_oauth_refresh_token_enc TEXT;

@@ -137,6 +137,8 @@ export const projectFields = pgTable("project_fields", {
   // File-field restrictions (null = use global defaults)
   allowedFileTypes: jsonb("allowed_file_types").$type<string[] | null>().default(null),
   maxFileSizeMb: integer("max_file_size_mb"),
+  // Maximum number of files per field (null/1 = single file, >1 = multi-file stored as array)
+  maxFiles: integer("max_files"),
 }, (t) => ({
   projectIdIdx:  index("project_fields_project_id_idx").on(t.projectId),
   // Unique (projectId, key) — prevents duplicate field keys that cause frontend mapping collisions

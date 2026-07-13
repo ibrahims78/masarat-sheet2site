@@ -72,9 +72,18 @@ export function useProjectFormEngine({
     const rules: Record<string, any> = {};
 
     if (f.isRequired) {
-      rules.required = isAr
-        ? `${f.label} مطلوب`
-        : `${f.label} is required`;
+      if (f.fieldType === "file") {
+        // Custom validate handles both single string and multi-file array
+        const msg = isAr ? `${f.label} مطلوب` : `${f.label} is required`;
+        rules.validate = (val: any) => {
+          if (Array.isArray(val)) return val.filter(Boolean).length > 0 || msg;
+          return (!!val && val !== "") || msg;
+        };
+      } else {
+        rules.required = isAr
+          ? `${f.label} مطلوب`
+          : `${f.label} is required`;
+      }
     }
 
     if (f.fieldType === "email") {

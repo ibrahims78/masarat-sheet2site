@@ -202,12 +202,13 @@ export function DynamicFieldRenderer({
           {uploadConfig ? (
             <FileField
               value={formValues[f.key]}
-              onChange={url => setValue(f.key, url, { shouldValidate: true })}
+              onChange={val => setValue(f.key, val, { shouldValidate: true })}
               uploadUrl={uploadConfig.url + (uploadConfig.authSuffix || "")}
               fieldKey={f.key}
               uploadFolder={uploadConfig.folder}
               allowedTypes={(f as any).allowedFileTypes}
               maxSizeMb={(f as any).maxFileSizeMb}
+              maxFiles={(f as any).maxFiles}
             />
           ) : (
             <p className="text-xs text-muted-foreground py-2">—</p>

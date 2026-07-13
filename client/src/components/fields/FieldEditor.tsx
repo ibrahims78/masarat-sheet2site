@@ -352,21 +352,44 @@ export function FieldEditor({
               })}
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <label className="text-[11px] text-muted-foreground whitespace-nowrap">
-              {isAr ? "الحجم الأقصى (MB)" : "Max size (MB)"}
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={(f as any).maxFileSizeMb || ""}
-              onChange={e =>
-                onUpdate({ maxFileSizeMb: e.target.value ? Number(e.target.value) : null } as any)
-              }
-              placeholder={isAr ? "افتراضي: 10" : "Default: 10"}
-              className="w-32 h-7 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-slate-800 px-2 text-xs"
-            />
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] text-muted-foreground whitespace-nowrap">
+                {isAr ? "الحجم الأقصى (MB)" : "Max size (MB)"}
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={(f as any).maxFileSizeMb || ""}
+                onChange={e =>
+                  onUpdate({ maxFileSizeMb: e.target.value ? Number(e.target.value) : null } as any)
+                }
+                placeholder={isAr ? "افتراضي: 10" : "Default: 10"}
+                className="w-28 h-7 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-slate-800 px-2 text-xs"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] text-muted-foreground whitespace-nowrap">
+                {isAr ? "عدد الملفات الأقصى" : "Max files"}
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={(f as any).maxFiles || ""}
+                onChange={e =>
+                  onUpdate({ maxFiles: e.target.value ? Number(e.target.value) : null } as any)
+                }
+                placeholder="1"
+                className="w-20 h-7 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-slate-800 px-2 text-xs"
+              />
+              {((f as any).maxFiles || 1) > 1 && (
+                <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
+                  {isAr ? "متعدد" : "multi"}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}

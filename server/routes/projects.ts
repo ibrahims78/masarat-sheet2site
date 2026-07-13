@@ -265,6 +265,7 @@ router.post("/", requireEditorOrAdmin, async (req: Request, res: Response) => {
         placeholder: f.placeholder || null,
         allowedFileTypes: Array.isArray(f.allowedFileTypes) && f.allowedFileTypes.length > 0 ? f.allowedFileTypes : null,
         maxFileSizeMb: f.maxFileSizeMb ? Number(f.maxFileSizeMb) : null,
+        maxFiles: f.maxFiles ? Number(f.maxFiles) : null,
         // Advanced field options — configured via FieldEditor in CreateProject wizard (Phase 2)
         validationMin: f.validationMin ?? null,
         validationMax: f.validationMax ?? null,
@@ -382,15 +383,17 @@ router.delete("/:id", requireEditorOrAdmin, requireProjectOwnership, async (req:
 
     // Async cleanup of local files and Drive files (non-blocking)
     // Handles both flat (/uploads/uuid.ext) and organised (/uploads/project/folder/uuid.ext) paths.
+    // Values may be a single URL string (single-file field) or an array of URLs (multi-file field).
     for (const rec of allRecords) {
       if (rec.data && typeof rec.data === "object") {
         Object.values(rec.data as Record<string, any>).forEach(val => {
-          if (typeof val === "string" && val.startsWith("/uploads/")) {
-            const relativePath = val.slice("/uploads/".length);
+          const urls: string[] = Array.isArray(val) ? val : [val];
+          urls.filter((u: any) => typeof u === "string" && u.startsWith("/uploads/")).forEach(url => {
+            const relativePath = url.slice("/uploads/".length);
             const normalized = path.normalize(relativePath).replace(/^(\.\.[/\\])+/, "");
             const filePath = path.join(uploadsDir, normalized);
             if (filePath.startsWith(uploadsDir + path.sep)) fs.unlink(filePath, () => {});
-          }
+          });
         });
       }
       if (rec.syncStatus === "synced" && rec.driveFiles && typeof rec.driveFiles === "object") {
@@ -556,6 +559,7 @@ router.post("/:id/fields", requireEditorOrAdmin, requireProjectEditAccess, async
         // Per-field file restrictions (null = use global defaults)
         allowedFileTypes: Array.isArray(f.allowedFileTypes) && f.allowedFileTypes.length > 0 ? f.allowedFileTypes : null,
         maxFileSizeMb: f.maxFileSizeMb ? Number(f.maxFileSizeMb) : null,
+        maxFiles: f.maxFiles ? Number(f.maxFiles) : null,
       })));
     }
     res.json({ ok: true });
@@ -772,17 +776,16 @@ router.delete("/:id/records/:recordId", requireEditorOrAdmin, requireProjectEdit
 
     // Clean up local uploaded files (best-effort, non-blocking)
     // Handles both flat paths (/uploads/uuid.ext) and organised paths (/uploads/project/folder/uuid.ext)
+    // Values may be a single URL string (single-file field) or an array of URLs (multi-file field).
     if (rec.data && typeof rec.data === "object") {
       Object.values(rec.data as Record<string, any>).forEach(val => {
-        if (typeof val === "string" && val.startsWith("/uploads/")) {
-          const relativePath = val.slice("/uploads/".length); // strip leading /uploads/
+        const urls: string[] = Array.isArray(val) ? val : [val];
+        urls.filter((u: any) => typeof u === "string" && u.startsWith("/uploads/")).forEach(url => {
+          const relativePath = url.slice("/uploads/".length);
           const normalized = path.normalize(relativePath).replace(/^(\.\.[/\\])+/, "");
           const filePath = path.join(uploadsDir, normalized);
-          // Safety: only delete inside uploadsDir
-          if (filePath.startsWith(uploadsDir + path.sep)) {
-            fs.unlink(filePath, () => {});
-          }
-        }
+          if (filePath.startsWith(uploadsDir + path.sep)) fs.unlink(filePath, () => {});
+        });
       });
     }
 
@@ -844,15 +847,17 @@ router.post("/:id/records/bulk-delete", requireEditorOrAdmin, requireProjectEdit
 
     // Async cleanup of local and Drive files (non-blocking)
     // Handles both flat (/uploads/uuid.ext) and organised (/uploads/project/folder/uuid.ext) paths.
+    // Values may be a single URL string (single-file field) or an array of URLs (multi-file field).
     for (const rec of toDelete) {
       if (rec.data && typeof rec.data === "object") {
         Object.values(rec.data as Record<string, any>).forEach(val => {
-          if (typeof val === "string" && val.startsWith("/uploads/")) {
-            const relativePath = val.slice("/uploads/".length);
+          const urls: string[] = Array.isArray(val) ? val : [val];
+          urls.filter((u: any) => typeof u === "string" && u.startsWith("/uploads/")).forEach(url => {
+            const relativePath = url.slice("/uploads/".length);
             const normalized = path.normalize(relativePath).replace(/^(\.\.[/\\])+/, "");
             const filePath = path.join(uploadsDir, normalized);
             if (filePath.startsWith(uploadsDir + path.sep)) fs.unlink(filePath, () => {});
-          }
+          });
         });
       }
       if (rec.syncStatus === "synced" && rec.driveFiles && typeof rec.driveFiles === "object") {
@@ -1782,15 +1787,17 @@ router.delete("/users/:userId", requireAdmin, async (req: Request, res: Response
         .where(inArray(projectRecords.projectId, projectIds));
 
       // 3. Delete local files for every record (best-effort, non-blocking)
+      // Values may be a single URL string (single-file field) or an array of URLs (multi-file field).
       for (const rec of allRecords) {
         if (rec.data && typeof rec.data === "object") {
           Object.values(rec.data as Record<string, any>).forEach(val => {
-            if (typeof val === "string" && val.startsWith("/uploads/")) {
-              const relativePath = val.slice("/uploads/".length);
+            const urls: string[] = Array.isArray(val) ? val : [val];
+            urls.filter((u: any) => typeof u === "string" && u.startsWith("/uploads/")).forEach(url => {
+              const relativePath = url.slice("/uploads/".length);
               const normalized = path.normalize(relativePath).replace(/^(\.\.[/\\])+/, "");
               const filePath = path.join(uploadsDir, normalized);
               if (filePath.startsWith(uploadsDir + path.sep)) fs.unlink(filePath, () => {});
-            }
+            });
           });
         }
       }
@@ -1878,6 +1885,7 @@ const importFileSchema = z.object({
     isFullWidth: z.boolean().nullable().optional(),
     allowedFileTypes: z.any().optional(),
     maxFileSizeMb: z.number().nullable().optional(),
+    maxFiles: z.number().nullable().optional(),
   })).default([]),
   integrations: z.object({
     googleSheetId: z.string().nullable().optional(),
@@ -1956,6 +1964,7 @@ router.post("/:id/template-export", requireEditorOrAdmin, requireProjectOwnershi
         isFullWidth: f.isFullWidth,
         allowedFileTypes: f.allowedFileTypes,
         maxFileSizeMb: f.maxFileSizeMb,
+        maxFiles: f.maxFiles,
       })),
       integrations: {
         googleSheetId: proj.googleSheetId,
@@ -2188,6 +2197,7 @@ router.post("/import", requireEditorOrAdmin, upload.single("file"), async (req: 
           isFullWidth: f.isFullWidth ?? false,
           allowedFileTypes: Array.isArray(f.allowedFileTypes) && f.allowedFileTypes.length > 0 ? f.allowedFileTypes : null,
           maxFileSizeMb: f.maxFileSizeMb ?? null,
+          maxFiles: f.maxFiles ?? null,
         }));
         await tx.insert(projectFields).values(fieldRows);
       }
