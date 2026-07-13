@@ -40,11 +40,13 @@ async function requireDriveProjectAccess(req: Request, res: Response, next: Func
   }
 }
 
-/** Redirect URI — must be registered verbatim in Google Cloud Console. */
+/** Redirect URI — must be registered verbatim in Google Cloud Console.
+ *  Priority: REPLIT_DOMAINS (production) → REPLIT_DEV_DOMAIN (dev) → APP_BASE_URL → localhost
+ */
 export function getRedirectUri(): string {
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return `https://${process.env.REPLIT_DEV_DOMAIN}/api/drive-oauth/callback`;
-  }
+  const domains = process.env.REPLIT_DOMAINS?.split(",");
+  if (domains?.length) return `https://${domains[0].trim()}/api/drive-oauth/callback`;
+  if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}/api/drive-oauth/callback`;
   const base = (process.env.APP_BASE_URL || "http://localhost:3001").replace(/\/$/, "");
   return `${base}/api/drive-oauth/callback`;
 }
@@ -99,9 +101,12 @@ router.get("/drive-oauth/callback", async (req: Request, res: Response) => {
   const nonce = stateParts[0];
   const projectId = stateParts.slice(1).join(":"); // handle UUIDs with dashes safely
 
-  const frontendBase = process.env.REPLIT_DEV_DOMAIN
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-    : (process.env.APP_BASE_URL || "http://localhost:5000").replace(/\/$/, "");
+  const _domains = process.env.REPLIT_DOMAINS?.split(",");
+  const frontendBase = _domains?.length
+    ? `https://${_domains[0].trim()}`
+    : process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : (process.env.APP_BASE_URL || "http://localhost:5000").replace(/\/$/, "");
 
   const settingsUrl = (extra = "") =>
     `${frontendBase}/admin/projects/${projectId}/settings?tab=drive${extra}`;

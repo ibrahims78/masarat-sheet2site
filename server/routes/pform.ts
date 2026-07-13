@@ -920,6 +920,32 @@ router.post("/telegram-webhook", webhookLimiter, async (req: Request, res: Respo
       // Cache this chat scoped to the project — used by "جلب Chat ID" in admin settings
       storeChatForProject(participant.projectId, chatId, message.chat);
 
+      // Persist to DB so all autoscale instances can find it (in-memory cache is per-instance)
+      {
+        const sanitize = (s: string) =>
+          s.replace(/[<>&"']/g, "").replace(/[\r\n\t]/g, " ").trim().slice(0, 120);
+        const parts = [message.chat.first_name, message.chat.last_name].filter(Boolean);
+        const rawTitle =
+          message.chat.title ||
+          (parts.length ? parts.join(" ") : undefined) ||
+          message.chat.username ||
+          chatId;
+        const entry = {
+          id: chatId,
+          title: sanitize(String(rawTitle)),
+          type: message.chat.type || "private",
+          seenAt: Date.now(),
+        };
+        db.select({ telegramKnownChats: projects.telegramKnownChats })
+          .from(projects).where(eq(projects.id, participant.projectId))
+          .then(([p]) => {
+            const existing: any[] = Array.isArray(p?.telegramKnownChats) ? p.telegramKnownChats : [];
+            const updated = [entry, ...existing.filter((c: any) => c.id !== chatId)].slice(0, 30);
+            return db.update(projects).set({ telegramKnownChats: updated }).where(eq(projects.id, participant.projectId));
+          })
+          .catch((e) => console.error("[pform] telegram chat DB persist error:", e));
+      }
+
       // Get project bot token for all responses
       const [proj] = await db.select({ telegramBotTokenEnc: projects.telegramBotTokenEnc, name: projects.name })
         .from(projects).where(eq(projects.id, participant.projectId));

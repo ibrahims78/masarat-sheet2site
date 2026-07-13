@@ -1162,17 +1162,31 @@ router.post("/:id/telegram-updates", requireEditorOrAdmin, requireProjectEditAcc
     }
     if (!botToken) return res.status(400).json({ ok: false, message: "أدخل Bot Token أولاً" });
 
-    // ── Strategy 1: read from project-scoped webhook cache (zero side-effects) ─
-    // Messages delivered to the Webhook are consumed immediately and never appear
-    // in getUpdates. The webhook handler stores chats per-project so admins only
-    // see chats from their own project's bot.
+    // ── Strategy 1: in-memory cache (fastest, zero side-effects) ──────────────
+    // Works on single-instance dev; not reliable on autoscale (per-instance).
     const projectId = String(req.params.id);
     if (hasProjectChats(projectId)) {
-      const chats = getProjectChats(projectId);
-      return res.json({ ok: true, chats });
+      return res.json({ ok: true, chats: getProjectChats(projectId) });
     }
 
-    // ── Strategy 2: fallback to getUpdates (only when webhook cache is empty) ──
+    // ── Strategy 1.5: DB-persisted chats (cross-instance, works on autoscale) ─
+    // Written by the webhook handler whenever a chat interaction is received.
+    {
+      const [projChats] = await db
+        .select({ telegramKnownChats: projects.telegramKnownChats })
+        .from(projects)
+        .where(eq(projects.id, projectId));
+      if (Array.isArray(projChats?.telegramKnownChats) && (projChats.telegramKnownChats as any[]).length > 0) {
+        const TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days (persisted is long-lived)
+        const now = Date.now();
+        const chats = (projChats.telegramKnownChats as any[])
+          .filter((c) => now - c.seenAt < TTL_MS)
+          .map(({ id, title, type }) => ({ id, title, type }));
+        if (chats.length > 0) return res.json({ ok: true, chats });
+      }
+    }
+
+    // ── Strategy 2: fallback to getUpdates (only when both caches are empty) ──
     // This handles the rare case where the Webhook was never hit yet. We must
     // delete the webhook first (Telegram forbids simultaneous use), then
     // re-register it immediately after.

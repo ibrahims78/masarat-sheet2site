@@ -88,6 +88,8 @@ export const projects = pgTable("projects", {
   // Telegram
   telegramBotTokenEnc: text("telegram_bot_token_enc"),
   telegramChatId: text("telegram_chat_id"),
+  // Chats seen by the webhook — persisted so autoscale instances share state
+  telegramKnownChats: jsonb("telegram_known_chats").$type<Array<{ id: string; title: string; type: string; seenAt: number }> | null>().default(null),
   // ── Participant Tracking ──────────────────────────────────
   participantsEnabled: boolean("participants_enabled").default(false),
   participantNameField: text("participant_name_field"),
