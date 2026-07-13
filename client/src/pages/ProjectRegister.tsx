@@ -56,6 +56,7 @@ export function ProjectRegister() {
   const [verifying, setVerifying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [fromReview, setFromReview] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(200);
   // Stable UUID for the upload session — groups all files for this submission into one folder
@@ -245,7 +246,11 @@ export function ProjectRegister() {
   const submitMut = useMutation({
     mutationFn: (formData: Record<string, any>) => apiRequest("POST", `/api/pform/${projectId}/submit`, formData),
     onSuccess: (data) => {
-      if (data.ok) { setSubmitted(true); setEditToken(data.editToken); setTokenHours(data.tokenHours); clearDraft(); }
+      if (data.ok) { setSubmitError(""); setSubmitted(true); setEditToken(data.editToken); setTokenHours(data.tokenHours); clearDraft(); }
+    },
+    onError: (err: any) => {
+      setSubmitError(err?.message || (isAr ? "حدث خطأ أثناء الإرسال، يرجى المحاولة مرة أخرى" : "Submission failed, please try again"));
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
     },
   });
 
@@ -752,6 +757,14 @@ export function ProjectRegister() {
 
       {/* ══ Fixed bottom navigation ══ */}
       <div className="fixed bottom-0 inset-x-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] z-50">
+        {submitError && (
+          <div className="max-w-3xl mx-auto px-4 pt-2">
+            <div className="flex items-start gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2 text-sm text-red-700 dark:text-red-400">
+              <span className="shrink-0 mt-0.5">⚠</span>
+              <span>{submitError}</span>
+            </div>
+          </div>
+        )}
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
 
           {/* Back */}
